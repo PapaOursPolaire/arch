@@ -1,6 +1,33 @@
 set -e
 
-# 🌌 Script d'automatisation d'Arch Linux avec Hyprland
+# 🌌 Script d'automatisation d'Arch Linux avec Hyprland (version corrigée)
+
+# Fonction de validation des noms
+validate_name() {
+    local name=$1
+    local type=$2
+    if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+        echo "❌ Format $type invalide ! Doit commencer par une lettre minuscule et ne contenir que :"
+        echo "   - Lettres minuscules"
+        echo "   - Chiffres"
+        echo "   - Tirets (-) et underscores (_)"
+        echo "   - Pas d'espaces, majuscules ou caractères spéciaux"
+        return 1
+    fi
+    return 0
+}
+
+# PHASE 0: VÉRIFICATIONS PRÉLIMINAIRES
+echo "🔍 Vérification des prérequis..."
+if ! ping -c 1 archlinux.org &> /dev/null; then
+    echo "❌ Connexion Internet requise !"
+    exit 1
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "❌ Le script doit être exécuté en tant que root !"
+    exit 1
+fi
 
 # PHASE 1: CONFIGURATION PRÉ-INSTALLATION
 
@@ -9,7 +36,7 @@ echo "🔍 Détection des disques et partitions..."
 DISKS=()
 while IFS= read -r line; do
     DISKS+=("$line")
-done < <(lsblk -d -n -o NAME,SIZE,TYPE | grep 'disk' | awk '{print $1 " (" $2 ")"}')
+done < <(lsblk -d -n -o NAME,SIZE,TYPE,MODEL | grep 'disk' | awk '{print $1 " (" $2 ") - " substr($0, index($0,$4))}')
 
 if [ ${#DISKS[@]} -eq 0 ]; then
     echo "❌ Aucun disque détecté !"
@@ -22,37 +49,51 @@ for i in "${!DISKS[@]}"; do
     echo "  $((i+1)). ${DISKS[$i]}"
 done
 
-read -p "→ Sélectionnez un disque [1-${#DISKS[@]}]: " DISK_CHOICE
-SELECTED_DISK="/dev/$(echo "${DISKS[$((DISK_CHOICE-1))]}" | awk '{print $1}')"
+while true; do
+    read -p "→ Sélectionnez un disque [1-${#DISKS[@]}]: " DISK_CHOICE
+    if [[ "$DISK_CHOICE" =~ ^[0-9]+$ ]] && [ "$DISK_CHOICE" -ge 1 ] && [ "$DISK_CHOICE" -le ${#DISKS[@]} ]; then
+        SELECTED_DISK="/dev/$(echo "${DISKS[$((DISK_CHOICE-1))]}" | awk '{print $1}')"
+        break
+    else
+        echo "❌ Choix invalide !"
+    fi
+done
 
 echo "💾 Configuration des partitions pour $SELECTED_DISK:"
-echo "   (Minimum recommandé: EFI=550M, SWAP=4G, ROOT=30G)"
-echo "   1. Partition EFI (boot)"
-echo "   2. Partition SWAP"
-echo "   3. Partition ROOT (système)"
+echo "   (Minimum recommandé: EFI=550M, ROOT=30G)"
 
 # Configuration des partitions
 read -p "→ Taille de la partition EFI (ex: 550M): " EFI_SIZE
-read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
 read -p "→ Taille de la partition ROOT (ex: 30G): " ROOT_SIZE
+read -p "→ Voulez-vous une partition SWAP ? [o/n]: " SWAP_NEEDED
+
+if [[ "$SWAP_NEEDED" =~ ^[oOyY].* ]]; then
+    read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
+    SWAP_PART=2
+    ROOT_PART=3
+else
+    SWAP_SIZE="0"
+    SWAP_PART=""
+    ROOT_PART=2
+fi
 
 # Création des partitions
 echo "🗂️ Création des partitions..."
 parted -s "$SELECTED_DISK" mklabel gpt
 parted -s "$SELECTED_DISK" mkpart primary fat32 0% "$EFI_SIZE"
-parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
-parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
+[ -n "$SWAP_PART" ] && parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
+parted -s "$SELECTED_DISK" mkpart primary ext4 "${SWAP_SIZE:-$EFI_SIZE}" "$ROOT_SIZE"
 parted -s "$SELECTED_DISK" set 1 boot on
 
 # Formatage des partitions
 echo "📂 Formatage des partitions..."
 mkfs.fat -F32 "${SELECTED_DISK}1"
-mkswap "${SELECTED_DISK}2"
-swapon "${SELECTED_DISK}2"
-mkfs.ext4 "${SELECTED_DISK}3"
+[ -n "$SWAP_PART" ] && mkswap "${SELECTED_DISK}$SWAP_PART"
+[ -n "$SWAP_PART" ] && swapon "${SELECTED_DISK}$SWAP_PART"
+mkfs.ext4 "${SELECTED_DISK}$ROOT_PART"
 
 # Montage des partitions
-mount "${SELECTED_DISK}3" /mnt
+mount "${SELECTED_DISK}$ROOT_PART" /mnt
 mkdir -p /mnt/boot
 mount "${SELECTED_DISK}1" /mnt/boot
 
@@ -60,8 +101,15 @@ mount "${SELECTED_DISK}1" /mnt/boot
 
 # Saisie des informations utilisateur
 echo "👤 Configuration du système"
-read -p "→ Nom d'utilisateur: " USERNAME
-read -p "→ Nom de la machine (hostname): " HOSTNAME
+while true; do
+    read -p "→ Nom d'utilisateur (minuscules/chiffres/_/-): " USERNAME
+    validate_name "$USERNAME" "d'utilisateur" && break
+done
+
+while true; do
+    read -p "→ Nom de la machine (hostname, minuscules/chiffres/_/-): " HOSTNAME
+    validate_name "$HOSTNAME" "hostname" && break
+done
 
 while true; do
     read -s -p "→ Mot de passe pour $USERNAME: " PASSWORD
@@ -97,10 +145,10 @@ set -e
 USERNAME="$USERNAME"
 HOSTNAME="$HOSTNAME"
 PASSWORD="$PASSWORD"
-GITHUB_REPO="https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets"
-VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/arcane-background.mp4"
-LOGO_IMAGE_PATH="/usr/share/pictures/custom-fastfetch-logo.png"
-BEEP_SOUND_PATH="/usr/share/sounds/fallout-beep.mp3"
+GITHUB_REPO="https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/refs/heads/Projets/archhyprland"
+VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/bkv.mp4"
+LOGO_IMAGE_PATH="/usr/share/pictures/Papa-Ours.png"
+BEEP_SOUND_PATH="/usr/share/sounds/FalloutBip.mp3"
 GRUB_THEMES_DIR="/boot/grub/themes"
 
 # Configuration de base
@@ -123,6 +171,8 @@ echo "🌍 Configuration des locales..."
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
+ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
+hwclock --systohc
 
 # PHASE 4: INSTALLATION DES COMPOSANTS
 
@@ -132,7 +182,8 @@ pacman -Syu --noconfirm --needed \
     grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio \
     pipewire-pulse pipewire-alsa wireplumber hyprland kitty waybar wofi \
     rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
-    neofetch mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava
+    mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava xdotool \
+    noto-fonts noto-fonts-emoji ttf-dejavu ttf-liberation
 
 # UEFI + GRUB
 echo "🧬 Configuration du bootloader..."
@@ -160,9 +211,11 @@ theme_names=(
 )
 
 for i in "\${!themes[@]}"; do
-    git clone "\${themes[\$i]}" "/tmp/\${theme_names[\$i]}" >/dev/null 2>&1
-    mkdir -p "\$GRUB_THEMES_DIR/\${theme_names[\$i]}"
-    cp -r "/tmp/\${theme_names[\$i]}"/* "\$GRUB_THEMES_DIR/\${theme_names[\$i]}/"
+    git clone "\${themes[\$i]}" "/tmp/\${theme_names[\$i]}" >/dev/null 2>&1 || true
+    if [ -d "/tmp/\${theme_names[\$i]}" ]; then
+        mkdir -p "\$GRUB_THEMES_DIR/\${theme_names[\$i]}"
+        cp -r "/tmp/\${theme_names[\$i]}"/* "\$GRUB_THEMES_DIR/\${theme_names[\$i]}/" || true
+    fi
 done
 
 echo "GRUB_THEME=\"\$GRUB_THEMES_DIR/Fallout/theme.txt\"" >> /etc/default/grub
@@ -171,17 +224,25 @@ grub-mkconfig -o /boot/grub/grub.cfg
 # Sons et wallpapers
 echo "🔊 Téléchargement des ressources multimédias..."
 mkdir -p /usr/share/{sounds,wallpapers,pictures}
-curl -Lo "$BEEP_SOUND_PATH" "https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets/FalloutBip.mp3"
-curl -Lo "$VIDEO_WALLPAPER_PATH" "https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets/bkv.mp4"
-curl -Lo "$LOGO_IMAGE_PATH" "https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets/Papa-Ours.png"
+curl -fLo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/FalloutBip.mp3" || echo "⚠️ Impossible de télécharger le son"
+curl -fLo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/bkv.mp4" || echo "⚠️ Impossible de télécharger le wallpaper"
+curl -fLo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/Papa-Ours.png" || echo "⚠️ Impossible de télécharger le logo"
 
 # Fastfetch
-echo "⚡ Configuration de Fastfetch..."
-git clone https://github.com/fastfetch-cli/fastfetch.git /opt/fastfetch
-cd /opt/fastfetch
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target fastfetch
-cp build/fastfetch /usr/local/bin/
+echo "⚡ Installation de Fastfetch..."
+if ! command -v fastfetch &> /dev/null; then
+    if pacman -S fastfetch --noconfirm &> /dev/null; then
+        echo "✅ Fastfetch installé via pacman"
+    else
+        echo "⚠️ Installation via pacman échouée, tentative de compilation..."
+        pacman -S --noconfirm cmake base-devel
+        git clone https://github.com/fastfetch-cli/fastfetch.git /tmp/fastfetch
+        cd /tmp/fastfetch
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --target fastfetch
+        cp build/fastfetch /usr/local/bin/
+    fi
+fi
 
 mkdir -p /home/\$USERNAME/.config/fastfetch/
 cat << FASTEOF > /home/\$USERNAME/.config/fastfetch/config.jsonc
@@ -195,6 +256,7 @@ cat << FASTEOF > /home/\$USERNAME/.config/fastfetch/config.jsonc
   "color": "magenta"
 }
 FASTEOF
+chown \$USERNAME: /home/\$USERNAME/.config/fastfetch/config.jsonc
 
 # Autres configurations
 echo "🎞️ Configuration du fond d'écran vidéo..."
@@ -243,5 +305,5 @@ EOF
 # FINALISATION
 echo "🎉 Installation complète !"
 echo "🔄 Démonter les partitions..."
-umount -R /mnt
+umount -R /mnt || true
 echo "💻 Vous pouvez maintenant redémarrer avec : reboot"
