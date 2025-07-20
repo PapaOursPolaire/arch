@@ -26,33 +26,50 @@ read -p "→ Sélectionnez un disque [1-${#DISKS[@]}]: " DISK_CHOICE
 SELECTED_DISK="/dev/$(echo "${DISKS[$((DISK_CHOICE-1))]}" | awk '{print $1}')"
 
 echo "💾 Configuration des partitions pour $SELECTED_DISK:"
-echo "   (Minimum recommandé: EFI=550M, SWAP=4G, ROOT=30G)"
+echo "   (Minimum recommandé: EFI=550M, SWAP=optionnel, ROOT=30G)"
 echo "   1. Partition EFI (boot)"
-echo "   2. Partition SWAP"
+echo "   2. Partition SWAP (optionnel)"
 echo "   3. Partition ROOT (système)"
 
 # Configuration des partitions
 read -p "→ Taille de la partition EFI (ex: 550M): " EFI_SIZE
-read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
+read -p "→ Créer un SWAP? [o/n]: " CREATE_SWAP
+if [[ $CREATE_SWAP =~ ^[OoYy]$ ]]; then
+    read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
+    SWAP_ENABLED=true
+else
+    SWAP_ENABLED=false
+fi
 read -p "→ Taille de la partition ROOT (ex: 30G): " ROOT_SIZE
 
 # Création des partitions
 echo "🗂️ Création des partitions..."
 parted -s "$SELECTED_DISK" mklabel gpt
 parted -s "$SELECTED_DISK" mkpart primary fat32 0% "$EFI_SIZE"
-parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
-parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
+START_NEXT=$(echo "$EFI_SIZE" | sed 's/[^0-9]*//g')
+if [ "$SWAP_ENABLED" = true ]; then
+    parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
+    parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
+else
+    parted -s "$SELECTED_DISK" mkpart primary ext4 "$EFI_SIZE" "$ROOT_SIZE"
+fi
 parted -s "$SELECTED_DISK" set 1 boot on
 
 # Formatage des partitions
 echo "📂 Formatage des partitions..."
 mkfs.fat -F32 "${SELECTED_DISK}1"
-mkswap "${SELECTED_DISK}2"
-swapon "${SELECTED_DISK}2"
-mkfs.ext4 "${SELECTED_DISK}3"
+if [ "$SWAP_ENABLED" = true ]; then
+    mkswap "${SELECTED_DISK}2"
+    swapon "${SELECTED_DISK}2"
+    mkfs.ext4 "${SELECTED_DISK}3"
+    ROOT_PART="${SELECTED_DISK}3"
+else
+    mkfs.ext4 "${SELECTED_DISK}2"
+    ROOT_PART="${SELECTED_DISK}2"
+fi
 
 # Montage des partitions
-mount "${SELECTED_DISK}3" /mnt
+mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot
 mount "${SELECTED_DISK}1" /mnt/boot
 
@@ -60,8 +77,23 @@ mount "${SELECTED_DISK}1" /mnt/boot
 
 # Saisie des informations utilisateur
 echo "👤 Configuration du système"
-read -p "→ Nom d'utilisateur: " USERNAME
-read -p "→ Nom de la machine (hostname): " HOSTNAME
+while true; do
+    read -p "→ Nom d'utilisateur (sans espaces): " USERNAME
+    if [[ "$USERNAME" =~ [[:space:]] ]]; then
+        echo "❌ Le nom d'utilisateur ne doit pas contenir d'espaces !"
+    else
+        break
+    fi
+done
+
+while true; do
+    read -p "→ Nom de la machine (hostname sans espaces): " HOSTNAME
+    if [[ "$HOSTNAME" =~ [[:space:]] ]]; then
+        echo "❌ Le hostname ne doit pas contenir d'espaces !"
+    else
+        break
+    fi
+done
 
 while true; do
     read -s -p "→ Mot de passe pour $USERNAME: " PASSWORD
@@ -133,40 +165,25 @@ pacman -Syu --noconfirm --needed \
     pipewire-pulse pipewire-alsa wireplumber hyprland kitty waybar wofi \
     rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
     neofetch mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava \
-    sddm xdg-user-dirs noto-fonts-emoji
+    sddm xdg-user-dirs noto-fonts-emoji terminus-font ttf-dejavu
+
+# Installation explicite de cava (au cas où)
+pacman -S --noconfirm --needed cava
 
 # UEFI + GRUB
 echo "🧬 Configuration du bootloader..."
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 mkdir -p "\$GRUB_THEMES_DIR"
 
-# Thèmes GRUB
-echo "🎨 Installation des thèmes GRUB..."
-themes=(
-    "https://github.com/shvchk/fallout-grub-theme"
-    "https://github.com/vinceliuice/BSOL-GRUB-Theme"
-    "https://github.com/JeansLucifer/Minegrub-Theme"
-    "https://github.com/Mangeshrex/CRT-Amber-GRUB-Theme"
-    "https://github.com/vinceliuice/Arcade-GRUB-Theme"
-    "https://github.com/vinceliuice/Dark-Matter-Grub-Theme"
-)
+# Installation du thème GRUB Fallout
+echo "🎨 Installation du thème GRUB Fallout..."
+git clone https://github.com/shvchk/fallout-grub-theme.git "\$GRUB_THEMES_DIR/fallout"
+cp -r "\$GRUB_THEMES_DIR/fallout"/* "\$GRUB_THEMES_DIR/"
 
-theme_names=(
-    "Fallout"
-    "BSOL"
-    "Minegrub"
-    "CRT-Amber"
-    "Arcade"
-    "Dark-Matter"
-)
-
-for i in "\${!themes[@]}"; do
-    git clone "\${themes[\$i]}" "/tmp/\${theme_names[\$i]}" >/dev/null 2>&1
-    mkdir -p "\$GRUB_THEMES_DIR/\${theme_names[\$i]}"
-    cp -r "/tmp/\${theme_names[\$i]}"/* "\$GRUB_THEMES_DIR/\${theme_names[\$i]}/"
-done
-
-echo "GRUB_THEME=\"\$GRUB_THEMES_DIR/Fallout/theme.txt\"" >> /etc/default/grub
+# Configuration GRUB avec animation
+echo "GRUB_THEME=\"\$GRUB_THEMES_DIR/theme.txt\"" >> /etc/default/grub
+echo "GRUB_GFXMODE=auto" >> /etc/default/grub
+echo "GRUB_GFXPAYLOAD_LINUX=keep" >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Sons et wallpapers
@@ -199,13 +216,11 @@ FASTEOF
 
 # Configuration SDDM pour Hyprland
 echo "🖥️ Configuration du gestionnaire de connexion SDDM..."
+pacman -S --noconfirm --needed qt5-quickcontrols2 qt5-graphicaleffects
 cat << SDDM > /etc/sddm.conf
-[Autologin]
-User=$USERNAME
-Session=hyprland.desktop
 [Theme]
 Current=breeze
-SDDM
+EOF
 
 # Création du dossier de configuration Hyprland
 echo "📁 Création des dossiers de configuration Hyprland..."
@@ -218,6 +233,9 @@ cat << HYPR > /home/\$USERNAME/.config/hypr/hyprland.conf
 # Configuration minimale Hyprland
 exec-once = dbus-update-activation-environment --systemd DISPLAY
 exec-once = systemctl --user import-environment DISPLAY
+exec-once = swww init
+exec-once = waybar
+exec-once = nm-applet --indicator
 
 monitor=,preferred,auto,1
 
@@ -230,6 +248,7 @@ general {
     gaps_in = 5
     gaps_out = 10
     border_size = 2
+    col.active_border = rgba(ff5500ee)
 }
 
 decoration {
@@ -250,11 +269,12 @@ master {
     new_is_master = true
 }
 
-# Exemple d'application
+# Raccourcis clavier
 bind = SUPER, RETURN, exec, kitty
-bind = SUPER, Q, killactive,
-bind = SUPER, M, exit,
-bind = SUPER, V, togglefloating,
+bind = SUPER, Q, killactive
+bind = SUPER, M, exit
+bind = SUPER, V, togglefloating
+bind = SUPER, D, exec, wofi --show drun
 HYPR
 
 # Transparence
@@ -273,6 +293,22 @@ echo "🔊 Configuration de Cava..."
 mkdir -p /home/\$USERNAME/.config/cava
 cp /etc/cava/config /home/\$USERNAME/.config/cava/config
 
+# Service wallpaper (démarre après la session graphique)
+echo "🎞️ Configuration du fond d'écran vidéo..."
+cat << SERVICE > /home/\$USERNAME/.config/systemd/user/video-wallpaper.service
+[Unit]
+Description=Video Wallpaper Service
+After=graphical-session.target
+
+[Service]
+Environment=DISPLAY=:0
+ExecStart=mpv --no-audio --loop --panscan=1.0 --no-keepaspect --wid=\$(xdotool getactivewindow) "\$VIDEO_WALLPAPER_PATH"
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
+SERVICE
+
 # Permissions
 chown -R \$USERNAME:\$USERNAME /home/\$USERNAME
 
@@ -280,7 +316,10 @@ chown -R \$USERNAME:\$USERNAME /home/\$USERNAME
 echo "🚀 Activation des services..."
 systemctl enable NetworkManager
 systemctl enable sddm
-systemctl enable video-wallpaper.service
+
+# Activer le service wallpaper pour l'utilisateur
+echo "Enabling video wallpaper service for user..."
+sudo -u \$USERNAME systemctl --user enable video-wallpaper.service
 
 echo "✅ Installation post-chroot terminée !"
 EOF
@@ -291,3 +330,4 @@ echo "🎉 Installation complète !"
 echo "🔄 Démonter les partitions..."
 umount -R /mnt
 echo "💻 Vous pouvez maintenant redémarrer avec : reboot"
+echo "   Après démarrage, connectez-vous avec $USERNAME et son mot de passe"
