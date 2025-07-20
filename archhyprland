@@ -290,4 +290,4 @@ EOF
 echo "🎉 Installation complète !"
 echo "🔄 Démonter les partitions..."
 umount -R /mnt
-echo "💻 Vous pouvez maintenant redémarrer avec : reboot"  
+echo "💻 Vous pouvez maintenant redémarrer avec : reboot"
