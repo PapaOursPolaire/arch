@@ -46,7 +46,6 @@ read -p "→ Taille de la partition ROOT (ex: 30G): " ROOT_SIZE
 echo "🗂️ Création des partitions..."
 parted -s "$SELECTED_DISK" mklabel gpt
 parted -s "$SELECTED_DISK" mkpart primary fat32 0% "$EFI_SIZE"
-START_NEXT=$(echo "$EFI_SIZE" | sed 's/[^0-9]*//g')
 if [ "$SWAP_ENABLED" = true ]; then
     parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
     parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
@@ -78,18 +77,22 @@ mount "${SELECTED_DISK}1" /mnt/boot
 # Saisie des informations utilisateur
 echo "👤 Configuration du système"
 while true; do
-    read -p "→ Nom d'utilisateur (sans espaces): " USERNAME
-    if [[ "$USERNAME" =~ [[:space:]] ]]; then
-        echo "❌ Le nom d'utilisateur ne doit pas contenir d'espaces !"
+    read -p "→ Nom d'utilisateur: " USERNAME
+    # Validation du nom d'utilisateur (autorise les espaces mais pas les caractères spéciaux)
+    if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9\ _-]+$ ]]; then
+        echo "❌ Le nom d'utilisateur contient des caractères invalides !"
+        echo "   Utilisez seulement des lettres, chiffres, espaces, tirets et underscores"
     else
         break
     fi
 done
 
 while true; do
-    read -p "→ Nom de la machine (hostname sans espaces): " HOSTNAME
-    if [[ "$HOSTNAME" =~ [[:space:]] ]]; then
-        echo "❌ Le hostname ne doit pas contenir d'espaces !"
+    read -p "→ Nom de la machine (hostname): " HOSTNAME
+    # Validation du hostname (pas d'espaces ni de caractères spéciaux)
+    if [[ "$HOSTNAME" =~ [^a-zA-Z0-9-] ]]; then
+        echo "❌ Le hostname contient des caractères invalides !"
+        echo "   Utilisez seulement des lettres, chiffres et tirets (pas d'espaces)"
     else
         break
     fi
@@ -164,12 +167,9 @@ pacman -Syu --noconfirm --needed \
     grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio \
     pipewire-pulse pipewire-alsa wireplumber hyprland kitty waybar wofi \
     rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
-    mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom \
-    sddm xdg-user-dirs noto-fonts-emoji terminus-font ttf-dejavu
-
-# Correction pour neofetch et cava
-echo "🔧 Installation de neofetch et cava..."
-pacman -S --noconfirm --needed neofetch cava
+    neofetch mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava \
+    sddm xdg-user-dirs noto-fonts-emoji terminus-font ttf-dejavu \
+    xdotool swww
 
 # UEFI + GRUB
 echo "🧬 Configuration du bootloader..."
@@ -190,9 +190,9 @@ grub-mkconfig -o /boot/grub/grub.cfg
 # Sons et wallpapers
 echo "🔊 Téléchargement des ressources multimédias..."
 mkdir -p /usr/share/{sounds,wallpapers,pictures}
-curl -Lo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/fallout-beep.wav"
-curl -Lo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/arcane-background.mp4"
-curl -Lo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/custom-fastfetch-logo.png"
+curl -Lo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/fallout-beep.wav" || echo "⚠️ Impossible de télécharger le son"
+curl -Lo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/arcane-background.mp4" || echo "⚠️ Impossible de télécharger le fond d'écran"
+curl -Lo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/custom-fastfetch-logo.png" || echo "⚠️ Impossible de télécharger le logo"
 
 # Fastfetch
 echo "⚡ Configuration de Fastfetch..."
@@ -239,6 +239,7 @@ cat << HYPR > /home/\$USERNAME/.config/hypr/hyprland.conf
 # Configuration minimale Hyprland
 exec-once = dbus-update-activation-environment --systemd DISPLAY
 exec-once = systemctl --user import-environment DISPLAY
+exec-once = swww init
 exec-once = waybar
 exec-once = nm-applet --indicator
 
@@ -305,11 +306,15 @@ cat << SERVICE > /home/\$USERNAME/.config/systemd/user/video-wallpaper.service
 [Unit]
 Description=Video Wallpaper Service
 After=graphical-session.target
+Requires=graphical-session.target
 
 [Service]
+Type=simple
 Environment=DISPLAY=:0
-ExecStart=mpv --no-audio --loop --panscan=1.0 --no-keepaspect --wid=\$(xdotool getactivewindow) "\$VIDEO_WALLPAPER_PATH"
+ExecStartPre=/usr/bin/sleep 5
+ExecStart=/usr/bin/mpv --no-audio --loop --panscan=1.0 --no-keepaspect --wid=\$(xdotool getactivewindow) "\$VIDEO_WALLPAPER_PATH"
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=graphical-session.target
