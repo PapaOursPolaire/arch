@@ -1,0 +1,157 @@
+#!/bin/bash
+set -e
+
+echo "🧠 Script d'installation Arch + Hyprland (complet, automatique)"
+
+# Demande des informations
+read -p "💾 Partition EFI (ex: /dev/sda1) : " EFI_PART
+read -p "📁 Partition ROOT (ex: /dev/sda2) : " ROOT_PART
+read -p "👤 Nom d'utilisateur : " USERNAME
+read -p "🖥️ Nom de la machine (hostname) : " HOSTNAME
+
+# Mot de passe avec confirmation
+while true; do
+  read -s -p "🔐 Mot de passe utilisateur : " USER_PASSWORD
+  echo
+  read -s -p "🔁 Confirmez le mot de passe : " USER_PASSWORD_CONFIRM
+  echo
+  [ "$USER_PASSWORD" = "$USER_PASSWORD_CONFIRM" ] && break
+  echo "❌ Les mots de passe ne correspondent pas."
+done
+
+# Formatage des partitions
+echo "🧹 Formatage des partitions..."
+mkfs.fat -F32 "$EFI_PART"
+mkfs.ext4 "$ROOT_PART"
+
+# Montage
+mount "$ROOT_PART" /mnt
+mkdir -p /mnt/boot/efi
+mount "$EFI_PART" /mnt/boot/efi
+
+# Installation de base
+echo "📦 Installation du système de base..."
+pacstrap /mnt base base-devel linux linux-firmware grub efibootmgr networkmanager sudo vim git pipewire pipewire-audio pipewire-alsa pipewire-pulse wireplumber
+
+# Fstab
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Copie du script post-installation dans le système
+cat <<EOF > /mnt/root/post-install.sh
+#!/bin/bash
+set -e
+
+USERNAME="$USERNAME"
+HOSTNAME="$HOSTNAME"
+USER_PASSWORD="$USER_PASSWORD"
+
+VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/arcane-background.mp4"
+LOGO_IMAGE_PATH="/usr/share/pictures/custom-fastfetch-logo.png"
+BEEP_SOUND_PATH="/usr/share/sounds/fallout-beep.wav"
+GRUB_THEMES_DIR="/boot/grub/themes"
+
+# Time & locale
+ln -sf /usr/share/zoneinfo/Europe/Brussels /etc/localtime
+hwclock --systohc
+sed -i 's/#fr_BE.UTF-8 UTF-8/fr_BE.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo "LANG=fr_BE.UTF-8" > /etc/locale.conf
+echo "KEYMAP=fr" > /etc/vconsole.conf
+
+# Hostname
+echo "\$HOSTNAME" > /etc/hostname
+
+# User
+useradd -m -G wheel -s /bin/bash "\$USERNAME"
+echo "\$USERNAME:\$USER_PASSWORD" | chpasswd
+echo "root:\$USER_PASSWORD" | chpasswd
+echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
+
+# GRUB
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+mkdir -p "\$GRUB_THEMES_DIR"
+
+# GRUB themes
+cd /tmp
+git clone https://github.com/shvchk/fallout-grub-theme
+git clone https://github.com/vinceliuice/BSOL-GRUB-Theme
+git clone https://github.com/JeansLucifer/Minegrub-Theme
+git clone https://github.com/Mangeshrex/CRT-Amber-GRUB-Theme
+git clone https://github.com/vinceliuice/Arcade-GRUB-Theme
+git clone https://github.com/vinceliuice/Dark-Matter-Grub-Theme
+
+mkdir -p "\$GRUB_THEMES_DIR/Fallout"
+cp -r fallout-grub-theme/* "\$GRUB_THEMES_DIR/Fallout/"
+echo "GRUB_THEME=\"\$GRUB_THEMES_DIR/Fallout/theme.txt\"" >> /etc/default/grub
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# Audio bip Fallout
+mkdir -p /usr/share/sounds
+curl -Lo "\$BEEP_SOUND_PATH" https://github.com/fallout-theme-sounds/beep.wav || true
+aplay "\$BEEP_SOUND_PATH" &
+
+# Hyprland et apps
+pacman -S --noconfirm hyprland kitty waybar wofi rofi nwg-look brightnessctl \
+  pavucontrol thunar thunar-archive-plugin neofetch mpv xdg-desktop-portal-hyprland \
+  ffmpeg playerctl cava picom
+
+# Fastfetch
+git clone https://github.com/fastfetch-cli/fastfetch.git /opt/fastfetch
+cd /opt/fastfetch
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target fastfetch
+cp build/fastfetch /usr/local/bin/
+
+mkdir -p /home/\$USERNAME/.config/fastfetch
+cat <<END > /home/\$USERNAME/.config/fastfetch/config.jsonc
+{
+  "logo": "arch",
+  "color": "magenta"
+}
+END
+
+# Vidéo fond d’écran
+mkdir -p /usr/share/wallpapers
+curl -Lo "\$VIDEO_WALLPAPER_PATH" https://example.com/arcane.mp4 || true
+cat <<END > /etc/systemd/system/video-wallpaper.service
+[Unit]
+Description=Video Wallpaper
+After=hyprland.service
+
+[Service]
+ExecStart=/usr/bin/mpv --loop --no-audio --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) "\$VIDEO_WALLPAPER_PATH"
+
+[Install]
+WantedBy=default.target
+END
+systemctl enable video-wallpaper.service
+
+# Picom config
+mkdir -p /home/\$USERNAME/.config/picom
+cat <<END > /home/\$USERNAME/.config/picom/picom.conf
+opacity-rule = [ "90:class_g = 'kitty'" ];
+backend = "glx";
+vsync = true;
+blur-method = "dual_kawase";
+blur-strength = 5;
+END
+
+# Cava config
+mkdir -p /home/\$USERNAME/.config/cava
+cp /etc/cava/config /home/\$USERNAME/.config/cava/config
+
+# Network
+systemctl enable NetworkManager
+
+echo "✅ Post-installation terminée."
+EOF
+
+chmod +x /mnt/root/post-install.sh
+
+# Exécution dans chroot
+arch-chroot /mnt /root/post-install.sh
+
+# Nettoyage
+rm /mnt/root/post-install.sh
+
+echo "🎉 Installation complète ! Tu peux redémarrer le système."
