@@ -107,7 +107,7 @@ echo "GRUB_THEME=\"$GRUB_THEMES_DIR/$GRUB_DEFAULT_THEME/theme.txt\"" >> /etc/def
 
 # BIP SONORE OPTIONNEL (MP3 depuis repo GitHub)
 mkdir -p /usr/share/sounds
-curl -Lo "$BEEP_SOUND_PATH" https://github.com/fallout-theme-sounds/beep.mp3 || true
+curl -Lo "$BEEP_SOUND_PATH" https://github.com/PapaOursPolaire/archautoconfig/blob/Projets/FalloutBip.mp3 || true
 command -v mpv &> /dev/null && mpv --no-video "$BEEP_SOUND_PATH" &
 
 # HYPRLAND
@@ -132,7 +132,7 @@ EOF
 
 # VIDEO FOND D'ECRAN (MPV avec URL fonctionnelle)
 mkdir -p /usr/share/wallpapers
-curl -Lo "$VIDEO_WALLPAPER_PATH" https://raw.githubusercontent.com/youruser/yourrepo/main/arcane.mp4 || true
+curl -Lo "$VIDEO_WALLPAPER_PATH" https://github.com/PapaOursPolaire/archautoconfig/blob/Projets/bkv.mp4 || true
 cat <<EOF > /etc/systemd/system/video-wallpaper.service
 [Unit]
 Description=Arcane Video Wallpaper
