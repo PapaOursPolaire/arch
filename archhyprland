@@ -1,119 +1,180 @@
 set -e
 
-echo "🚀 Lancement de l'installation complète Arch Linux + Hyprland + GRUB personnalisé"
+# 🌌 Script d'installation Arch Linux personnalisé avec Hyprland et setup visuel
 
-# 📥 Demande d'infos
-read -p "💾 Partition EFI (ex: /dev/sda1) : " EFI_PART
-read -p "📁 Partition ROOT (ex: /dev/sda2) : " ROOT_PART
-read -p "👤 Nom d'utilisateur : " USERNAME
-read -p "🖥️ Nom de la machine (hostname) : " HOSTNAME
+clear
+echo "\n🚀 Bienvenue dans l'installateur Arch Linux Hyprland - Style Arcane x Fallout"
+echo "by Papa Ours"
+
+# 🧮 Liste des disques disponibles
+
+echo "\n💽 Disques détectés :"
+lsblk -dpno NAME,SIZE | grep -v "/loop" | nl
+
+read -rp $'\n🖱️  Entrez le *numéro* du disque cible pour l’installation (ex: 1): ' DISK_CHOICE
+DISK=$(lsblk -dpno NAME | grep -v "/loop" | sed -n "${DISK_CHOICE}p")
+
+if [[ ! -b "$DISK" ]]; then
+  echo "\n❌ Disque invalide. Abandon."
+  exit 1
+fi
+
+read -rp "\n🗃️  Nom d'utilisateur souhaité : " USERNAME
+read -rp "🏷️  Nom de la machine (hostname) : " HOSTNAME
 
 while true; do
-  read -s -p "🔐 Mot de passe utilisateur : " USER_PASSWORD
+  read -rsp "🔐 Mot de passe pour $USERNAME : " USERPASS
   echo
-  read -s -p "🔁 Confirmez le mot de passe : " USER_PASSWORD_CONFIRM
+  read -rsp "🔁 Confirmer le mot de passe : " USERPASS_CONFIRM
   echo
-  [ "$USER_PASSWORD" = "$USER_PASSWORD_CONFIRM" ] && break
-  echo "❌ Les mots de passe ne correspondent pas."
+  [[ "$USERPASS" == "$USERPASS_CONFIRM" ]] && break
+  echo "❗ Les mots de passe ne correspondent pas. Recommence."
 done
 
-# ⚠️ Formatage
-echo "🧹 Formatage des partitions..."
-mkfs.fat -F32 "$EFI_PART"
-mkfs.ext4 -F "$ROOT_PART"
+#Variables internes
+EFI_PART="${DISK}1"
+ROOT_PART="${DISK}2"
+MOUNTPOINT="/mnt"
+SCRIPT_PATH="/root/install.sh"
+VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/arcane-background.mp4"
+LOGO_IMAGE_PATH="/usr/share/pictures/custom-fastfetch-logo.png"
+BEEP_SOUND_PATH="/usr/share/sounds/fallout-beep.mp3"
+GRUB_THEMES_DIR="/boot/grub/themes"
+GRUB_DEFAULT_THEME="Fallout"
 
-# 📂 Montage
-mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot/efi
-mount "$EFI_PART" /mnt/boot/efi
+#Étape 1 : Partitionnement et installation de base
 
-# 📦 Installation de base
-pacstrap /mnt base base-devel linux linux-firmware grub efibootmgr networkmanager sudo git vim pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber
+if [[ "$1" != "--chroot" ]]; then
+  echo "\n🌀 Suppression des partitions sur $DISK..."
+  wipefs -af $DISK
+  sgdisk -Zo $DISK
 
-# 📄 fstab
-genfstab -U /mnt >> /mnt/etc/fstab
+  echo "🧱 Création des nouvelles partitions..."
+  parted --script $DISK mklabel gpt
+  parted --script $DISK mkpart ESP fat32 1MiB 300MiB
+  parted --script $DISK set 1 esp on
+  parted --script $DISK mkpart primary ext4 300MiB 100%
 
-# 💬 Configuration dans chroot
-arch-chroot /mnt /bin/bash <<EOF
-set -e
+  echo "🔧 Formatage..."
+  mkfs.fat -F32 $EFI_PART
+  mkfs.ext4 $ROOT_PART
 
-echo "🎯 Configuration dans le système installé"
+  echo "📦 Montage..."
+  mount $ROOT_PART $MOUNTPOINT
+  mkdir -p $MOUNTPOINT/boot/efi
+  mount $EFI_PART $MOUNTPOINT/boot/efi
 
-# 🕐 Heure et locale
-ln -sf /usr/share/zoneinfo/Europe/Brussels /etc/localtime
-hwclock --systohc
-sed -i 's/#fr_BE.UTF-8 UTF-8/fr_BE.UTF-8 UTF-8/' /etc/locale.gen
-locale-gen
-echo "LANG=fr_BE.UTF-8" > /etc/locale.conf
-echo "KEYMAP=fr" > /etc/vconsole.conf
+  echo "📥 Installation de la base..."
+  pacstrap $MOUNTPOINT base base-devel linux linux-firmware grub efibootmgr networkmanager sudo git vim
 
-# 🔠 Hostname
+  echo "🧠 génération fstab..."
+  genfstab -U $MOUNTPOINT >> $MOUNTPOINT/etc/fstab
+
+  echo "📁 Copie du script dans le système cible..."
+  cp "$0" "$MOUNTPOINT/$SCRIPT_PATH"
+  chmod +x "$MOUNTPOINT/$SCRIPT_PATH"
+
+  arch-chroot $MOUNTPOINT $SCRIPT_PATH --chroot "$USERNAME" "$HOSTNAME" "$USERPASS"
+  echo "✅ Base installée. Tu peux redémarrer."
+  exit 0
+fi
+
+#Étape 2 : post-install (exécuté en chroot)
+USERNAME="$2"
+HOSTNAME="$3"
+USERPASS="$4"
+
+echo "📛 Configuration hostname..."
 echo "$HOSTNAME" > /etc/hostname
 
-# 👤 Utilisateur
-useradd -m -G wheel -s /bin/bash "$USERNAME"
-echo "$USERNAME:$USER_PASSWORD" | chpasswd
-echo "root:$USER_PASSWORD" | chpasswd
-echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
+# MISE A JOUR
+pacman -Syu --noconfirm
 
-# 🧠 GRUB
+# INSTALLATION KERNEL & MODULES
+pacman -S --noconfirm base base-devel linux linux-firmware grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber
+
+# INSTALLATION UEFI + GRUB
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-mkdir -p /boot/grub/themes
+mkdir -p $GRUB_THEMES_DIR
 
-# 🎨 Thèmes GRUB
+# THEMES GRUB
+echo "🎨 Téléchargement des thèmes GRUB..."
 cd /tmp
 git clone https://github.com/shvchk/fallout-grub-theme
-cp -r fallout-grub-theme /boot/grub/themes/Fallout
-echo 'GRUB_THEME="/boot/grub/themes/Fallout/theme.txt"' >> /etc/default/grub
-grub-mkconfig -o /boot/grub/grub.cfg
+mkdir -p "$GRUB_THEMES_DIR/$GRUB_DEFAULT_THEME"
+cp -r fallout-grub-theme/* "$GRUB_THEMES_DIR/$GRUB_DEFAULT_THEME"
+echo "GRUB_THEME=\"$GRUB_THEMES_DIR/$GRUB_DEFAULT_THEME/theme.txt\"" >> /etc/default/grub
 
-# 📡 Réseau
-systemctl enable NetworkManager
+# BIP SONORE OPTIONNEL (MP3 depuis repo GitHub)
+mkdir -p /usr/share/sounds
+curl -Lo "$BEEP_SOUND_PATH" https://github.com/fallout-theme-sounds/beep.mp3 || true
+command -v mpv &> /dev/null && mpv --no-video "$BEEP_SOUND_PATH" &
 
-# 🖥️ Environnement graphique
+# HYPRLAND
 pacman -S --noconfirm hyprland kitty waybar wofi rofi nwg-look brightnessctl \
   pavucontrol thunar thunar-archive-plugin neofetch mpv xdg-desktop-portal-hyprland \
-  ffmpeg playerctl cava picom
+  ffmpeg playerctl
 
-# ⚡ Fastfetch
-git clone https://github.com/fastfetch-cli/fastfetch.git /opt/fastfetch
-cd /opt/fastfetch
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+# FASTFETCH
+cd /opt && git clone https://github.com/fastfetch-cli/fastfetch.git
+cd fastfetch && cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target fastfetch
 cp build/fastfetch /usr/local/bin/
 
-mkdir -p /home/$USERNAME/.config/fastfetch
-echo '{ "logo": "arch", "color": "magenta" }' > /home/$USERNAME/.config/fastfetch/config.jsonc
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config
+mkdir -p /home/$USERNAME/.config/fastfetch/
+cat <<EOF > /home/$USERNAME/.config/fastfetch/config.jsonc
+{
+  "logo": "arch",
+  // "image": "$LOGO_IMAGE_PATH",
+  "color": "magenta"
+}
+EOF
 
-# 🌫️ Picom
-mkdir -p /home/$USERNAME/.config/picom
-echo 'opacity-rule = [ "90:class_g = '\''kitty'\''" ]; backend = "glx"; vsync = true; blur-method = "dual_kawase"; blur-strength = 5;' > /home/$USERNAME/.config/picom/picom.conf
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/picom
-
-# 🔊 Cava
-mkdir -p /home/$USERNAME/.config/cava
-cp /etc/cava/config /home/$USERNAME/.config/cava/config
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/cava
-
-# 🎞️ Fond vidéo
+# VIDEO FOND D'ECRAN (MPV avec URL fonctionnelle)
 mkdir -p /usr/share/wallpapers
-curl -Lo /usr/share/wallpapers/arcane-background.mp4 https://example.com/arcane.mp4 || true
-cat <<EOL > /etc/systemd/system/video-wallpaper.service
+curl -Lo "$VIDEO_WALLPAPER_PATH" https://raw.githubusercontent.com/youruser/yourrepo/main/arcane.mp4 || true
+cat <<EOF > /etc/systemd/system/video-wallpaper.service
 [Unit]
-Description=Video Wallpaper
+Description=Arcane Video Wallpaper
 After=graphical.target
 
 [Service]
-ExecStart=/usr/bin/mpv --loop --no-audio --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) /usr/share/wallpapers/arcane-background.mp4
+ExecStart=/usr/bin/mpv --loop --no-audio --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) "$VIDEO_WALLPAPER_PATH"
+Restart=always
+User=$USERNAME
+Environment=DISPLAY=:0
 
 [Install]
 WantedBy=default.target
-EOL
-
+EOF
 systemctl enable video-wallpaper.service
 
-echo "✅ Configuration terminée."
+# TRANSPARENCE
+pacman -S --noconfirm picom
+mkdir -p /home/$USERNAME/.config/picom
+cat <<EOF > /home/$USERNAME/.config/picom/picom.conf
+opacity-rule = [ "90:class_g = 'kitty'" ];
+backend = "glx";
+vsync = true;
+blur-method = "dual_kawase";
+blur-strength = 5;
 EOF
 
-echo "🎉 Installation complète ! Tu peux maintenant redémarrer dans ton Arch Linux personnalisé 🌌"
+# CAVA
+pacman -S --noconfirm cava
+mkdir -p /home/$USERNAME/.config/cava
+cp /etc/cava/config /home/$USERNAME/.config/cava/config
+
+# UTILISATEUR
+useradd -m -G wheel -s /bin/bash $USERNAME
+echo "$USERNAME:$USERPASS" | chpasswd
+echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
+
+# RÉSEAU
+systemctl enable NetworkManager
+
+# GRUB FINAL
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# ✅ FIN
+echo "\n🎉 Installation terminée avec succès. Redémarre et profite de ton Arch stylé."
