@@ -1,33 +1,7 @@
+#!/bin/bash
 set -e
 
-# 🌌 Script d'automatisation d'Arch Linux avec Hyprland (version corrigée)
-
-# Fonction de validation des noms
-validate_name() {
-    local name=$1
-    local type=$2
-    if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
-        echo "❌ Format $type invalide ! Doit commencer par une lettre minuscule et ne contenir que :"
-        echo "   - Lettres minuscules"
-        echo "   - Chiffres"
-        echo "   - Tirets (-) et underscores (_)"
-        echo "   - Pas d'espaces, majuscules ou caractères spéciaux"
-        return 1
-    fi
-    return 0
-}
-
-# PHASE 0: VÉRIFICATIONS PRÉLIMINAIRES
-echo "🔍 Vérification des prérequis..."
-if ! ping -c 1 archlinux.org &> /dev/null; then
-    echo "❌ Connexion Internet requise !"
-    exit 1
-fi
-
-if [ "$(id -u)" -ne 0 ]; then
-    echo "❌ Le script doit être exécuté en tant que root !"
-    exit 1
-fi
+# 🌌 Script d'automatisation d'Arch Linux avec Hyprland
 
 # PHASE 1: CONFIGURATION PRÉ-INSTALLATION
 
@@ -36,7 +10,7 @@ echo "🔍 Détection des disques et partitions..."
 DISKS=()
 while IFS= read -r line; do
     DISKS+=("$line")
-done < <(lsblk -d -n -o NAME,SIZE,TYPE,MODEL | grep 'disk' | awk '{print $1 " (" $2 ") - " substr($0, index($0,$4))}')
+done < <(lsblk -d -n -o NAME,SIZE,TYPE | grep 'disk' | awk '{print $1 " (" $2 ")"}')
 
 if [ ${#DISKS[@]} -eq 0 ]; then
     echo "❌ Aucun disque détecté !"
@@ -49,51 +23,37 @@ for i in "${!DISKS[@]}"; do
     echo "  $((i+1)). ${DISKS[$i]}"
 done
 
-while true; do
-    read -p "→ Sélectionnez un disque [1-${#DISKS[@]}]: " DISK_CHOICE
-    if [[ "$DISK_CHOICE" =~ ^[0-9]+$ ]] && [ "$DISK_CHOICE" -ge 1 ] && [ "$DISK_CHOICE" -le ${#DISKS[@]} ]; then
-        SELECTED_DISK="/dev/$(echo "${DISKS[$((DISK_CHOICE-1))]}" | awk '{print $1}')"
-        break
-    else
-        echo "❌ Choix invalide !"
-    fi
-done
+read -p "→ Sélectionnez un disque [1-${#DISKS[@]}]: " DISK_CHOICE
+SELECTED_DISK="/dev/$(echo "${DISKS[$((DISK_CHOICE-1))]}" | awk '{print $1}')"
 
 echo "💾 Configuration des partitions pour $SELECTED_DISK:"
-echo "   (Minimum recommandé: EFI=550M, ROOT=30G)"
+echo "   (Minimum recommandé: EFI=550M, SWAP=4G, ROOT=30G)"
+echo "   1. Partition EFI (boot)"
+echo "   2. Partition SWAP"
+echo "   3. Partition ROOT (système)"
 
 # Configuration des partitions
 read -p "→ Taille de la partition EFI (ex: 550M): " EFI_SIZE
+read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
 read -p "→ Taille de la partition ROOT (ex: 30G): " ROOT_SIZE
-read -p "→ Voulez-vous une partition SWAP ? [o/n]: " SWAP_NEEDED
-
-if [[ "$SWAP_NEEDED" =~ ^[oOyY].* ]]; then
-    read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
-    SWAP_PART=2
-    ROOT_PART=3
-else
-    SWAP_SIZE="0"
-    SWAP_PART=""
-    ROOT_PART=2
-fi
 
 # Création des partitions
 echo "🗂️ Création des partitions..."
 parted -s "$SELECTED_DISK" mklabel gpt
 parted -s "$SELECTED_DISK" mkpart primary fat32 0% "$EFI_SIZE"
-[ -n "$SWAP_PART" ] && parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
-parted -s "$SELECTED_DISK" mkpart primary ext4 "${SWAP_SIZE:-$EFI_SIZE}" "$ROOT_SIZE"
+parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
+parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
 parted -s "$SELECTED_DISK" set 1 boot on
 
 # Formatage des partitions
 echo "📂 Formatage des partitions..."
 mkfs.fat -F32 "${SELECTED_DISK}1"
-[ -n "$SWAP_PART" ] && mkswap "${SELECTED_DISK}$SWAP_PART"
-[ -n "$SWAP_PART" ] && swapon "${SELECTED_DISK}$SWAP_PART"
-mkfs.ext4 "${SELECTED_DISK}$ROOT_PART"
+mkswap "${SELECTED_DISK}2"
+swapon "${SELECTED_DISK}2"
+mkfs.ext4 "${SELECTED_DISK}3"
 
 # Montage des partitions
-mount "${SELECTED_DISK}$ROOT_PART" /mnt
+mount "${SELECTED_DISK}3" /mnt
 mkdir -p /mnt/boot
 mount "${SELECTED_DISK}1" /mnt/boot
 
@@ -101,15 +61,8 @@ mount "${SELECTED_DISK}1" /mnt/boot
 
 # Saisie des informations utilisateur
 echo "👤 Configuration du système"
-while true; do
-    read -p "→ Nom d'utilisateur (minuscules/chiffres/_/-): " USERNAME
-    validate_name "$USERNAME" "d'utilisateur" && break
-done
-
-while true; do
-    read -p "→ Nom de la machine (hostname, minuscules/chiffres/_/-): " HOSTNAME
-    validate_name "$HOSTNAME" "hostname" && break
-done
+read -p "→ Nom d'utilisateur: " USERNAME
+read -p "→ Nom de la machine (hostname): " HOSTNAME
 
 while true; do
     read -s -p "→ Mot de passe pour $USERNAME: " PASSWORD
@@ -145,10 +98,10 @@ set -e
 USERNAME="$USERNAME"
 HOSTNAME="$HOSTNAME"
 PASSWORD="$PASSWORD"
-GITHUB_REPO="https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/refs/heads/Projets/archhyprland"
-VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/bkv.mp4"
-LOGO_IMAGE_PATH="/usr/share/pictures/Papa-Ours.png"
-BEEP_SOUND_PATH="/usr/share/sounds/FalloutBip.mp3"
+GITHUB_REPO="https://raw.githubusercontent.com/votre_compte/votre_repo/main"
+VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/arcane-background.mp4"
+LOGO_IMAGE_PATH="/usr/share/pictures/custom-fastfetch-logo.png"
+BEEP_SOUND_PATH="/usr/share/sounds/fallout-beep.wav"
 GRUB_THEMES_DIR="/boot/grub/themes"
 
 # Configuration de base
@@ -160,7 +113,7 @@ echo "127.0.1.1 $HOSTNAME.localdomain $HOSTNAME" >> /etc/hosts
 
 # Utilisateur et mot de passe
 echo "👤 Création de l'utilisateur..."
-useradd -m -G wheel -s /bin/bash "$USERNAME"
+useradd -m -G wheel,audio,video -s /bin/bash "$USERNAME"
 echo "$USERNAME:$PASSWORD" | chpasswd
 
 # sudoers
@@ -171,8 +124,6 @@ echo "🌍 Configuration des locales..."
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
-ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
-hwclock --systohc
 
 # PHASE 4: INSTALLATION DES COMPOSANTS
 
@@ -182,8 +133,8 @@ pacman -Syu --noconfirm --needed \
     grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio \
     pipewire-pulse pipewire-alsa wireplumber hyprland kitty waybar wofi \
     rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
-    mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava xdotool \
-    noto-fonts noto-fonts-emoji ttf-dejavu ttf-liberation
+    neofetch mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava \
+    sddm xdg-user-dirs noto-fonts-emoji
 
 # UEFI + GRUB
 echo "🧬 Configuration du bootloader..."
@@ -211,11 +162,9 @@ theme_names=(
 )
 
 for i in "\${!themes[@]}"; do
-    git clone "\${themes[\$i]}" "/tmp/\${theme_names[\$i]}" >/dev/null 2>&1 || true
-    if [ -d "/tmp/\${theme_names[\$i]}" ]; then
-        mkdir -p "\$GRUB_THEMES_DIR/\${theme_names[\$i]}"
-        cp -r "/tmp/\${theme_names[\$i]}"/* "\$GRUB_THEMES_DIR/\${theme_names[\$i]}/" || true
-    fi
+    git clone "\${themes[\$i]}" "/tmp/\${theme_names[\$i]}" >/dev/null 2>&1
+    mkdir -p "\$GRUB_THEMES_DIR/\${theme_names[\$i]}"
+    cp -r "/tmp/\${theme_names[\$i]}"/* "\$GRUB_THEMES_DIR/\${theme_names[\$i]}/"
 done
 
 echo "GRUB_THEME=\"\$GRUB_THEMES_DIR/Fallout/theme.txt\"" >> /etc/default/grub
@@ -224,25 +173,17 @@ grub-mkconfig -o /boot/grub/grub.cfg
 # Sons et wallpapers
 echo "🔊 Téléchargement des ressources multimédias..."
 mkdir -p /usr/share/{sounds,wallpapers,pictures}
-curl -fLo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/FalloutBip.mp3" || echo "⚠️ Impossible de télécharger le son"
-curl -fLo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/bkv.mp4" || echo "⚠️ Impossible de télécharger le wallpaper"
-curl -fLo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/Papa-Ours.png" || echo "⚠️ Impossible de télécharger le logo"
+curl -Lo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/fallout-beep.wav"
+curl -Lo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/arcane-background.mp4"
+curl -Lo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/custom-fastfetch-logo.png"
 
 # Fastfetch
-echo "⚡ Installation de Fastfetch..."
-if ! command -v fastfetch &> /dev/null; then
-    if pacman -S fastfetch --noconfirm &> /dev/null; then
-        echo "✅ Fastfetch installé via pacman"
-    else
-        echo "⚠️ Installation via pacman échouée, tentative de compilation..."
-        pacman -S --noconfirm cmake base-devel
-        git clone https://github.com/fastfetch-cli/fastfetch.git /tmp/fastfetch
-        cd /tmp/fastfetch
-        cmake -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --target fastfetch
-        cp build/fastfetch /usr/local/bin/
-    fi
-fi
+echo "⚡ Configuration de Fastfetch..."
+git clone https://github.com/fastfetch-cli/fastfetch.git /opt/fastfetch
+cd /opt/fastfetch
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target fastfetch
+cp build/fastfetch /usr/local/bin/
 
 mkdir -p /home/\$USERNAME/.config/fastfetch/
 cat << FASTEOF > /home/\$USERNAME/.config/fastfetch/config.jsonc
@@ -256,24 +197,66 @@ cat << FASTEOF > /home/\$USERNAME/.config/fastfetch/config.jsonc
   "color": "magenta"
 }
 FASTEOF
-chown \$USERNAME: /home/\$USERNAME/.config/fastfetch/config.jsonc
 
-# Autres configurations
-echo "🎞️ Configuration du fond d'écran vidéo..."
-cat << SERVICE > /etc/systemd/system/video-wallpaper.service
-[Unit]
-Description=Video Wallpaper Service
-After=graphical-session.target
+# Configuration SDDM pour Hyprland
+echo "🖥️ Configuration du gestionnaire de connexion SDDM..."
+cat << SDDM > /etc/sddm.conf
+[Autologin]
+User=$USERNAME
+Session=hyprland.desktop
+[Theme]
+Current=breeze
+SDDM
 
-[Service]
-User=\$USERNAME
-Environment=DISPLAY=:0
-ExecStart=mpv --no-audio --loop --panscan=1.0 --no-keepaspect --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) "\$VIDEO_WALLPAPER_PATH"
-Restart=on-failure
+# Création du dossier de configuration Hyprland
+echo "📁 Création des dossiers de configuration Hyprland..."
+mkdir -p /home/\$USERNAME/.config/hypr
+chown -R \$USERNAME:\$USERNAME /home/\$USERNAME/.config
 
-[Install]
-WantedBy=graphical-session.target
-SERVICE
+# Configuration Hyprland minimale
+echo "🌊 Création de la configuration Hyprland de base..."
+cat << HYPR > /home/\$USERNAME/.config/hypr/hyprland.conf
+# Configuration minimale Hyprland
+exec-once = dbus-update-activation-environment --systemd DISPLAY
+exec-once = systemctl --user import-environment DISPLAY
+
+monitor=,preferred,auto,1
+
+input {
+    kb_layout = fr
+    follow_mouse = 1
+}
+
+general {
+    gaps_in = 5
+    gaps_out = 10
+    border_size = 2
+}
+
+decoration {
+    rounding = 5
+    blur = yes
+    blur_size = 3
+}
+
+animations {
+    enabled = yes
+}
+
+dwindle {
+    pseudotile = yes
+}
+
+master {
+    new_is_master = true
+}
+
+# Exemple d'application
+bind = SUPER, RETURN, exec, kitty
+bind = SUPER, Q, killactive,
+bind = SUPER, M, exit,
+bind = SUPER, V, togglefloating,
+HYPR
 
 # Transparence
 echo "🌫️ Configuration de la transparence..."
@@ -297,13 +280,15 @@ chown -R \$USERNAME:\$USERNAME /home/\$USERNAME
 # Services
 echo "🚀 Activation des services..."
 systemctl enable NetworkManager
+systemctl enable sddm
 systemctl enable video-wallpaper.service
 
 echo "✅ Installation post-chroot terminée !"
 EOF
 
+
 # FINALISATION
 echo "🎉 Installation complète !"
 echo "🔄 Démonter les partitions..."
-umount -R /mnt || true
+umount -R /mnt
 echo "💻 Vous pouvez maintenant redémarrer avec : reboot"
