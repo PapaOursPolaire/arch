@@ -1,32 +1,53 @@
+#!/bin/bash
 set -e
 
-# 🌌 Script d'automatisation d'Arch Linux avec le moteur graphique Hyprland
+# 🌌 Script d'installation Arch Linux + Hyprland + GRUB personnalisé
 
-echo "🚀 Démarrage de l'installation... Prépare-toi à vivre l'expérience Arcane x Fallout sur Arch."
+echo "🚀 Bienvenue dans l'installation Arcane x Fallout sur Arch Linux."
 
-# PARAMÈTRES 
-USERNAME="papaours"
-HOSTNAME="papaours"
+# 🔧 Saisie des paramètres utilisateur
+read -p "💾 Sur quelle partition souhaitez-vous installer Arch ? (ex: /dev/sda1) : " INSTALL_PARTITION
+read -p "👤 Nom d'utilisateur à créer : " USERNAME
+read -p "🖥️ Nom de la machine (hostname) : " HOSTNAME
+
+# 🔐 Saisie + confirmation mot de passe
+while true; do
+  read -s -p "🔐 Mot de passe de l'utilisateur : " USER_PASSWORD
+  echo
+  read -s -p "🔁 Confirmez le mot de passe : " USER_PASSWORD_CONFIRM
+  echo
+  if [ "$USER_PASSWORD" = "$USER_PASSWORD_CONFIRM" ]; then
+    break
+  else
+    echo "❌ Les mots de passe ne correspondent pas. Veuillez réessayer."
+  fi
+done
+
+# 📁 Points de montage
+mount "$INSTALL_PARTITION" /mnt
+
+# Chemins personnalisés
 VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/arcane-background.mp4"
 LOGO_IMAGE_PATH="/usr/share/pictures/custom-fastfetch-logo.png"
 BEEP_SOUND_PATH="/usr/share/sounds/fallout-beep.wav"
 GRUB_THEMES_DIR="/boot/grub/themes"
 GRUB_DEFAULT_THEME="Fallout"
 
-#MISE À JOUR
+# 📦 Mise à jour des dépôts
 echo "📦 Mise à jour des dépôts..."
 pacman -Syu --noconfirm
 
-# INSTALLATION DU KERNEL
-echo "📁 Installation des paquets additionnels..."
+# 📁 Installation de base
+echo "📁 Installation des paquets système..."
 pacman -S --noconfirm base base-devel linux linux-firmware grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber
 
-#UEFI + GRUB
-echo "🧬 Installation UEFI + GRUB..."
+# 🧬 Configuration UEFI + GRUB
+echo "🧬 Installation de GRUB (UEFI)..."
+mkdir -p /mnt/boot/efi
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-mkdir -p $GRUB_THEMES_DIR
+mkdir -p "$GRUB_THEMES_DIR"
 
-#THÈMES GRUB
+# 🎨 Thèmes GRUB
 echo "🎨 Téléchargement des thèmes GRUB..."
 cd /tmp
 git clone https://github.com/shvchk/fallout-grub-theme
@@ -45,21 +66,20 @@ cp -r CRT-Amber-GRUB-Theme/* "$GRUB_THEMES_DIR/CRT-Amber/"
 cp -r Arcade-GRUB-Theme/* "$GRUB_THEMES_DIR/Arcade/"
 cp -r Dark-Matter-Grub-Theme/* "$GRUB_THEMES_DIR/Dark-Matter/"
 
-# Ajout du thème Fallout par défaut
 echo "GRUB_THEME=\"$GRUB_THEMES_DIR/Fallout/theme.txt\"" >> /etc/default/grub
 
-# Optionnel : Ajout d’un bip sonore style Fallout
+# 🔊 Bip sonore Fallout (optionnel)
 mkdir -p /usr/share/sounds
 curl -Lo "$BEEP_SOUND_PATH" https://github.com/fallout-theme-sounds/beep.wav
 aplay "$BEEP_SOUND_PATH" &
 
-#INSTALLATION HYPRLAND
-echo "🖥️ Installation d'Hyprland et des dépendances..."
+# 🖥️ Installation de Hyprland
+echo "🖥️ Installation de Hyprland et des composants graphiques..."
 pacman -S --noconfirm hyprland kitty waybar wofi rofi nwg-look brightnessctl \
   pavucontrol thunar thunar-archive-plugin neofetch mpv xdg-desktop-portal-hyprland \
   ffmpeg playerctl
 
-#FASTFETCH
+# ⚡ Fastfetch
 echo "⚡ Installation de Fastfetch..."
 git clone https://github.com/fastfetch-cli/fastfetch.git /opt/fastfetch
 cd /opt/fastfetch
@@ -71,24 +91,31 @@ mkdir -p /home/$USERNAME/.config/fastfetch/
 cat <<EOF > /home/$USERNAME/.config/fastfetch/config.jsonc
 {
   "logo": "arch",
-  // 🔧 Pour utiliser un logo personnalisé, décommentez la ligne ci-dessous :
   // "image": "$LOGO_IMAGE_PATH",
   "color": "magenta"
 }
 EOF
 
-#VIDÉO EN FOND D'ÉCRAN
-echo "🎞️ Configuration du fond d’écran vidéo..."
+# 🎞️ Fond d’écran vidéo
+echo "🎞️ Configuration du fond vidéo..."
 mkdir -p /usr/share/wallpapers
-curl -Lo "$VIDEO_WALLPAPER_PATH" https://example.com/arcane.mp4 # Remplacer par chemin d'accès correct
-echo "[Service]
-ExecStart=mpv --loop --no-audio --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) \"$VIDEO_WALLPAPER_PATH\"
-" > /etc/systemd/system/video-wallpaper.service
+curl -Lo "$VIDEO_WALLPAPER_PATH" https://example.com/arcane.mp4
+cat <<EOF > /etc/systemd/system/video-wallpaper.service
+[Unit]
+Description=Video Wallpaper
+After=hyprland.service
+
+[Service]
+ExecStart=/usr/bin/mpv --loop --no-audio --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) "$VIDEO_WALLPAPER_PATH"
+
+[Install]
+WantedBy=default.target
+EOF
 
 systemctl enable video-wallpaper.service
 
-# TRANSPARENCE
-echo "🌫️ Activation de la transparence (picom)..."
+# 🌫️ Transparence Picom
+echo "🌫️ Configuration de la transparence..."
 pacman -S --noconfirm picom
 mkdir -p /home/$USERNAME/.config/picom
 cat <<EOF > /home/$USERNAME/.config/picom/picom.conf
@@ -99,23 +126,26 @@ blur-method = "dual_kawase";
 blur-strength = 5;
 EOF
 
-#DÉTECTION DES BASSES
-echo "🔊 Installation de Cava (analyseur audio)..."
+# 🔊 Cava
+echo "🔊 Installation de Cava..."
 pacman -S --noconfirm cava
 mkdir -p /home/$USERNAME/.config/cava
 cp /etc/cava/config /home/$USERNAME/.config/cava/config
 
-#UTILISATEUR
-echo "👤 Création de l’utilisateur..."
-useradd -m -G wheel -s /bin/bash $USERNAME
-echo "$USERNAME:arch" | chpasswd
+# 👤 Création de l'utilisateur
+echo "👤 Création de l'utilisateur $USERNAME..."
+useradd -m -G wheel -s /bin/bash "$USERNAME"
+echo "$USERNAME:$USER_PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
 
-#RÉSEAU
+# 🖥️ Nom de machine
+echo "$HOSTNAME" > /etc/hostname
+
+# 🌐 Réseau
 systemctl enable NetworkManager
 
-#GRUB FINAL
-echo "🧠 Mise à jour de GRUB..."
+# 🧠 Mise à jour du GRUB
+echo "🧠 Mise à jour du GRUB..."
 grub-mkconfig -o /boot/grub/grub.cfg
 
-echo "✅ Installation complète ! Redémarre maintenant et découvre l'architecture Hyprland sur Arch"
+echo "✅ Installation terminée avec succès ! Redémarre vers ton nouvel univers Arch x Hyprland 🌌"
