@@ -1,3 +1,4 @@
+#!/bin/bash
 set -e
 
 # 🌌 Script d'automatisation d'Arch Linux avec Hyprland
@@ -50,8 +51,10 @@ START_NEXT=$(echo "$EFI_SIZE" | sed 's/[^0-9]*//g')
 if [ "$SWAP_ENABLED" = true ]; then
     parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
     parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
+    ROOT_PART="${SELECTED_DISK}3"
 else
     parted -s "$SELECTED_DISK" mkpart primary ext4 "$EFI_SIZE" "$ROOT_SIZE"
+    ROOT_PART="${SELECTED_DISK}2"
 fi
 parted -s "$SELECTED_DISK" set 1 boot on
 
@@ -61,11 +64,9 @@ mkfs.fat -F32 "${SELECTED_DISK}1"
 if [ "$SWAP_ENABLED" = true ]; then
     mkswap "${SELECTED_DISK}2"
     swapon "${SELECTED_DISK}2"
-    mkfs.ext4 "${SELECTED_DISK}3"
-    ROOT_PART="${SELECTED_DISK}3"
+    mkfs.ext4 "${ROOT_PART}"
 else
-    mkfs.ext4 "${SELECTED_DISK}2"
-    ROOT_PART="${SELECTED_DISK}2"
+    mkfs.ext4 "${ROOT_PART}"
 fi
 
 # Montage des partitions
@@ -164,18 +165,19 @@ pacman -Syu --noconfirm --needed \
     grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio \
     pipewire-pulse pipewire-alsa wireplumber hyprland kitty waybar wofi \
     rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
-    neofetch mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava \
+    mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom \
     sddm xdg-user-dirs noto-fonts-emoji terminus-font ttf-dejavu
 
-# Installation explicite de cava (au cas où)
-pacman -S --noconfirm --needed cava
+# Correction pour neofetch et cava
+echo "🔧 Installation de neofetch et cava..."
+pacman -S --noconfirm --needed neofetch cava
 
 # UEFI + GRUB
 echo "🧬 Configuration du bootloader..."
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 mkdir -p "\$GRUB_THEMES_DIR"
 
-# Installation du thème GRUB Fallout
+# Installation du thème GRUB Fallout avec animation
 echo "🎨 Installation du thème GRUB Fallout..."
 git clone https://github.com/shvchk/fallout-grub-theme.git "\$GRUB_THEMES_DIR/fallout"
 cp -r "\$GRUB_THEMES_DIR/fallout"/* "\$GRUB_THEMES_DIR/"
@@ -220,7 +222,12 @@ pacman -S --noconfirm --needed qt5-quickcontrols2 qt5-graphicaleffects
 cat << SDDM > /etc/sddm.conf
 [Theme]
 Current=breeze
-EOF
+
+[Autologin]
+User=$USERNAME
+Session=hyprland.desktop
+Relogin=false
+SDDM
 
 # Création du dossier de configuration Hyprland
 echo "📁 Création des dossiers de configuration Hyprland..."
@@ -233,7 +240,6 @@ cat << HYPR > /home/\$USERNAME/.config/hypr/hyprland.conf
 # Configuration minimale Hyprland
 exec-once = dbus-update-activation-environment --systemd DISPLAY
 exec-once = systemctl --user import-environment DISPLAY
-exec-once = swww init
 exec-once = waybar
 exec-once = nm-applet --indicator
 
@@ -295,6 +301,7 @@ cp /etc/cava/config /home/\$USERNAME/.config/cava/config
 
 # Service wallpaper (démarre après la session graphique)
 echo "🎞️ Configuration du fond d'écran vidéo..."
+mkdir -p /home/\$USERNAME/.config/systemd/user
 cat << SERVICE > /home/\$USERNAME/.config/systemd/user/video-wallpaper.service
 [Unit]
 Description=Video Wallpaper Service
