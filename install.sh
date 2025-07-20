@@ -1,4 +1,3 @@
-#!/bin/bash
 set -e
 
 # 🌌 Script d'installation Arch Linux + Hyprland + GRUB personnalisé
