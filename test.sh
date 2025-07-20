@@ -1,8 +1,3 @@
-# Script d'installation Arch Linux avec Hyprland - Thème Arcane/Gaming/Dev
-
-# ATTENTION: Ce script ne formate PAS entièrement les disques
-# Il créera de nouvelles partitions sans supprimer les données existantes
-
 set -e
 
 # Couleurs pour l'affichage
