@@ -171,9 +171,9 @@ grub-mkconfig -o /boot/grub/grub.cfg
 # Sons et wallpapers
 echo "🔊 Téléchargement des ressources multimédias..."
 mkdir -p /usr/share/{sounds,wallpapers,pictures}
-curl -Lo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/FalloutBip.mp3"
-curl -Lo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/bkv.mp4"
-curl -Lo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/Papa-Ours.png"
+curl -Lo "$BEEP_SOUND_PATH" "https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets/FalloutBip.mp3"
+curl -Lo "$VIDEO_WALLPAPER_PATH" "https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets/bkv.mp4"
+curl -Lo "$LOGO_IMAGE_PATH" "https://raw.githubusercontent.com/PapaOursPolaire/archautoconfig/Projets/Papa-Ours.png"
 
 # Fastfetch
 echo "⚡ Configuration de Fastfetch..."
