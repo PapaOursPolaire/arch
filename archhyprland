@@ -163,7 +163,7 @@ echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
 # PHASE 4: INSTALLATION DES COMPOSANTS
 
-# Installation des paquets (neofetch remplacé par fastfetch)
+# Installation des paquets avec dépendances de compilation
 echo "📦 Installation des paquets système..."
 pacman -Syu --noconfirm --needed \
     grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio \
@@ -171,7 +171,7 @@ pacman -Syu --noconfirm --needed \
     rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
     mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava \
     sddm xdg-user-dirs noto-fonts-emoji terminus-font ttf-dejavu \
-    xdotool swww
+    xdotool swww cmake make
 
 # UEFI + GRUB
 echo "🧬 Configuration du bootloader..."
