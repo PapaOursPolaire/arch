@@ -336,4 +336,4 @@ echo "🎉 Installation complète !"
 echo "🔄 Démonter les partitions..."
 umount -R /mnt
 echo "💻 Vous pouvez maintenant redémarrer avec : reboot"
-echo "   Après démarrage, connectez-vous avec $USERNAME et son mot de passe"
+echo "   Après démarrage, connectez-vous avec $USERNAME et son mot de passe"           
