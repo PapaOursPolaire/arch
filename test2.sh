@@ -1,6 +1,9 @@
 #!/bin/bash
+
 # Arch Hyprland Ultimate Installer - Configuration automatisée
-# Variables personnalisables - MODIFIEZ CES VALEURS !
+# -----------------------------------------------------------
+
+### VARIABLES PERSONNALISABLES - MODIFIEZ CES VALEURS ###
 USERNAME="votre_user"
 HOSTNAME="arch-hypr"
 ROOT_PASSWORD="votre_mdp_root"
@@ -11,7 +14,7 @@ KEYMAP="fr-latin1"
 DISK="/dev/sda"  # Modifier selon votre configuration
 EFI_PART="${DISK}1" # Partition EFI
 ROOT_PART="${DISK}2" # Partition root
-#-------------------------------------------------------
+# -----------------------------------------------------
 
 ### !!! AVERTISSEMENT !!! 
 ### Ce script va formater les partitions spécifiées ci-dessus
@@ -48,8 +51,8 @@ auto_partition() {
     mkfs.ext4 -F "$ROOT_PART"
     
     mount "$ROOT_PART" /mnt
-    mkdir -p /mnt/boot
-    mount "$EFI_PART" /mnt/boot
+    mkdir -p /mnt/boot/efi
+    mount "$EFI_PART" /mnt/boot/efi
 }
 
 # Installation de base
@@ -92,14 +95,17 @@ graphics_install() {
     pacman -S --noconfirm mesa vulkan-intel nvidia nvidia-utils
     
     # Hyprland
-    sudo -u $USERNAME paru -S --noconfirm hyprland-git \
+    sudo -u $USERNAME bash -c 'git clone https://aur.archlinux.org/yay-bin.git /tmp/yay'
+    cd /tmp/yay
+    sudo -u $USERNAME makepkg -si --noconfirm
+    sudo -u $USERNAME yay -S --noconfirm hyprland-git \
         waybar-hyprland-git rofi-lbonn-wayland-git \
         kitty swaybg swaylock-effects wl-clipboard \
         mako pavucontrol pulseaudio-alsa bluez bluez-utils
     
     # Thèmes
-    sudo -u $USERNAME git clone https://github.com/Arcane-Theme/arcanetheme /home/$USERNAME/.themes/Arcane
-    sudo -u $USERNAME git clone https://github.com/Fallout-Theme/fallouttheme /home/$USERNAME/.themes/Fallout
+    sudo -u $USERNAME bash -c 'git clone https://github.com/Arcane-Theme/arcanetheme /home/$USERNAME/.themes/Arcane'
+    sudo -u $USERNAME bash -c 'git clone https://github.com/Fallout-Theme/fallouttheme /home/$USERNAME/.themes/Fallout'
 EOF
 }
 
@@ -112,22 +118,22 @@ customizations() {
     echo '--logo arch' > /home/$USERNAME/.config/fastfetch/config.conf
     
     # Fond vidéo animé
-    sudo -u $USERNAME git clone https://github.com/Givemo/VideoWall /home/$USERNAME/.config/videowall
-    echo "exec_always VideoWall --loop ~/.config/videowall/arcane.mp4" >> /home/$USERNAME/.config/hypr/hyprland.conf
+    sudo -u $USERNAME bash -c 'git clone https://github.com/Givemo/VideoWall /home/$USERNAME/.config/videowall'
+    echo "exec_always videowall --loop ~/.config/videowall/arcane.mp4" >> /home/$USERNAME/.config/hypr/hyprland.conf
     
     # Barre des tâches transparente
     sudo -u $USERNAME mkdir -p /home/$USERNAME/.config/waybar
     cat > /home/$USERNAME/.config/waybar/config <<'WAYBAR'
-    position: "bottom",
-    height: 36,
-    width: 1400,
-    margin: "0 auto",
-    modules-center: [...],
-    background-color: "rgba(0,0,0,0.5)",
+position: "bottom",
+height: 36,
+width: 1400,
+margin: "0 auto",
+modules-center: [...],
+background-color: "rgba(0,0,0,0.5)",
 WAYBAR
     
     # Verrouillage Fallout
-    sudo -u $USERNAME git clone https://github.com/Fallout-Theme/fallout-lockscreen /home/$USERNAME/.config/lockscreen
+    sudo -u $USERNAME bash -c 'git clone https://github.com/Fallout-Theme/fallout-lockscreen /home/$USERNAME/.config/lockscreen'
     echo "exec swaylock -C /home/$USERNAME/.config/lockscreen/config" >> /home/$USERNAME/.config/hypr/hyprland.conf
 EOF
 }
@@ -139,10 +145,11 @@ install_apps() {
     pacman -S --noconfirm code android-studio jdk-openjdk python nodejs npm docker
     
     # Browsers
-    yay -S --noconfirm google-chrome brave-bin
+    sudo -u $USERNAME yay -S --noconfirm google-chrome brave-bin
     
     # Médias
-    yay -S --noconfirm spotify-launcher spicetify-cli netflix-disney
+    sudo -u $USERNAME yay -S --noconfirm spotify-launcher spicetify-cli netflix-disney
+    sudo -u $USERNAME bash -c 'spicetify apply'
     
     # Gaming/Réseau
     pacman -S --noconfirm wine-staging lutris steam wireshark nmap
@@ -159,7 +166,7 @@ EOF
 grub_config() {
     arch-chroot /mnt /bin/bash <<EOF
     # Installation GRUB
-    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
     pacman -S --noconfirm grub-theme-vimix
     
     # Thèmes supplémentaires
@@ -172,8 +179,9 @@ grub_config() {
     grub-mkconfig -o /boot/grub/grub.cfg
     
     # Bip sonore
+    mkdir -p /boot/grub/sounds
     curl -L https://github.com/Fallout-Theme/grub-sound/raw/main/fallout.wav -o /boot/grub/sounds/fallout.wav
-    echo "GRUB_INIT_TUNE='fallout.wav'" >> /etc/default/grub
+    echo "GRUB_INIT_TUNE='\\aplay /boot/grub/sounds/fallout.wav'" >> /etc/default/grub
     grub-mkconfig -o /boot/grub/grub.cfg
 EOF
 }
@@ -181,11 +189,6 @@ EOF
 # Installation finale
 final_steps() {
     arch-chroot /mnt /bin/bash <<EOF
-    # Yay pour AUR
-    sudo -u $USERNAME git clone https://aur.archlinux.org/yay-bin.git /tmp/yay
-    cd /tmp/yay
-    sudo -u $USERNAME makepkg -si --noconfirm
-    
     # Services
     systemctl enable bluetooth
 EOF
@@ -196,11 +199,11 @@ confirm_install
 auto_partition
 base_install
 system_config
-final_steps
 graphics_install
 customizations
 install_apps
 grub_config
+final_steps
 
 echo "---------------------------------------------"
 echo "Installation terminée avec succès !"

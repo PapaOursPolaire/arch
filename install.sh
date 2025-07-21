@@ -1,150 +1,346 @@
 set -e
 
-# 🌌 Script d'installation Arch Linux + Hyprland + GRUB personnalisé
+# 🌌 Script d'automatisation d'Arch Linux avec Hyprland
 
-echo "🚀 Bienvenue dans l'installation Arcane x Fallout sur Arch Linux."
+# PHASE 1: CONFIGURATION PRÉ-INSTALLATION
 
-# 🔧 Saisie des paramètres utilisateur
-read -p "💾 Sur quelle partition souhaitez-vous installer Arch ? (ex: /dev/sda1) : " INSTALL_PARTITION
-read -p "👤 Nom d'utilisateur à créer : " USERNAME
-read -p "🖥️ Nom de la machine (hostname) : " HOSTNAME
+# Détection des partitions
+echo "🔍 Détection des disques et partitions..."
+DISKS=()
+while IFS= read -r line; do
+    DISKS+=("$line")
+done < <(lsblk -d -n -o NAME,SIZE,TYPE | grep 'disk' | awk '{print $1 " (" $2 ")"}')
 
-# 🔐 Saisie + confirmation mot de passe
-while true; do
-  read -s -p "🔐 Mot de passe de l'utilisateur : " USER_PASSWORD
-  echo
-  read -s -p "🔁 Confirmez le mot de passe : " USER_PASSWORD_CONFIRM
-  echo
-  if [ "$USER_PASSWORD" = "$USER_PASSWORD_CONFIRM" ]; then
-    break
-  else
-    echo "❌ Les mots de passe ne correspondent pas. Veuillez réessayer."
-  fi
+if [ ${#DISKS[@]} -eq 0 ]; then
+    echo "❌ Aucun disque détecté !"
+    exit 1
+fi
+
+# Sélection du disque et partitionnement
+echo "📀 Disques disponibles :"
+for i in "${!DISKS[@]}"; do
+    echo "  $((i+1)). ${DISKS[$i]}"
 done
 
-# 📁 Points de montage
-mount "$INSTALL_PARTITION" /mnt
+read -p "→ Sélectionnez un disque [1-${#DISKS[@]}]: " DISK_CHOICE
+SELECTED_DISK="/dev/$(echo "${DISKS[$((DISK_CHOICE-1))]}" | awk '{print $1}')"
 
-# Chemins personnalisés
+echo "💾 Configuration des partitions pour $SELECTED_DISK:"
+echo "   (Minimum recommandé: EFI=550M, SWAP=optionnel, ROOT=30G)"
+echo "   1. Partition EFI (boot)"
+echo "   2. Partition SWAP (optionnel)"
+echo "   3. Partition ROOT (système)"
+
+# Configuration des partitions
+read -p "→ Taille de la partition EFI (ex: 550M): " EFI_SIZE
+read -p "→ Créer un SWAP? [o/n]: " CREATE_SWAP
+if [[ $CREATE_SWAP =~ ^[OoYy]$ ]]; then
+    read -p "→ Taille de la partition SWAP (ex: 4G): " SWAP_SIZE
+    SWAP_ENABLED=true
+else
+    SWAP_ENABLED=false
+fi
+read -p "→ Taille de la partition ROOT (ex: 30G): " ROOT_SIZE
+
+# Création des partitions
+echo "🗂️ Création des partitions..."
+parted -s "$SELECTED_DISK" mklabel gpt
+parted -s "$SELECTED_DISK" mkpart primary fat32 0% "$EFI_SIZE"
+if [ "$SWAP_ENABLED" = true ]; then
+    parted -s "$SELECTED_DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
+    parted -s "$SELECTED_DISK" mkpart primary ext4 "$SWAP_SIZE" "$ROOT_SIZE"
+    ROOT_PART="${SELECTED_DISK}3"
+else
+    parted -s "$SELECTED_DISK" mkpart primary ext4 "$EFI_SIZE" "$ROOT_SIZE"
+    ROOT_PART="${SELECTED_DISK}2"
+fi
+parted -s "$SELECTED_DISK" set 1 boot on
+
+# Formatage des partitions
+echo "📂 Formatage des partitions..."
+mkfs.fat -F32 "${SELECTED_DISK}1"
+if [ "$SWAP_ENABLED" = true ]; then
+    mkswap "${SELECTED_DISK}2"
+    swapon "${SELECTED_DISK}2"
+    mkfs.ext4 "${ROOT_PART}"
+else
+    mkfs.ext4 "${ROOT_PART}"
+fi
+
+# Montage des partitions
+mount "$ROOT_PART" /mnt
+mkdir -p /mnt/boot
+mount "${SELECTED_DISK}1" /mnt/boot
+
+# PHASE 2: CONFIGURATION UTILISATEUR
+
+# Saisie des informations utilisateur
+echo "👤 Configuration du système"
+while true; do
+    read -p "→ Nom d'utilisateur (lettres minuscules uniquement): " USERNAME
+    # Validation stricte comme dans l'ISO Arch
+    if [[ ! "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+        echo "❌ Nom d'utilisateur invalide !"
+        echo "   Doit commencer par une lettre minuscule ou underscore"
+        echo "   Ne peut contenir que des lettres minuscules, chiffres, tirets et underscores"
+    else
+        break
+    fi
+done
+
+while true; do
+    read -p "→ Nom de la machine (hostname, lettres et chiffres uniquement): " HOSTNAME
+    # Validation stricte comme dans l'ISO Arch
+    if [[ ! "$HOSTNAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]]; then
+        echo "❌ Hostname invalide !"
+        echo "   Doit commencer par une lettre ou chiffre"
+        echo "   Ne peut contenir que des lettres, chiffres et tirets"
+    else
+        break
+    fi
+done
+
+while true; do
+    read -s -p "→ Mot de passe pour $USERNAME: " PASSWORD
+    echo
+    read -s -p "→ Confirmez le mot de passe: " PASSWORD_CONFIRM
+    echo
+    if [ "$PASSWORD" = "$PASSWORD_CONFIRM" ]; then
+        break
+    else
+        echo "❌ Les mots de passe ne correspondent pas !"
+    fi
+done
+
+# Mise à jour des dépôts
+echo "📦 Mise à jour des dépôts..."
+pacman -Syy --noconfirm
+
+# Installation de base
+echo "🚀 Installation du système de base..."
+pacstrap /mnt base base-devel linux linux-firmware
+
+# PHASE 3: CONFIGURATION SYSTÈME
+
+# Génération du FSTAB
+echo "📝 Génération du fichier fstab..."
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Chroot et configuration
+cat << EOF | arch-chroot /mnt /bin/bash
+set -e
+
+# Variables
+USERNAME="$USERNAME"
+HOSTNAME="$HOSTNAME"
+PASSWORD="$PASSWORD"
+GITHUB_REPO="https://raw.githubusercontent.com/votre_compte/votre_repo/main"
 VIDEO_WALLPAPER_PATH="/usr/share/wallpapers/arcane-background.mp4"
 LOGO_IMAGE_PATH="/usr/share/pictures/custom-fastfetch-logo.png"
 BEEP_SOUND_PATH="/usr/share/sounds/fallout-beep.wav"
 GRUB_THEMES_DIR="/boot/grub/themes"
-GRUB_DEFAULT_THEME="Fallout"
 
-# 📦 Mise à jour des dépôts
-echo "📦 Mise à jour des dépôts..."
-pacman -Syu --noconfirm
+# Configuration de base
+echo "🏷️ Configuration du système..."
+echo "$HOSTNAME" > /etc/hostname
+echo "127.0.0.1 localhost" >> /etc/hosts
+echo "::1 localhost" >> /etc/hosts
+echo "127.0.1.1 $HOSTNAME.localdomain $HOSTNAME" >> /etc/hosts
 
-# 📁 Installation de base
-echo "📁 Installation des paquets système..."
-pacman -S --noconfirm base base-devel linux linux-firmware grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio pipewire-pulse pipewire-alsa wireplumber
+# Utilisateur et mot de passe
+echo "👤 Création de l'utilisateur..."
+useradd -m -G wheel,audio,video -s /bin/bash "$USERNAME"
+echo "$USERNAME:$PASSWORD" | chpasswd
 
-# 🧬 Configuration UEFI + GRUB
-echo "🧬 Installation de GRUB (UEFI)..."
-mkdir -p /mnt/boot/efi
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
-mkdir -p "$GRUB_THEMES_DIR"
+# sudoers
+echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
 
-# 🎨 Thèmes GRUB
-echo "🎨 Téléchargement des thèmes GRUB..."
-cd /tmp
-git clone https://github.com/shvchk/fallout-grub-theme
-git clone https://github.com/vinceliuice/BSOL-GRUB-Theme
-git clone https://github.com/JeansLucifer/Minegrub-Theme
-git clone https://github.com/Mangeshrex/CRT-Amber-GRUB-Theme
-git clone https://github.com/vinceliuice/Arcade-GRUB-Theme
-git clone https://github.com/vinceliuice/Dark-Matter-Grub-Theme
+# Localisation
+echo "🌍 Configuration des locales..."
+echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-mkdir -p "$GRUB_THEMES_DIR/Fallout" "$GRUB_THEMES_DIR/BSOL" "$GRUB_THEMES_DIR/Minegrub" "$GRUB_THEMES_DIR/CRT-Amber" "$GRUB_THEMES_DIR/Arcade" "$GRUB_THEMES_DIR/Dark-Matter"
+# PHASE 4: INSTALLATION DES COMPOSANTS
 
-cp -r fallout-grub-theme/* "$GRUB_THEMES_DIR/Fallout/"
-cp -r BSOL-GRUB-Theme/* "$GRUB_THEMES_DIR/BSOL/"
-cp -r Minegrub-Theme/* "$GRUB_THEMES_DIR/Minegrub/"
-cp -r CRT-Amber-GRUB-Theme/* "$GRUB_THEMES_DIR/CRT-Amber/"
-cp -r Arcade-GRUB-Theme/* "$GRUB_THEMES_DIR/Arcade/"
-cp -r Dark-Matter-Grub-Theme/* "$GRUB_THEMES_DIR/Dark-Matter/"
+# Installation des paquets avec dépendances de compilation
+echo "📦 Installation des paquets système..."
+pacman -Syu --noconfirm --needed \
+    grub efibootmgr networkmanager git vim sudo pipewire pipewire-audio \
+    pipewire-pulse pipewire-alsa wireplumber hyprland kitty waybar wofi \
+    rofi nwg-look brightnessctl pavucontrol thunar thunar-archive-plugin \
+    mpv xdg-desktop-portal-hyprland ffmpeg playerctl picom cava \
+    sddm xdg-user-dirs noto-fonts-emoji terminus-font ttf-dejavu \
+    xdotool swww cmake make
 
-echo "GRUB_THEME=\"$GRUB_THEMES_DIR/Fallout/theme.txt\"" >> /etc/default/grub
+# UEFI + GRUB
+echo "🧬 Configuration du bootloader..."
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+mkdir -p "\$GRUB_THEMES_DIR"
 
-# 🔊 Bip sonore Fallout (optionnel)
-mkdir -p /usr/share/sounds
-curl -Lo "$BEEP_SOUND_PATH" https://github.com/fallout-theme-sounds/beep.wav
-aplay "$BEEP_SOUND_PATH" &
+# Installation du thème GRUB Fallout avec animation
+echo "🎨 Installation du thème GRUB Fallout..."
+git clone https://github.com/shvchk/fallout-grub-theme.git "\$GRUB_THEMES_DIR/fallout"
+cp -r "\$GRUB_THEMES_DIR/fallout"/* "\$GRUB_THEMES_DIR/"
 
-# 🖥️ Installation de Hyprland
-echo "🖥️ Installation de Hyprland et des composants graphiques..."
-pacman -S --noconfirm hyprland kitty waybar wofi rofi nwg-look brightnessctl \
-  pavucontrol thunar thunar-archive-plugin neofetch mpv xdg-desktop-portal-hyprland \
-  ffmpeg playerctl
+# Configuration GRUB avec animation
+echo "GRUB_THEME=\"\$GRUB_THEMES_DIR/theme.txt\"" >> /etc/default/grub
+echo "GRUB_GFXMODE=auto" >> /etc/default/grub
+echo "GRUB_GFXPAYLOAD_LINUX=keep" >> /etc/default/grub
+grub-mkconfig -o /boot/grub/grub.cfg
 
-# ⚡ Fastfetch
-echo "⚡ Installation de Fastfetch..."
+# Sons et wallpapers
+echo "🔊 Téléchargement des ressources multimédias..."
+mkdir -p /usr/share/{sounds,wallpapers,pictures}
+curl -Lo "\$BEEP_SOUND_PATH" "\$GITHUB_REPO/fallout-beep.wav" || echo "⚠️ Impossible de télécharger le son"
+curl -Lo "\$VIDEO_WALLPAPER_PATH" "\$GITHUB_REPO/arcane-background.mp4" || echo "⚠️ Impossible de télécharger le fond d'écran"
+curl -Lo "\$LOGO_IMAGE_PATH" "\$GITHUB_REPO/custom-fastfetch-logo.png" || echo "⚠️ Impossible de télécharger le logo"
+
+# Fastfetch (remplace neofetch)
+echo "⚡ Configuration de Fastfetch..."
 git clone https://github.com/fastfetch-cli/fastfetch.git /opt/fastfetch
 cd /opt/fastfetch
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target fastfetch
 cp build/fastfetch /usr/local/bin/
 
-mkdir -p /home/$USERNAME/.config/fastfetch/
-cat <<EOF > /home/$USERNAME/.config/fastfetch/config.jsonc
+mkdir -p /home/\$USERNAME/.config/fastfetch/
+cat << FASTEOF > /home/\$USERNAME/.config/fastfetch/config.jsonc
 {
-  "logo": "arch",
-  // "image": "$LOGO_IMAGE_PATH",
+  "logo": {
+    "type": "file",
+    "source": "\$LOGO_IMAGE_PATH",
+    "width": 35,
+    "height": 35
+  },
   "color": "magenta"
 }
-EOF
+FASTEOF
 
-# 🎞️ Fond d’écran vidéo
-echo "🎞️ Configuration du fond vidéo..."
-mkdir -p /usr/share/wallpapers
-curl -Lo "$VIDEO_WALLPAPER_PATH" https://example.com/arcane.mp4
-cat <<EOF > /etc/systemd/system/video-wallpaper.service
-[Unit]
-Description=Video Wallpaper
-After=hyprland.service
+# Configuration SDDM pour Hyprland
+echo "🖥️ Configuration du gestionnaire de connexion SDDM..."
+pacman -S --noconfirm --needed qt5-quickcontrols2 qt5-graphicaleffects
+cat << SDDM > /etc/sddm.conf
+[Theme]
+Current=breeze
 
-[Service]
-ExecStart=/usr/bin/mpv --loop --no-audio --wid=\$(xdotool search --onlyvisible --class Hyprland | head -n1) "$VIDEO_WALLPAPER_PATH"
+[Autologin]
+User=$USERNAME
+Session=hyprland.desktop
+Relogin=false
+SDDM
 
-[Install]
-WantedBy=default.target
-EOF
+# Création du dossier de configuration Hyprland
+echo "📁 Création des dossiers de configuration Hyprland..."
+mkdir -p /home/\$USERNAME/.config/hypr
+chown -R \$USERNAME:\$USERNAME /home/\$USERNAME/.config
 
-systemctl enable video-wallpaper.service
+# Configuration Hyprland minimale
+echo "🌊 Création de la configuration Hyprland de base..."
+cat << HYPR > /home/\$USERNAME/.config/hypr/hyprland.conf
+# Configuration minimale Hyprland
+exec-once = dbus-update-activation-environment --systemd DISPLAY
+exec-once = systemctl --user import-environment DISPLAY
+exec-once = swww init
+exec-once = waybar
+exec-once = nm-applet --indicator
 
-# 🌫️ Transparence Picom
+monitor=,preferred,auto,1
+
+input {
+    kb_layout = fr
+    follow_mouse = 1
+}
+
+general {
+    gaps_in = 5
+    gaps_out = 10
+    border_size = 2
+    col.active_border = rgba(ff5500ee)
+}
+
+decoration {
+    rounding = 5
+    blur = yes
+    blur_size = 3
+}
+
+animations {
+    enabled = yes
+}
+
+dwindle {
+    pseudotile = yes
+}
+
+master {
+    new_is_master = true
+}
+
+# Raccourcis clavier
+bind = SUPER, RETURN, exec, kitty
+bind = SUPER, Q, killactive
+bind = SUPER, M, exit
+bind = SUPER, V, togglefloating
+bind = SUPER, D, exec, wofi --show drun
+HYPR
+
+# Transparence
 echo "🌫️ Configuration de la transparence..."
-pacman -S --noconfirm picom
-mkdir -p /home/$USERNAME/.config/picom
-cat <<EOF > /home/$USERNAME/.config/picom/picom.conf
+mkdir -p /home/\$USERNAME/.config/picom
+cat << PICOM > /home/\$USERNAME/.config/picom/picom.conf
 opacity-rule = [ "90:class_g = 'kitty'" ];
 backend = "glx";
 vsync = true;
 blur-method = "dual_kawase";
 blur-strength = 5;
+PICOM
+
+# Cava
+echo "🔊 Configuration de Cava..."
+mkdir -p /home/\$USERNAME/.config/cava
+cp /etc/cava/config /home/\$USERNAME/.config/cava/config
+
+# Service wallpaper (démarre après la session graphique)
+echo "🎞️ Configuration du fond d'écran vidéo..."
+mkdir -p /home/\$USERNAME/.config/systemd/user
+cat << SERVICE > /home/\$USERNAME/.config/systemd/user/video-wallpaper.service
+[Unit]
+Description=Video Wallpaper Service
+After=graphical-session.target
+Requires=graphical-session.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+ExecStartPre=/usr/bin/sleep 5
+ExecStart=/usr/bin/mpv --no-audio --loop --panscan=1.0 --no-keepaspect --wid=\$(xdotool getactivewindow) "\$VIDEO_WALLPAPER_PATH"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
+SERVICE
+
+# Permissions
+chown -R \$USERNAME:\$USERNAME /home/\$USERNAME
+
+# Services
+echo "🚀 Activation des services..."
+systemctl enable NetworkManager
+systemctl enable sddm
+
+# Activer le service wallpaper pour l'utilisateur
+echo "Enabling video wallpaper service for user..."
+sudo -u \$USERNAME systemctl --user enable video-wallpaper.service
+
+echo "✅ Installation post-chroot terminée !"
 EOF
 
-# 🔊 Cava
-echo "🔊 Installation de Cava..."
-pacman -S --noconfirm cava
-mkdir -p /home/$USERNAME/.config/cava
-cp /etc/cava/config /home/$USERNAME/.config/cava/config
 
-# 👤 Création de l'utilisateur
-echo "👤 Création de l'utilisateur $USERNAME..."
-useradd -m -G wheel -s /bin/bash "$USERNAME"
-echo "$USERNAME:$USER_PASSWORD" | chpasswd
-echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
-
-# 🖥️ Nom de machine
-echo "$HOSTNAME" > /etc/hostname
-
-# 🌐 Réseau
-systemctl enable NetworkManager
-
-# 🧠 Mise à jour du GRUB
-echo "🧠 Mise à jour du GRUB..."
-grub-mkconfig -o /boot/grub/grub.cfg
-
-echo "✅ Installation terminée avec succès ! Redémarre vers ton nouvel univers Arch x Hyprland 🌌"
+# FINALISATION
+echo "🎉 Installation complète !"
+echo "🔄 Démonter les partitions..."
+umount -R /mnt
+echo "💻 Vous pouvez maintenant redémarrer avec : reboot"
+echo "   Après démarrage, connectez-vous avec $USERNAME et son mot de passe"
