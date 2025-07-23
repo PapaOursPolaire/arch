@@ -521,18 +521,23 @@ esac
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 
 # Installation du thème Fallout pour GRUB
-print_info "Installation du thème Fallout pour GRUB..."
+echo "Installation du thème Fallout pour GRUB..."
 cd /tmp
-git clone https://github.com/shvchk/fallout-grub-theme.git
-cd fallout-grub-theme
+git clone https://github.com/shvchk/fallout-grub-theme.git 2>/dev/null || {
+    # Thème de secours si GitHub n'est pas accessible
+    mkdir -p fallout-grub-theme
+    echo 'desktop-image: "background.png"' > fallout-grub-theme/theme.txt
+}
 mkdir -p /boot/grub/themes/fallout
-cp -r * /boot/grub/themes/fallout/
+cp -r fallout-grub-theme/* /boot/grub/themes/fallout/ 2>/dev/null || true
 
 # Alternative: thème Fallout terminal plus avancé
-git clone https://github.com/mebeim/grub-fallout-terminal-theme.git fallout-terminal
-cd fallout-terminal
+git clone https://github.com/mebeim/grub-fallout-terminal-theme.git fallout-terminal 2>/dev/null || {
+    mkdir -p fallout-terminal
+    echo 'title-text: "VAULT-TEC BIOS"' > fallout-terminal/theme.txt
+}
 mkdir -p /boot/grub/themes/fallout-terminal
-cp -r * /boot/grub/themes/fallout-terminal/
+cp -r fallout-terminal/* /boot/grub/themes/fallout-terminal/ 2>/dev/null || true
 
 # Configuration GRUB avec thème Fallout
 cat << GRUBCONF >> /etc/default/grub
@@ -563,61 +568,248 @@ if [[ "$DESKTOP_ENV" != "minimal" ]]; then
     cat << EOF > /mnt/post_install_themes.sh
 #!/bin/bash
 
-# Installation des thèmes et fonds d'écran Fallout
-mkdir -p /home/$USERNAME/.themes
-mkdir -p /home/$USERNAME/.local/share/wallpapers
+# Création des dossiers utilisateur avec bonnes permissions
+mkdir -p /home/$USERNAME/{.themes,.local/share/wallpapers,.config,.cache}
+mkdir -p /home/$USERNAME/.local/share/{plasma/desktoptheme,plasma/look-and-feel}
 
-# Téléchargement des thèmes Fallout depuis gnome-look.org
+# Attribution des permissions préliminaires
+chown -R $USERNAME:$USERNAME /home/$USERNAME/
+chmod -R 755 /home/$USERNAME/
+
+# Installation des thèmes et fonds d'écran Fallout
 cd /tmp
 
 # Thème GTK Fallout (si GNOME ou compatible)
 if [[ "$DESKTOP_ENV" == "gnome" ]] || [[ "$DESKTOP_ENV" == "kde" ]]; then
-    wget -O fallout-theme.zip "https://www.gnome-look.org/p/1230882/loadFiles"
+    wget -O fallout-theme.zip "https://www.gnome-look.org/p/1230882/loadFiles" 2>/dev/null || true
     if [[ -f fallout-theme.zip ]]; then
-        unzip -q fallout-theme.zip -d /tmp/fallout-theme/
-        cp -r /tmp/fallout-theme/* /home/$USERNAME/.themes/ 2>/dev/null || true
+        unzip -q fallout-theme.zip -d /tmp/fallout-theme/ 2>/dev/null || true
+        if [[ -d /tmp/fallout-theme ]]; then
+            cp -r /tmp/fallout-theme/* /home/$USERNAME/.themes/ 2>/dev/null || true
+        fi
     fi
 fi
 
 # Configuration spécifique KDE
 if [[ "$DESKTOP_ENV" == "kde" ]]; then
-    # Installation de thèmes Plasma compatibles Fallout
-    mkdir -p /home/$USERNAME/.local/share/plasma/desktoptheme
-    mkdir -p /home/$USERNAME/.local/share/plasma/look-and-feel
+    # Configuration SDDM avec thème Fallout PipBoy Animation
+    mkdir -p /usr/share/sddm/themes/fallout-pipboy
     
-    # Configuration SDDM avec thème Fallout
-    mkdir -p /usr/share/sddm/themes/fallout
-    
-    cat << SDDMTHEME > /usr/share/sddm/themes/fallout/theme.conf
+    # Installation du thème PipBoy Animation de LuMarans30 (ou équivalent)
+    cd /tmp
+    # Tentative de récupération du thème officiel
+    git clone https://github.com/LuMarans30/Fallout-PipBoy-Animation.git fallout-pipboy-theme 2>/dev/null || {
+        # Si le repo n'est pas trouvé, créer un thème PipBoy personnalisé
+        mkdir -p fallout-pipboy-theme
+        cd fallout-pipboy-theme
+        
+        # Création du thème SDDM PipBoy avec animation CSS
+        cat << PIPBOYTHEME > theme.conf
 [General]
-type=image
-color=#00ff41
+type=color
+color=#1a1a1a
 fontSize=12
-background=/usr/share/sddm/themes/fallout/background.jpg
+background=background.png
 showUserList=true
+showPassword=true
 
 [Background]
 type=image
 color=#1a1a1a
-background=/usr/share/sddm/themes/fallout/background.jpg
-SDDMTHEME
+background=background.png
 
-    # Téléchargement d'un fond d'écran Fallout
-    wget -O /usr/share/sddm/themes/fallout/background.jpg "https://wallpapercave.com/wp/wp2535653.jpg" 2>/dev/null || {
-        # Fond de secours si le téléchargement échoue
-        cp /usr/share/pixmaps/archlinux-logo.svg /usr/share/sddm/themes/fallout/background.jpg 2>/dev/null || true
+[Input]
+color=#00ff41
+borderColor=#ffaa00
+backgroundColor=#001100
+PIPBOYTHEME
+
+        # Création du fichier Main.qml pour l'interface PipBoy
+        cat << PIPBOYMAIN > Main.qml
+import QtQuick 2.11
+import QtGraphicalEffects 1.12
+import SddmComponents 2.0
+
+Rectangle {
+    id: container
+    width: 1920
+    height: 1080
+    color: "#001a00"
+    
+    // Animation PipBoy Background
+    Image {
+        id: background
+        anchors.fill: parent
+        source: "background.png"
+        fillMode: Image.PreserveAspectCrop
+        
+        // Animation de scan terminal
+        Rectangle {
+            id: scanLine
+            width: parent.width
+            height: 2
+            color: "#00ff41"
+            opacity: 0.8
+            
+            PropertyAnimation on y {
+                loops: Animation.Infinite
+                from: 0
+                to: container.height
+                duration: 3000
+            }
+        }
     }
     
-    # Configuration SDDM pour utiliser le thème Fallout
+    // Interface PipBoy principale
+    Rectangle {
+        id: mainFrame
+        anchors.centerIn: parent
+        width: 800
+        height: 600
+        color: "#002200"
+        border.color: "#00ff41"
+        border.width: 3
+        radius: 10
+        
+        // Titre PipBoy
+        Text {
+            id: title
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 20
+            text: "PIPBOY 3000 MK IV"
+            color: "#00ff41"
+            font.pixelSize: 24
+            font.family: "Courier"
+            font.bold: true
+        }
+        
+        // Zone de connexion
+        Rectangle {
+            id: loginArea
+            anchors.centerIn: parent
+            width: 600
+            height: 300
+            color: "#001100"
+            border.color: "#ffaa00"
+            border.width: 2
+            
+            Column {
+                anchors.centerIn: parent
+                spacing: 20
+                
+                Text {
+                    text: "USER AUTHENTICATION"
+                    color: "#00ff41"
+                    font.pixelSize: 18
+                    font.family: "Courier"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+                
+                Text {
+                    text: "Username: " + userModel.lastUser
+                    color: "#ffaa00"
+                    font.pixelSize: 14
+                    font.family: "Courier"
+                }
+                
+                Rectangle {
+                    width: 400
+                    height: 40
+                    color: "#002200"
+                    border.color: "#00ff41"
+                    border.width: 1
+                    
+                    TextInput {
+                        id: password
+                        anchors.fill: parent
+                        anchors.margins: 5
+                        font.pixelSize: 16
+                        font.family: "Courier"
+                        color: "#00ff41"
+                        echoMode: TextInput.Password
+                        focus: true
+                        
+                        Keys.onPressed: {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                sddm.login(userModel.lastUser, password.text, sessionModel.lastIndex)
+                                event.accepted = true
+                            }
+                        }
+                    }
+                }
+                
+                Text {
+                    text: "Press ENTER to continue..."
+                    color: "#ffaa00"
+                    font.pixelSize: 12
+                    font.family: "Courier"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        PropertyAnimation { to: 0.3; duration: 1000 }
+                        PropertyAnimation { to: 1.0; duration: 1000 }
+                    }
+                }
+            }
+        }
+        
+        // Animation de particules
+        Repeater {
+            model: 20
+            Rectangle {
+                width: 2
+                height: 2
+                color: "#00ff41"
+                opacity: Math.random()
+                x: Math.random() * container.width
+                y: Math.random() * container.height
+                
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    PropertyAnimation { to: 0; duration: Math.random() * 2000 + 1000 }
+                    PropertyAnimation { to: 1; duration: Math.random() * 2000 + 1000 }
+                }
+            }
+        }
+    }
+}
+PIPBOYMAIN
+
+        # Création d'un arrière-plan PipBoy (image de base)
+        cat << PIPBOYIMG > background.png.b64
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6k gAAAABJRU5ErkJggg==
+PIPBOYIMG
+        
+        base64 -d background.png.b64 > background.png 2>/dev/null || {
+            # Création d'une image de secours
+            convert -size 1920x1080 xc:"#001a00" background.png 2>/dev/null || {
+                echo "Fallout PipBoy Theme" > background.txt
+            }
+        }
+    }
+    
+    # Copie du thème vers le répertoire SDDM
+    cp -r /tmp/fallout-pipboy-theme/* /usr/share/sddm/themes/fallout-pipboy/
+    
+    # Configuration SDDM pour utiliser le thème PipBoy
     cat << SDDMCONF > /etc/sddm.conf
 [Theme]
-Current=fallout
+Current=fallout-pipboy
 
 [General]
 Numlock=on
+DisplayServer=x11
+
+[X11]
+ServerPath=/usr/bin/X
+ServerArguments=-nolisten tcp
 SDDMCONF
 
-    # Configuration du thème pour l'utilisateur
+    # Création des fichiers de configuration utilisateur avec permissions correctes
+    mkdir -p /home/$USERNAME/.config
+    
     cat << PLASMARC > /home/$USERNAME/.config/plasmarc
 [Theme]
 name=breeze-dark
@@ -627,29 +819,8 @@ alignment=132
 panelVisibility=0
 PLASMARC
 
-fi
-
-# Configuration spécifique GNOME
-if [[ "$DESKTOP_ENV" == "gnome" ]]; then
-    # Configuration GDM avec thème Fallout
-    mkdir -p /usr/share/gnome-shell/theme
-    
-    # Installation d'extensions GNOME pour personnalisation
-    sudo -u $USERNAME dbus-launch gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
-    sudo -u $USERNAME dbus-launch gsettings set org.gnome.shell.extensions.user-theme name 'Fallout'
-fi
-
-# Attribution des permissions
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.themes
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.local
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config 2>/dev/null || true
-
-# Configuration de l'écran de verrouillage
-case "$DESKTOP_ENV" in
-    "kde")
-        # Configuration de l'écran de verrouillage KDE avec thème Fallout
-        mkdir -p /home/$USERNAME/.config
-        cat << KSCREENLOCKERRC > /home/$USERNAME/.config/kscreenlockrc
+    # Configuration de l'écran de verrouillage KDE
+    cat << KSCREENLOCKERRC > /home/$USERNAME/.config/kscreenlockrc
 [Greeter]
 Theme=org.kde.breeze.desktop
 WallpaperPlugin=org.kde.image
@@ -657,14 +828,53 @@ WallpaperPlugin=org.kde.image
 [Greeter][Wallpaper][org.kde.image][General]
 Image=/usr/share/sddm/themes/fallout/background.jpg
 KSCREENLOCKERRC
-        ;;
-    "gnome")
-        # Configuration de l'écran de verrouillage GNOME
-        sudo -u $USERNAME dbus-launch gsettings set org.gnome.desktop.screensaver picture-uri 'file:///usr/share/pixmaps/fallout-lock.jpg'
-        ;;
-esac
 
+fi
+
+# Configuration spécifique GNOME
+if [[ "$DESKTOP_ENV" == "gnome" ]]; then
+    # Création des dossiers GNOME nécessaires
+    mkdir -p /home/$USERNAME/.local/share/gnome-shell
+    mkdir -p /home/$USERNAME/.config/dconf
+    
+    # Configuration de base pour éviter les erreurs au premier démarrage
+    cat << DCONFDB > /home/$USERNAME/.config/dconf/user
+# Configuration GNOME de base
 EOF
+
+fi
+
+# Attribution finale des permissions (CRITIQUE pour éviter les pop-ups)
+chown -R $USERNAME:$USERNAME /home/$USERNAME/
+chmod -R 755 /home/$USERNAME/
+# Permissions spécifiques pour les fichiers de configuration
+find /home/$USERNAME/.config -type f -exec chmod 644 {} \; 2>/dev/null || true
+find /home/$USERNAME/.config -type d -exec chmod 755 {} \; 2>/dev/null || true
+find /home/$USERNAME/.local -type f -exec chmod 644 {} \; 2>/dev/null || true
+find /home/$USERNAME/.local -type d -exec chmod 755 {} \; 2>/dev/null || true
+
+# Création des dossiers cachés standards pour éviter les erreurs
+mkdir -p /home/$USERNAME/{.cache,.local/share,.config}
+mkdir -p /home/$USERNAME/.local/share/{applications,icons,mime}
+
+# Permissions pour l'utilisateur supplémentaire si existant
+if [[ -n "$EXTRA_USERNAME" ]]; then
+    mkdir -p /home/$EXTRA_USERNAME/{.cache,.local/share,.config}
+    mkdir -p /home/$EXTRA_USERNAME/.local/share/{applications,icons,mime}
+    chown -R $EXTRA_USERNAME:$EXTRA_USERNAME /home/$EXTRA_USERNAME/
+    chmod -R 755 /home/$EXTRA_USERNAME/
+fi
+
+# Régénération du cache des icônes et applications
+if [[ "$DESKTOP_ENV" == "kde" ]]; then
+    sudo -u $USERNAME kbuildsycoca5 2>/dev/null || true
+fi
+
+# Ajout de l'utilisateur principal au groupe audio et video
+usermod -a -G audio,video $USERNAME
+if [[ -n "$EXTRA_USERNAME" ]]; then
+    usermod -a -G audio,video $EXTRA_USERNAME
+fi
 
     chmod +x /mnt/post_install_themes.sh
     arch-chroot /mnt /post_install_themes.sh
