@@ -133,7 +133,7 @@ done
 # Mot de passe utilisateur principal
 while true; do
     echo ""
-    read -s -p "Mot de passe pour $USERNAME (minimum 6 caractères): " USER_PASSWORD
+    read -s -p "Mot de passe pour $USERNAME (minimum 6 caractères, chiffres acceptés): " USER_PASSWORD
     echo
     if [[ ${#USER_PASSWORD} -lt 6 ]]; then
         print_error "Le mot de passe doit contenir au moins 6 caractères."
@@ -142,6 +142,7 @@ while true; do
     read -s -p "Confirmez le mot de passe: " USER_PASSWORD_CONFIRM
     echo
     if [[ "$USER_PASSWORD" == "$USER_PASSWORD_CONFIRM" ]]; then
+        print_success "Mot de passe accepté (${#USER_PASSWORD} caractères)"
         break
     else
         print_error "Les mots de passe ne correspondent pas."
@@ -165,7 +166,7 @@ if [[ "$CREATE_EXTRA_USER" =~ ^[oO]$ ]]; then
     done
     
     while true; do
-        read -s -p "Mot de passe pour $EXTRA_USERNAME (minimum 6 caractères): " EXTRA_PASSWORD
+        read -s -p "Mot de passe pour $EXTRA_USERNAME (minimum 6 caractères, chiffres acceptés): " EXTRA_PASSWORD
         echo
         if [[ ${#EXTRA_PASSWORD} -lt 6 ]]; then
             print_error "Le mot de passe doit contenir au moins 6 caractères."
@@ -174,6 +175,7 @@ if [[ "$CREATE_EXTRA_USER" =~ ^[oO]$ ]]; then
         read -s -p "Confirmez le mot de passe: " EXTRA_PASSWORD_CONFIRM
         echo
         if [[ "$EXTRA_PASSWORD" == "$EXTRA_PASSWORD_CONFIRM" ]]; then
+            print_success "Mot de passe accepté (${#EXTRA_PASSWORD} caractères)"
             break
         else
             print_error "Les mots de passe ne correspondent pas."
@@ -184,7 +186,7 @@ fi
 # Mot de passe root
 while true; do
     echo ""
-    read -s -p "Mot de passe root (minimum 6 caractères): " ROOT_PASSWORD
+    read -s -p "Mot de passe root (minimum 6 caractères, chiffres acceptés): " ROOT_PASSWORD
     echo
     if [[ ${#ROOT_PASSWORD} -lt 6 ]]; then
         print_error "Le mot de passe root doit contenir au moins 6 caractères."
@@ -193,6 +195,7 @@ while true; do
     read -s -p "Confirmez le mot de passe root: " ROOT_PASSWORD_CONFIRM
     echo
     if [[ "$ROOT_PASSWORD" == "$ROOT_PASSWORD_CONFIRM" ]]; then
+        print_success "Mot de passe root accepté (${#ROOT_PASSWORD} caractères)"
         break
     else
         print_error "Les mots de passe ne correspondent pas."
