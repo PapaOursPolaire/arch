@@ -94,6 +94,20 @@ print_success "Connexion internet établie"
 print_info "Synchronisation de l'horloge système..."
 timedatectl set-ntp true
 
+# Mise à jour des clés de signature et miroirs
+print_info "Mise à jour des clés de signature et des miroirs..."
+pacman-key --init
+pacman-key --populate archlinux
+pacman-key --refresh-keys
+
+# Mise à jour des miroirs pour de meilleures performances
+print_info "Mise à jour de la liste des miroirs..."
+pacman -Sy --noconfirm reflector
+reflector --country France,Belgium,Germany,Netherlands --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+
+# Mise à jour de la base de données des paquets
+pacman -Sy
+
 # Configuration du nom d'hôte (nom du PC)
 while true; do
     echo ""
@@ -421,7 +435,23 @@ case $DESKTOP_ENV in
         ;;
 esac
 
-pacstrap /mnt $BASE_PACKAGES
+# Installation avec gestion des erreurs de signature
+print_info "Installation des paquets (cela peut prendre du temps)..."
+if ! pacstrap /mnt $BASE_PACKAGES; then
+    print_warning "Erreur lors de l'installation. Tentative de résolution des problèmes de signature..."
+    
+    # Réinitialisation des clés en cas d'erreur
+    pacman-key --init
+    pacman-key --populate archlinux
+    pacman-key --refresh-keys
+    
+    # Nouvelle tentative
+    print_info "Nouvelle tentative d'installation..."
+    if ! pacstrap /mnt $BASE_PACKAGES; then
+        print_error "Échec de l'installation des paquets. Vérifiez votre connexion internet."
+        exit 1
+    fi
+fi
 
 # Génération du fstab
 print_info "Génération du fstab..."
@@ -432,6 +462,10 @@ print_info "Configuration du système..."
 
 cat << EOF > /mnt/install_chroot.sh
 #!/bin/bash
+
+# Initialisation des clés de signature dans le chroot
+pacman-key --init
+pacman-key --populate archlinux
 
 # Configuration du fuseau horaire
 ln -sf /usr/share/zoneinfo/Europe/Brussels /etc/localtime
