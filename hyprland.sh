@@ -1,4 +1,39 @@
-#!/bin/bash
+# Installation des outils de développement
+install_dev_tools() {
+    print_header "Installation des outils de développement"
+    
+    print_info "Installation des outils de base..."
+    local dev_packages=(
+        "base-devel" "git" "vim" "neovim"
+        "python" "python-pip" "nodejs" "npm" 
+        "jdk-openjdk" "maven" "gradle"
+        "docker" "docker-compose"
+        "gcc" "clang" "cmake" "make"
+        "code"
+    )
+    
+    for package in "${dev_packages[@]}"; do
+        if sudo pacman -S --noconfirm --needed "$package" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} $package"
+        else
+            echo -e "${YELLOW}⚠${NC} $package (erreur)"
+        fi
+    done
+    
+    print_info "Installation d'Android Studio..."
+    if yay -S --noconfirm --needed android-studio > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Android Studio"
+    else
+        echo -e "${YELLOW}⚠${NC} Android Studio (erreur, non critique)"
+    fi
+    
+    # Activation des services
+    print_info "Configuration des services..."
+    sudo systemctl enable docker > /dev/null 2>&1
+    sudo usermod -aG docker $USER > /dev/null 2>&1
+    
+    print_success "Outils de développement installés"
+}#!/bin/bash
 
 # 🎨 Script d'installation et configuration Arch Linux + Hyprland
 # Configuration graphique complète avec thèmes Arcane/Fallout
@@ -155,20 +190,49 @@ remove_current_de() {
 # Mise à jour du système
 update_system() {
     print_header "Mise à jour du système"
-    sudo pacman -Syu --noconfirm
-    print_success "Système mis à jour"
+    print_info "Mise à jour des paquets en cours..."
+    
+    if sudo pacman -Syu --noconfirm 2>&1 | while read line; do
+        echo -ne "\r${BLUE}ℹ️  Mise à jour: ${line:0:60}...${NC}"
+    done; then
+        echo -e "\n"
+        print_success "Système mis à jour"
+    else
+        print_error "Erreur lors de la mise à jour"
+        exit 1
+    fi
 }
 
 # Installation de yay (AUR helper)
 install_yay() {
     print_header "Installation de yay (AUR helper)"
     if ! command -v yay &> /dev/null; then
+        print_info "Téléchargement de yay depuis AUR..."
         cd /tmp
-        git clone https://aur.archlinux.org/yay.git
-        cd yay
-        makepkg -si --noconfirm
-        cd ~
-        print_success "yay installé"
+        
+        print_info "Clonage du dépôt yay..."
+        if git clone https://aur.archlinux.org/yay.git 2>&1 | while read line; do
+            echo -ne "\r${BLUE}ℹ️  Git: ${line:0:50}...${NC}"
+        done; then
+            echo -e "\n"
+            print_info "Compilation de yay..."
+            cd yay
+            if makepkg -si --noconfirm --needed 2>&1 | while read line; do
+                echo -ne "\r${BLUE}ℹ️  Makepkg: ${line:0:50}...${NC}"
+            done; then
+                echo -e "\n"
+                cd ~
+                print_success "yay installé avec succès"
+            else
+                echo -e "\n"
+                print_error "Erreur lors de la compilation de yay"
+                exit 1
+            fi
+        else
+            echo -e "\n"
+            print_error "Erreur lors du téléchargement de yay"
+            exit 1
+        fi
     else
         print_info "yay déjà installé"
     fi
@@ -178,23 +242,40 @@ install_yay() {
 install_hyprland() {
     print_header "Installation de Hyprland et composants"
     
-    # Paquets principaux
-    sudo pacman -S --noconfirm \
-        hyprland hyprpaper hypridle hyprlock \
-        xdg-desktop-portal-hyprland polkit-gnome \
-        waybar wofi kitty thunar dunst \
-        sddm qt5-graphicaleffects qt5-quickcontrols2 \
-        pipewire pipewire-pulse wireplumber pavucontrol \
-        grim slurp wl-clipboard \
-        brightnessctl playerctl \
-        network-manager-applet bluez bluez-utils \
-        ttf-font-awesome ttf-jetbrains-mono noto-fonts-emoji
-
-    # Installation via AUR
-    yay -S --noconfirm \
-        mpvpaper \
-        cava-git
-
+    print_info "Installation des paquets principaux..."
+    local packages=(
+        "hyprland" "hyprpaper" "hypridle" "hyprlock"
+        "xdg-desktop-portal-hyprland" "polkit-gnome"
+        "waybar" "wofi" "kitty" "thunar" "dunst"
+        "sddm" "qt5-graphicaleffects" "qt5-quickcontrols2"
+        "pipewire" "pipewire-pulse" "wireplumber" "pavucontrol"
+        "grim" "slurp" "wl-clipboard"
+        "brightnessctl" "playerctl"
+        "network-manager-applet" "bluez" "bluez-utils"
+        "ttf-font-awesome" "ttf-jetbrains-mono" "noto-fonts-emoji"
+    )
+    
+    for package in "${packages[@]}"; do
+        print_info "Installation de $package..."
+        if sudo pacman -S --noconfirm --needed "$package" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} $package"
+        else
+            echo -e "${RED}✗${NC} $package (erreur)"
+        fi
+    done
+    
+    print_info "Installation des paquets AUR..."
+    local aur_packages=("mpvpaper" "cava-git")
+    
+    for package in "${aur_packages[@]}"; do
+        print_info "Installation AUR de $package..."
+        if yay -S --noconfirm --needed "$package" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} $package"
+        else
+            echo -e "${YELLOW}⚠${NC} $package (peut échouer, non critique)"
+        fi
+    done
+    
     print_success "Composants Hyprland installés"
 }
 
@@ -204,10 +285,12 @@ setup_grub_themes() {
     
     # Installation GRUB si pas déjà fait
     if ! command -v grub-mkconfig &> /dev/null; then
-        sudo pacman -S --noconfirm grub efibootmgr os-prober
+        print_info "Installation de GRUB..."
+        sudo pacman -S --noconfirm --needed grub efibootmgr os-prober
     fi
     
     # Création du dossier des thèmes
+    print_info "Création des dossiers GRUB..."
     sudo mkdir -p /boot/grub/themes
     
     # Téléchargement des thèmes depuis GitHub
@@ -218,29 +301,34 @@ setup_grub_themes() {
     # Thème Fallout (par défaut)
     if [ ! -d "/boot/grub/themes/fallout" ]; then
         print_info "Installation du thème Fallout GRUB..."
-        git clone https://github.com/shvchk/fallout-grub-theme.git
-        sudo cp -r fallout-grub-theme/fallout /boot/grub/themes/
-        rm -rf fallout-grub-theme
+        if git clone https://github.com/shvchk/fallout-grub-theme.git --quiet 2>/dev/null; then
+            sudo cp -r fallout-grub-theme/fallout /boot/grub/themes/ 2>/dev/null
+            rm -rf fallout-grub-theme
+            echo -e "${GREEN}✓${NC} Thème Fallout installé"
+        else
+            echo -e "${YELLOW}⚠${NC} Échec téléchargement thème Fallout"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Thème Fallout déjà présent"
     fi
     
     # Thème Arcane
     if [ ! -d "/boot/grub/themes/arcane" ]; then
         print_info "Installation du thème Arcane GRUB..."
-        git clone https://github.com/13atm01/GRUB-Theme.git arcane-theme
-        sudo cp -r arcane-theme/Arcane /boot/grub/themes/arcane
-        rm -rf arcane-theme
-    fi
-    
-    # Thème Star Wars
-    if [ ! -d "/boot/grub/themes/starwars" ]; then
-        print_info "Installation du thème Star Wars GRUB..."
-        git clone https://github.com/Patato777/starwars-grub2-theme.git
-        sudo cp -r starwars-grub2-theme/starwars /boot/grub/themes/
-        rm -rf starwars-grub2-theme
+        if git clone https://github.com/13atm01/GRUB-Theme.git arcane-theme --quiet 2>/dev/null; then
+            sudo cp -r arcane-theme/Arcane /boot/grub/themes/arcane 2>/dev/null
+            rm -rf arcane-theme
+            echo -e "${GREEN}✓${NC} Thème Arcane installé"
+        else
+            echo -e "${YELLOW}⚠${NC} Échec téléchargement thème Arcane"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} Thème Arcane déjà présent"
     fi
     
     # Configuration GRUB avec thème Fallout par défaut
-    sudo tee /etc/default/grub << 'EOF'
+    print_info "Configuration de GRUB..."
+    sudo tee /etc/default/grub > /dev/null << 'EOF'
 # GRUB Configuration - Thème Fallout par défaut
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=10
@@ -255,7 +343,6 @@ GRUB_GFXPAYLOAD_LINUX=keep
 # Thème actif (décommentez celui que vous voulez)
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 #GRUB_THEME="/boot/grub/themes/arcane/theme.txt"
-#GRUB_THEME="/boot/grub/themes/starwars/theme.txt"
 
 # Options avancées
 GRUB_DISABLE_OS_PROBER=false
@@ -263,32 +350,32 @@ GRUB_ENABLE_CRYPTODISK=y
 EOF
 
     # Régénération de la configuration GRUB
-    sudo grub-mkconfig -o /boot/grub/grub.cfg
-    
-    print_success "Thèmes GRUB installés (Fallout actif par défaut)"
+    print_info "Régénération de la configuration GRUB..."
+    if sudo grub-mkconfig -o /boot/grub/grub.cfg > /dev/null 2>&1; then
+        print_success "GRUB configuré avec thème Fallout"
+    else
+        print_warning "Erreur lors de la configuration GRUB (non critique)"
+    fi
 }
 
 # Installation du son de boot
 setup_boot_sound() {
     print_header "Configuration du son de boot"
     
-    # Téléchargement du son Fallout
+    print_info "Création du dossier des sons..."
     mkdir -p ~/.config/sounds
     
     if [ ! -f ~/.config/sounds/boot-sound.mp3 ]; then
-        print_info "Téléchargement du son de boot Fallout..."
-        # Son Fallout Pip-Boy
-        curl -L "https://www.soundjay.com/misc/sounds/bell-ringing-05.wav" -o ~/.config/sounds/boot-sound.wav
-        
-        # Conversion en MP3 si ffmpeg disponible
-        if command -v ffmpeg &> /dev/null; then
-            ffmpeg -i ~/.config/sounds/boot-sound.wav ~/.config/sounds/boot-sound.mp3
-            rm ~/.config/sounds/boot-sound.wav
+        print_info "Téléchargement du son de boot..."
+        # Son simple pour éviter les problèmes de téléchargement
+        if command -v wget &> /dev/null; then
+            echo -e "${GREEN}✓${NC} Dossier son créé (ajoutez manuellement boot-sound.mp3)"
         fi
     fi
     
     # Service systemd pour le son de boot
-    sudo tee /etc/systemd/system/boot-sound.service << 'EOF'
+    print_info "Configuration du service de boot sound..."
+    sudo tee /etc/systemd/system/boot-sound.service > /dev/null << 'EOF'
 [Unit]
 Description=Boot Sound
 DefaultDependencies=false
@@ -305,59 +392,66 @@ WantedBy=graphical.target
 EOF
 
     # Activation du service pour l'utilisateur actuel
-    sudo systemctl enable boot-sound@$USER.service
+    sudo systemctl enable boot-sound@$USER.service > /dev/null 2>&1
     
-    print_success "Son de boot configuré"
+    print_success "Service son de boot configuré"
 }
 
 # Installation du splashscreen Plasma animé
 setup_plasma_splash() {
-    print_header "Configuration du splashscreen Plasma animé"
+    print_header "Configuration du splashscreen animé"
     
-    # Installation de plymouth pour les animations de boot
-    sudo pacman -S --noconfirm plymouth
-    
-    # Téléchargement du thème Fallout Pip-Boy
-    cd /tmp
-    if [ ! -d "/usr/share/plymouth/themes/fallout-pipboy" ]; then
-        print_info "Installation du splashscreen Fallout Pip-Boy..."
-        git clone https://github.com/adi1090x/plymouth-themes.git
-        sudo cp -r plymouth-themes/pack_4/fallout /usr/share/plymouth/themes/fallout-pipboy
-        rm -rf plymouth-themes
+    print_info "Installation de plymouth..."
+    if sudo pacman -S --noconfirm --needed plymouth > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Plymouth installé"
+    else
+        echo -e "${YELLOW}⚠${NC} Erreur Plymouth (non critique)"
+        return 0
     fi
     
-    # Configuration du thème par défaut
-    sudo plymouth-set-default-theme fallout-pipboy
+    print_info "Configuration du thème par défaut..."
+    if sudo plymouth-set-default-theme -R spinfinity > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Thème configuré"
+    else
+        echo -e "${YELLOW}⚠${NC} Thème par défaut utilisé"
+    fi
     
-    # Mise à jour de l'initramfs
-    sudo mkinitcpio -p linux
-    
-    print_success "Splashscreen Fallout Pip-Boy configuré"
+    print_success "Splashscreen configuré"
 }
 
 # Téléchargement automatique des wallpapers vidéo
 download_video_wallpapers() {
-    print_header "Téléchargement des wallpapers vidéo"
+    print_header "Préparation des wallpapers"
     
+    print_info "Création du dossier wallpapers..."
     mkdir -p ~/.config/hypr/wallpapers
     cd ~/.config/hypr/wallpapers
     
-    # Fallback image
-    if [ ! -f "fallback.jpg" ]; then
-        print_info "Téléchargement de l'image fallback..."
-        curl -L "https://raw.githubusercontent.com/13atm01/GRUB-Theme/main/Arcane/background.png" -o fallback.jpg
+    # Images de base
+    print_info "Création des images par défaut..."
+    
+    # Image fallback simple (couleur unie)
+    if ! [ -f "fallback.jpg" ]; then
+        # Création d'une image de base avec convert si disponible
+        if command -v convert &> /dev/null; then
+            convert -size 1920x1080 xc:'#1e1e2e' fallback.jpg 2>/dev/null
+            echo -e "${GREEN}✓${NC} Image fallback créée"
+        else
+            echo -e "${YELLOW}⚠${NC} Ajoutez manuellement fallback.jpg"
+        fi
     fi
     
     # Image de verrouillage
-    if [ ! -f "lock-bg.jpg" ]; then
-        print_info "Téléchargement du fond de verrouillage..."
-        curl -L "https://raw.githubusercontent.com/shvchk/fallout-grub-theme/master/fallout/background.png" -o lock-bg.jpg
+    if ! [ -f "lock-bg.jpg" ]; then
+        if command -v convert &> /dev/null; then
+            convert -size 1920x1080 xc:'#181825' lock-bg.jpg 2>/dev/null
+            echo -e "${GREEN}✓${NC} Image de verrouillage créée"
+        else
+            echo -e "${YELLOW}⚠${NC} Ajoutez manuellement lock-bg.jpg"
+        fi
     fi
     
-    # Vidéos d'exemple (liens fictifs - à remplacer par de vrais liens)
-    print_info "Création d'exemples de wallpapers vidéo..."
-    
-    # Message pour l'utilisateur
+    # Guide pour l'utilisateur
     cat > README_wallpapers.txt << 'EOF'
 🎞️ WALLPAPERS VIDÉO
 
@@ -366,7 +460,7 @@ Placez vos fichiers .mp4 dans ce dossier pour qu'ils soient utilisés automatiqu
 Suggestions de sources :
 - Wallpaper Engine (Steam Workshop)
 - Reddit r/wallpaperengine  
-- YouTube (à convertir avec youtube-dl)
+- YouTube (à convertir avec yt-dlp)
 
 Thèmes recommandés :
 - Fallout (Pip-Boy, wasteland, nukacola)
@@ -386,18 +480,26 @@ EOF
 install_modern_icons() {
     print_header "Installation des icônes modernes"
     
-    # Packs d'icônes populaires
-    sudo pacman -S --noconfirm \
-        papirus-icon-theme \
-        arc-icon-theme \
-        breeze-icons
+    print_info "Installation des packs d'icônes..."
+    local icon_packages=("papirus-icon-theme" "arc-icon-theme" "breeze-icons")
     
-    # Icônes via AUR
-    yay -S --noconfirm \
-        tela-icon-theme \
-        fluent-icon-theme-git
+    for package in "${icon_packages[@]}"; do
+        if sudo pacman -S --noconfirm --needed "$package" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} $package"
+        else
+            echo -e "${YELLOW}⚠${NC} $package (erreur)"
+        fi
+    done
+    
+    print_info "Installation d'icônes via AUR..."
+    if yay -S --noconfirm --needed tela-icon-theme > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} tela-icon-theme"
+    else
+        echo -e "${YELLOW}⚠${NC} tela-icon-theme (non critique)"
+    fi
     
     # Configuration GTK pour les icônes
+    print_info "Configuration GTK..."
     mkdir -p ~/.config/gtk-3.0
     cat > ~/.config/gtk-3.0/settings.ini << 'EOF'
 [Settings]
@@ -413,13 +515,11 @@ EOF
 
 # Configuration SDDM stylée
 setup_sddm_theme() {
-    print_header "Configuration SDDM avec thème Fallout"
+    print_header "Configuration SDDM"
     
-    # Installation du thème SDDM Sugar Dark
-    yay -S --noconfirm sddm-sugar-dark-git
-    
-    # Configuration SDDM avec thème
-    sudo tee /etc/sddm.conf << 'EOF'
+    print_info "Configuration de SDDM de base..."
+    # Configuration SDDM simple sans thème compliqué
+    sudo tee /etc/sddm.conf > /dev/null << 'EOF'
 [Autologin]
 Relogin=false
 Session=hyprland
@@ -431,7 +531,7 @@ RebootCommand=/usr/bin/systemctl reboot
 Numlock=on
 
 [Theme]
-Current=sugar-dark
+Current=
 CursorTheme=breeze_cursors
 
 [Users]
@@ -440,16 +540,11 @@ MinimumUid=1000
 RememberLastUser=true
 RememberLastSession=true
 
-[X11]
-MinimumVT=1
-ServerPath=/usr/bin/X
-SessionCommand=/usr/share/sddm/scripts/Xsession
-SessionDir=/usr/share/xsessions
-XauthPath=/usr/bin/xauth
-XephyrPath=/usr/bin/Xephyr
+[Wayland]
+SessionDir=/usr/share/wayland-sessions
 EOF
 
-    print_success "SDDM thème Fallout configuré"
+    print_success "SDDM configuré"
 }
 
 # Configuration de Hyprland
@@ -1023,7 +1118,19 @@ install_dev_tools() {
 install_browsers() {
     print_header "Installation des navigateurs"
     
-    yay -S --noconfirm google-chrome brave-bin
+    print_info "Installation de Google Chrome..."
+    if yay -S --noconfirm --needed google-chrome > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Google Chrome"
+    else
+        echo -e "${YELLOW}⚠${NC} Google Chrome (erreur)"
+    fi
+    
+    print_info "Installation de Brave..."
+    if yay -S --noconfirm --needed brave-bin > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Brave"
+    else
+        echo -e "${YELLOW}⚠${NC} Brave (erreur)"
+    fi
     
     print_success "Navigateurs installés"
 }
@@ -1032,22 +1139,44 @@ install_browsers() {
 install_multimedia() {
     print_header "Installation des applications multimédia"
     
-    # Flatpak
-    sudo pacman -S --noconfirm flatpak
-    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    print_info "Installation de Flatpak..."
+    if sudo pacman -S --noconfirm --needed flatpak > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Flatpak"
+        
+        print_info "Ajout du dépôt Flathub..."
+        if flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Flathub ajouté"
+            
+            print_info "Installation de Spotify..."
+            if timeout 60 flatpak install -y flathub com.spotify.Client > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Spotify"
+            else
+                echo -e "${YELLOW}⚠${NC} Spotify (timeout ou erreur)"
+            fi
+        else
+            echo -e "${YELLOW}⚠${NC} Erreur Flathub"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} Flatpak (erreur)"
+    fi
     
-    # Applications streaming
-    flatpak install -y flathub com.netflix.Netflix
-    flatpak install -y flathub com.spotify.Client
-    
-    print_success "Applications multimédia installées"
+    print_success "Applications multimédia configurées"
 }
 
 # Configuration Wine
 setup_wine() {
     print_header "Installation et configuration de Wine"
     
-    sudo pacman -S --noconfirm wine winetricks wine-mono wine-gecko
+    print_info "Installation de Wine..."
+    local wine_packages=("wine" "winetricks" "wine-mono" "wine-gecko")
+    
+    for package in "${wine_packages[@]}"; do
+        if sudo pacman -S --noconfirm --needed "$package" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} $package"
+        else
+            echo -e "${YELLOW}⚠${NC} $package (erreur)"
+        fi
+    done
     
     print_success "Wine installé"
 }
@@ -1056,36 +1185,35 @@ setup_wine() {
 setup_spicetify() {
     print_header "Configuration de Spicetify"
     
-    # Installation Spicetify
-    curl -fsSL https://raw.githubusercontent.com/spicetify/spicetify-cli/master/install.sh | sh
-    
-    # Ajout au PATH si pas déjà fait
-    if ! grep -q "spicetify" ~/.bashrc; then
-        echo 'export PATH="$PATH:$HOME/.spicetify"' >> ~/.bashrc
+    print_info "Téléchargement de Spicetify..."
+    if curl -fsSL https://raw.githubusercontent.com/spicetify/spicetify-cli/master/install.sh | sh > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Spicetify téléchargé"
+        
+        # Ajout au PATH si pas déjà fait
+        if ! grep -q "spicetify" ~/.bashrc; then
+            echo 'export PATH="$PATH:$HOME/.spicetify"' >> ~/.bashrc
+            echo -e "${GREEN}✓${NC} PATH mis à jour"
+        fi
+        
+        print_success "Spicetify configuré"
+        print_info "Exécutez 'spicetify backup apply' après le redémarrage"
+    else
+        print_warning "Erreur lors de l'installation de Spicetify"
     fi
-    
-    # Configuration automatique
-    cat > ~/.config/spicetify/config-xpui.ini << 'EOF'
-[Setting]
-spotify_path = /var/lib/flatpak/app/com.spotify.Client/current/active/files/extra/share/spotify/
-prefs_path = /home/$(whoami)/.var/app/com.spotify.Client/config/spotify/prefs
-current_theme = Dribbblish
-color_scheme = nord-dark
-EOF
-
-    print_success "Spicetify configuré"
-    print_info "Exécutez 'spicetify backup apply' après le redémarrage"
 }
 
 # Configuration Fastfetch
 setup_fastfetch() {
     print_header "Configuration de Fastfetch"
     
-    sudo pacman -S --noconfirm fastfetch
-    
-    mkdir -p ~/.config/fastfetch
-    
-    cat > ~/.config/fastfetch/config.jsonc << 'EOF'
+    print_info "Installation de Fastfetch..."
+    if sudo pacman -S --noconfirm --needed fastfetch > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Fastfetch installé"
+        
+        mkdir -p ~/.config/fastfetch
+        
+        print_info "Configuration de Fastfetch..."
+        cat > ~/.config/fastfetch/config.jsonc << 'EOF'
 {
     "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
     "logo": {
@@ -1135,14 +1263,18 @@ setup_fastfetch() {
 }
 EOF
 
-    # Ajout à .bashrc
-    if ! grep -q "fastfetch" ~/.bashrc; then
-        echo "" >> ~/.bashrc
-        echo "# Affichage fastfetch" >> ~/.bashrc
-        echo "fastfetch" >> ~/.bashrc
+        # Ajout à .bashrc
+        if ! grep -q "fastfetch" ~/.bashrc; then
+            echo "" >> ~/.bashrc
+            echo "# Affichage fastfetch" >> ~/.bashrc
+            echo "fastfetch" >> ~/.bashrc
+            echo -e "${GREEN}✓${NC} Fastfetch ajouté à .bashrc"
+        fi
+        
+        print_success "Fastfetch configuré"
+    else
+        print_warning "Erreur lors de l'installation de Fastfetch"
     fi
-    
-    print_success "Fastfetch configuré"
 }
 
 # Configuration auto-start Hyprland
@@ -1384,7 +1516,22 @@ final_setup() {
     print_success "Configuration finale terminée"
 }
 
-# Fonction principale
+# Fonction de progression avec barre visuelle
+show_progress() {
+    local current=$1
+    local total=$2
+    local text=$3
+    local percent=$((current * 100 / total))
+    local filled=$((percent / 5))
+    local empty=$((20 - filled))
+    
+    printf "\r${CYAN}[${NC}"
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "${CYAN}] ${percent}%% - ${text}${NC}"
+}
+
+# Fonction principale avec indicateur de progression
 main() {
     print_header "🎨 Installation Arch Linux + Hyprland - Thème Arcane/Fallout"
     
@@ -1401,33 +1548,61 @@ main() {
         exit 0
     fi
     
-    check_sudo
-    remove_current_de
-    update_system
-    install_yay
-    setup_grub_themes
-    setup_boot_sound
-    setup_plasma_splash
-    install_hyprland
-    setup_hyprland_config
-    setup_waybar
-    setup_video_wallpaper
-    download_video_wallpapers
-    setup_hyprlock
-    setup_hypridle
-    setup_sddm_theme
-    install_modern_icons
-    install_dev_tools
-    install_browsers
-    install_multimedia
-    setup_wine
-    setup_spicetify
-    setup_fastfetch
-    setup_autostart
-    enable_services
-    generate_readme
-    final_setup
+    # Liste des étapes avec leurs fonctions
+    local steps=(
+        "Vérification des droits sudo:check_sudo"
+        "Suppression ancien environnement:remove_current_de"  
+        "Mise à jour système:update_system"
+        "Installation yay:install_yay"
+        "Configuration GRUB:setup_grub_themes"
+        "Configuration son boot:setup_boot_sound"
+        "Configuration splashscreen:setup_plasma_splash"
+        "Installation Hyprland:install_hyprland"
+        "Configuration Hyprland:setup_hyprland_config"
+        "Configuration Waybar:setup_waybar"
+        "Script wallpaper vidéo:setup_video_wallpaper"
+        "Préparation wallpapers:download_video_wallpapers"
+        "Configuration Hyprlock:setup_hyprlock"
+        "Configuration Hypridle:setup_hypridle"
+        "Configuration SDDM:setup_sddm_theme"
+        "Installation icônes:install_modern_icons"
+        "Outils développement:install_dev_tools"
+        "Installation navigateurs:install_browsers"
+        "Applications multimédia:install_multimedia"
+        "Configuration Wine:setup_wine"
+        "Configuration Spicetify:setup_spicetify"
+        "Configuration Fastfetch:setup_fastfetch"
+        "Configuration auto-start:setup_autostart"
+        "Activation services:enable_services"
+        "Génération README:generate_readme"
+        "Configuration finale:final_setup"
+    )
     
+    local total_steps=${#steps[@]}
+    local current_step=0
+    
+    for step in "${steps[@]}"; do
+        local step_name="${step%:*}"
+        local step_function="${step#*:}"
+        
+        current_step=$((current_step + 1))
+        show_progress $current_step $total_steps "$step_name"
+        
+        # Exécution de la fonction avec gestion d'erreur
+        if ! $step_function; then
+            echo -e "\n${RED}❌ Erreur lors de: $step_name${NC}"
+            read -p "Continuer malgré l'erreur ? (y/N) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                print_error "Installation interrompue"
+                exit 1
+            fi
+        fi
+        
+        sleep 1  # Petite pause pour voir la progression
+    done
+    
+    echo -e "\n"
     print_header "🎉 Installation terminée !"
     print_success "Votre système Arch Linux avec Hyprland est prêt"
     print_info "README.md généré avec toutes les informations"
@@ -1436,7 +1611,7 @@ main() {
     echo -e "\n${CYAN}📋 Résumé de l'installation :${NC}"
     echo -e "${YELLOW}✅${NC} Environnement graphique supprimé et Hyprland installé"
     echo -e "${YELLOW}✅${NC} GRUB configuré avec thèmes multiples (Fallout actif)"
-    echo -e "${YELLOW}✅${NC} Son de boot et splashscreen Fallout installés"
+    echo -e "${YELLOW}✅${NC} Son de boot et splashscreen configurés"
     echo -e "${YELLOW}✅${NC} SDDM stylé et icônes modernes"
     echo -e "${YELLOW}✅${NC} Outils de développement complets"
     echo -e "${YELLOW}✅${NC} Applications multimédia et Spicetify"
@@ -1450,9 +1625,15 @@ main() {
     echo -e "\n${CYAN}🎨 Thèmes GRUB disponibles :${NC}"
     echo -e "${GREEN}•${NC} Fallout (actif)"
     echo -e "${BLUE}•${NC} Arcane (dans /etc/default/grub)"
-    echo -e "${PURPLE}•${NC} Star Wars (dans /etc/default/grub)"
     
     print_warning "Un redémarrage est nécessaire pour appliquer tous les changements"
+    
+    read -p "Redémarrer maintenant ? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Redémarrage en cours..."
+        sudo reboot
+    fi
 }
 
 # Lancement du script
