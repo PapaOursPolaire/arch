@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 411.2, correctif 2 de la version 411.2
-# Mise à jour : 22/08/2025 à 15:25
+# Version: 412.2, correctif 2 de la version 412.2
+# Mise à jour : 22/08/2025 à 15:42
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="411.2"
+readonly SCRIPT_VERSION="412.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1055,7 +1055,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 411.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 412.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2333,15 +2333,15 @@ EOF
 }
 
 configure_sddm() {
-    print_header "CONFIGURATION DU DISPLAY MANAGER"
+    print_header "CONFIGURATION DU DISPLAY MANAGER (SDDM OU GDM)"
 
-    local repo_zip="/root/arch-Projets.zip"
+    local repo_zip="/root/Projets.zip"
     local extract_dir="/root/arch-Projets"
     local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
 
-    # 1) GNOME détecté → bascule sur GDM
+    # 1) Si GNOME → GDM
     if /usr/bin/arch-chroot /mnt pacman -Qi gdm &>/dev/null && \
-        /usr/bin/arch-chroot /mnt pacman -Qi gnome-shell &>/dev/null; then
+       /usr/bin/arch-chroot /mnt pacman -Qi gnome-shell &>/dev/null; then
         print_info "GNOME détecté → configuration de GDM"
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed gdm || {
             print_error "Impossible d’installer GDM"
@@ -2353,14 +2353,16 @@ configure_sddm() {
     fi
 
     # 2) Installer SDDM et unzip
-    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed sddm unzip || {
-        print_error "Impossible d’installer SDDM ou unzip"
+    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed sddm unzip curl || {
+        print_error "Impossible d’installer SDDM ou ses dépendances"
         return 1
     }
 
     # 3) Télécharger l’archive auto de GitHub
     print_info "Téléchargement du dépôt GitHub (branche Projets)..."
-    if ! /usr/bin/arch-chroot /mnt curl -fL "https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip" -o "$repo_zip"; then
+    if ! /usr/bin/arch-chroot /mnt curl -fL \
+        "https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip" \
+        -o "$repo_zip"; then
         print_error "Échec du téléchargement de l’archive GitHub"
         return 1
     fi
@@ -4032,7 +4034,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v411.2
+# Configuration Bash - Arch Linux Fallout Edition v412.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4446,13 +4448,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V411.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V412.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V411.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V412.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4564,7 +4566,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V411.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V412.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-install-setup.sh${NC} - Script de vérification post-installation"
