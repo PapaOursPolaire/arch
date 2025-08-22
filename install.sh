@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 444.2, correctif 2 de la version 444.2
-# Mise à jour : 22/08/2025 à 20:52
+# Version: 422.2, correctif 2 de la version 422.2
+# Mise à jour : 22/08/2025 à 16:51
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="444.2"
+readonly SCRIPT_VERSION="422.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -51,10 +51,9 @@ readonly NC='\033[0m'
 
 # Variables supplémentaires
 readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip"
-readonly SDDM_THEME_URL="https://lien-vers-ton-zip.com/FalloutTheme.zip"
+readonly SDDM_THEME_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/SDDM-Fallout-theme.zip"
 readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk"
-readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme"
-readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
+readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock" # Ne fonctionne pas car je n'ai pas trouvé delockscreen digne de la license fallout, ceci est un exemple
 
 # Variables globales
 DISK=""
@@ -1056,7 +1055,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 444.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 422.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2332,86 +2331,81 @@ plymouth-set-default-theme -R "$(basename "$THEME_DIR")"
 echo "[SUCCÈS] Plymouth configuré avec le thème arch-mac-style."
 EOF
 }
+
 configure_sddm() {
-    print_header "CONFIGURATION DU DISPLAY MANAGER (SDDM)"
-    if [[ "${DRY_RUN:-false}" == true ]]; then
-        print_info "[DRY RUN] Simulation SDDM"
+    print_header "CONFIGURATION DU DISPLAY MANAGER (SDDM OU GDM)"
+
+    local repo_zip="/root/Projets.zip"
+    local extract_dir="/root/arch-Projets"
+    local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
+
+    # 1) Si GNOME → GDM
+    if /usr/bin/arch-chroot /mnt pacman -Qi gdm &>/dev/null && \
+       /usr/bin/arch-chroot /mnt pacman -Qi gnome-shell &>/dev/null; then
+        print_info "GNOME détecté → configuration de GDM"
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed gdm || {
+            print_error "Impossible d’installer GDM"
+            return 1
+        }
+        /usr/bin/arch-chroot /mnt systemctl enable gdm.service
+        print_success "GDM activé (SDDM ignoré)."
         return 0
     fi
 
-    # Paquets requis pour la vidéo dans SDDM + SDDM
-    /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed sddm qt6-multimedia qt6-multimedia-ffmpeg || {
-        print_error "Impossible d'installer sddm/qt6-multimedia"; return 1; }
+    # 2) Installer SDDM et unzip
+    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed sddm unzip curl || {
+        print_error "Impossible d’installer SDDM ou ses dépendances"
+        return 1
+    }
 
-    # Copier le thème si présent à côté du script, sinon télécharger l'archive du repo (branche Projets)
-    THEME_NAME="SDD M Fallout Theme"
-    THEME_ID="Fallout"
-    TMPDIR="/mnt/tmp/sddm_theme.$$"
-    /usr/bin/arch-chroot /mnt /bin/bash -c "mkdir -p /tmp && chmod 1777 /tmp"
-    mkdir -p "$TMPDIR"
-    if [[ -d "SDDM-Fallout-theme" ]]; then
-        print_info "Copie du thème local SDDM-Fallout-theme"
-        cp -a "SDDM-Fallout-theme" "$TMPDIR/"
-    else
-        print_info "Téléchargement du dossier SDDM-Fallout-theme depuis GitHub (branche Projets)"
-        curl -Ls -o "$TMPDIR/repo.tar.gz" "https://codeload.github.com/PapaOursPolaire/arch/tar.gz/refs/heads/Projets" || {
-            print_error "Téléchargement du repo échoué"; return 1; }
-        tar -xzf "$TMPDIR/repo.tar.gz" -C "$TMPDIR" || { print_error "Extraction repo échouée"; return 1; }
-        # Cherche le dossier thème
-        SRC_DIR="$(find "$TMPDIR" -maxdepth 2 -type d -name 'SDDM-Fallout-theme' | head -n1)"
-        [[ -d "$SRC_DIR" ]] || { print_error "Dossier SDDM-Fallout-theme introuvable dans l'archive"; return 1; }
-        cp -a "$SRC_DIR" "$TMPDIR/"
+    # 3) Télécharger l’archive auto de GitHub
+    print_info "Téléchargement du dépôt GitHub (branche Projets)..."
+    if ! /usr/bin/arch-chroot /mnt curl -fL \
+        "https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip" \
+        -o "$repo_zip"; then
+        print_error "Échec du téléchargement de l’archive GitHub"
+        return 1
     fi
 
-    # Installation du thème dans le chroot
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
-set -e
-THEME_SRC="/tmp/SDDM-Fallout-theme"
-[[ -d "$THEME_SRC" ]] || THEME_SRC="$(find /tmp -maxdepth 2 -type d -name 'SDDM-Fallout-theme' | head -n1)"
-install -d /usr/share/sddm/themes/Fallout
-cp -a "$THEME_SRC/"* /usr/share/sddm/themes/Fallout/
+    # 4) Extraction
+    /usr/bin/arch-chroot /mnt rm -rf "$extract_dir" "$theme_dir"
+    if ! /usr/bin/arch-chroot /mnt unzip -o "$repo_zip" -d /root/; then
+        print_error "Échec extraction de l’archive GitHub"
+        return 1
+    fi
 
-# Forcer l'utilisation de la vidéo si présente
-if [[ -f /usr/share/sddm/themes/Fallout/background.mp4 ]]; then
-    sed -i 's#^\s*Background\s*=.*#Background=background.mp4#g' /usr/share/sddm/themes/Fallout/theme.conf 2>/dev/null || true
-    sed -i 's#background\\.gif#background.mp4#g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-fi
+    # 5) Déplacement du thème
+    if /usr/bin/arch-chroot /mnt test -d "$extract_dir/SDDM-Fallout-theme"; then
+        /usr/bin/arch-chroot /mnt mv "$extract_dir/SDDM-Fallout-theme" "$theme_dir"
+    else
+        print_error "Le dossier SDDM-Fallout-theme n’a pas été trouvé dans l’archive"
+        return 1
+    fi
 
-# Pré-remplir le champ utilisateur via sddm.lastUser si le QML expose un champ texte
-sed -i 's/\btext:\s*""/text: sddm.lastUser/g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-sed -i 's/\bplaceholderText:\s*""/placeholderText: sddm.lastUser/g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-sed -i 's/\buserName\s*:\s*""/userName: sddm.lastUser/g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-EOS
+    # 6) Vérification du contenu
+    if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/Main.qml"; then
+        print_error "Main.qml introuvable — thème incomplet"
+        return 1
+    fi
+    if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/background.mp4"; then
+        print_warning "Attention : la vidéo background.mp4 est manquante"
+    fi
 
-    # SDDM.conf.d (thème + clavier FR + mémoriser le dernier utilisateur)
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
-set -e
-install -d /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/10-theme.conf <<CONF
+    # 7) Configurer SDDM
+    print_info "Écriture de /etc/sddm.conf..."
+    /usr/bin/arch-chroot /mnt bash -c "cat > /etc/sddm.conf <<EOF
 [Theme]
-Current=Fallout
-CONF
+Current=SDDM-Fallout-theme
 
-cat > /etc/sddm.conf.d/10-keyboard.conf <<CONF
-[X11]
-ServerArguments=-nolisten tcp
-DisplayCommand=/usr/share/sddm/scripts/Xsetup
-GreeterEnvironment=LANG=fr_FR.UTF-8,LC_ALL=fr_FR.UTF-8,XKB_DEFAULT_LAYOUT=fr
-CONF
-
-cat > /etc/sddm.conf.d/10-users.conf <<CONF
 [General]
-RememberLastUser=true
-MinimumUid=1000
-CONF
-EOS
+DisplayServer=wayland
+EOF"
 
-    # Activer SDDM
-    /usr/bin/arch-chroot /mnt systemctl enable sddm.service || print_warning "Activation SDDM échouée"
+    # 8) Activer SDDM
+    /usr/bin/arch-chroot /mnt systemctl enable sddm.service
 
-    print_success "SDDM configuré (thème Fallout, FR, vidéo, préremplissage utilisateur)."
+    print_success "SDDM configuré avec succès avec le thème Fallout"
 }
-
 
 configure_kde_splash() {
     print_header "ETAPE $((++CURRENT_STEP))/$TOTAL_STEPS: CONFIGURATION KDE SPLASHSCREEN FALLOUT"
@@ -2790,486 +2784,7 @@ systemctl enable docker
 usermod -aG docker \"\$USERNAME\"
 "
 
-    # Vérifier que VS Code (Flatpak) est bien installé
-    if ! /usr/bin/arch-chroot /mnt flatpak list | grep -q com.visualstudio.code; then
-        print_warning "VS Code (Flatpak) introuvable, tentative d'installation..."
-        /usr/bin/arch-chroot /mnt flatpak install -y flathub com.visualstudio.code || {
-            print_error "Impossible d'installer VS Code"
-            return 1
-        }
-    fi
-
-    # Extensions à installer dans VS Code
-    local vscode_extensions=(
-        ms-python.python
-        ms-toolsai.jupyter
-        ms-vscode.cpptools
-        vscjava.vscode-java-pack
-        github.copilot
-        esbenp.prettier-vscode
-        dbaeumer.vscode-eslint
-        bradlc.vscode-tailwindcss
-        ritwickdey.liveserver
-        ms-azuretools.vscode-docker
-        ms-vscode.makefile-tools
-        ms-vscode.cmake-tools
-        ms-vscode.cpptools-extension-pack
-        pkief.material-icon-theme
-        usernamehw.errorlens
-    )
-
-    print_info "Installation des extensions VS Code..."
-    for ext in "${vscode_extensions[@]}"; do
-        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -lc \
-            "flatpak run com.visualstudio.code --install-extension $ext" \
-            && print_success "Extension installée : $ext" \
-            || print_warning "Échec installation extension : $ext"
-    done
-
     print_success "Environnement de développement installé et configuré"
-}
-
-# Fonction pour installation manuelle VSCode
-install_vscode_manual() {
-    print_info "Installation manuelle de Visual Studio Code..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Installation manuelle VSCode échouée"
-set -e
-cd /tmp
-
-# Téléchargement VSCode
-curl -L -o vscode.tar.gz 'https://code.visualstudio.com/sha/download?build=stable&os=linux-x64'
-tar -xzf vscode.tar.gz
-
-# Installation
-sudo mkdir -p /opt/visual-studio-code
-sudo cp -r VSCode-linux-x64/* /opt/visual-studio-code/
-sudo ln -sf /opt/visual-studio-code/code /usr/local/bin/code
-
-# Création du .desktop
-cat > /usr/share/applications/visual-studio-code.desktop <<'DESKTOP_EOF'
-[Desktop Entry]
-Name=Visual Studio Code
-Comment=Code Editing. Redefined.
-GenericName=Text Editor
-Exec=/opt/visual-studio-code/code --unity-launch %F
-Icon=/opt/visual-studio-code/resources/app/resources/linux/code.png
-Type=Application
-StartupNotify=true
-StartupWMClass=Code
-Categories=TextEditor;Development;IDE;
-MimeType=text/plain;inode/directory;
-Actions=new-empty-window;
-Keywords=vscode;
-
-[Desktop Action new-empty-window]
-Name=New Empty Window
-Exec=/opt/visual-studio-code/code --new-window %F
-Icon=/opt/visual-studio-code/resources/app/resources/linux/code.png
-DESKTOP_EOF
-
-update-desktop-database
-EOF
-    print_success "VSCode installé manuellement"
-}
-
-# Configuration des extensions VSCode séparée
-configure_vscode_extensions() {
-    print_header "ETAPE 18 bis/$TOTAL_STEPS: CONFIGURATION VSCODE"
-    CURRENT_STEP=18
-
-    if [[ "${DRY_RUN:-false}" == true ]]; then
-        print_info "[DRY RUN] Simulation de la configuration VSCode"
-        return 0
-    fi
-
-    if [[ -z "${USERNAME:-}" ]]; then
-        print_error "USERNAME non défini"
-        return 1
-    fi
-
-    print_info "Installation de Visual Studio Code..."
-    
-    # Installation de VSCode seulement (pas d'extensions dans le chroot)
-    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code || {
-        print_warning "Échec installation code officiel, tentative code-oss"
-        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code-oss || {
-            print_error "Impossible d'installer VS Code"
-            return 1
-        }
-    }
-
-    print_info "Création des répertoires de configuration..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-# Création des répertoires pour l'utilisateur
-mkdir -p /home/$USERNAME/.config/Code/User
-mkdir -p /home/$USERNAME/.vscode/extensions
-
-# Configuration settings.json
-cat > /home/$USERNAME/.config/Code/User/settings.json <<'SETTINGS_EOF'
-{
-    "workbench.colorTheme": "Default Dark+",
-    "workbench.iconTheme": "vs-seti",
-    "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-    "editor.fontLigatures": true,
-    "editor.fontSize": 14,
-    "editor.minimap.enabled": true,
-    "editor.lineNumbers": "on",
-    "editor.cursorBlinking": "smooth",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "files.autoSave": "afterDelay",
-    "files.autoSaveDelay": 1000,
-    "terminal.integrated.fontSize": 13,
-    "terminal.integrated.defaultProfile.linux": "bash",
-    "terminal.integrated.profiles.linux": {
-        "bash": {
-            "path": "/bin/bash",
-            "args": []
-        }
-    },
-    "explorer.confirmDelete": false,
-    "explorer.confirmDragAndDrop": false,
-    "window.titleBarStyle": "custom",
-    "window.zoomLevel": 0,
-    "telemetry.telemetryLevel": "off",
-    "update.mode": "default",
-    "extensions.autoUpdate": true,
-    "extensions.autoCheckUpdates": true,
-    "security.workspace.trust.enabled": false,
-    "git.confirmSync": false,
-    "git.autofetch": true,
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.python",
-        "editor.tabSize": 4
-    },
-    "[javascript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[json]": {
-        "editor.defaultFormatter": "vscode.json-language-features"
-    },
-    "[html]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[css]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": true,
-        "source.organizeImports": true
-    },
-    "typescript.updateImportsOnFileMove.enabled": "always",
-    "javascript.updateImportsOnFileMove.enabled": "always",
-    "workbench.startupEditor": "welcomePage",
-    "editor.suggestSelection": "first",
-    "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue"
-}
-SETTINGS_EOF
-
-# Configuration keybindings.json (raccourcis clavier)
-cat > /home/$USERNAME/.config/Code/User/keybindings.json <<'KEYBINDINGS_EOF'
-[
-    {
-        "key": "ctrl+shift+alt+f",
-        "command": "editor.action.formatDocument"
-    },
-    {
-        "key": "ctrl+shift+`",
-        "command": "terminal.new"
-    },
-    {
-        "key": "ctrl+shift+c",
-        "command": "terminal.openNativeConsole",
-        "when": "!terminalFocus"
-    }
-]
-KEYBINDINGS_EOF
-
-# Permissions correctes
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/Code
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.vscode
-chmod -R 755 /home/$USERNAME/.config/Code
-chmod -R 755 /home/$USERNAME/.vscode
-EOF
-
-    print_info "Création du script d'auto-configuration des extensions..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'SCRIPT_EOF'
-cat > /home/$USERNAME/install-vscode-extensions.sh <<'AUTO_INSTALL'
-#!/bin/bash
-# Script d'installation automatique des extensions VS Code
-# S'exécute automatiquement au premier démarrage de VS Code
-
-# Configuration pour éviter les messages d'erreur
-export DISPLAY=${DISPLAY:-:0}
-
-# Fonction de log
-log() {
-    echo "[$(date '+%H:%M:%S')] $1" | tee -a ~/vscode-extensions-install.log
-}
-
-log "DÉBUT INSTALLATION EXTENSIONS VSCODE"
-
-# Vérification que VS Code est installé
-if ! command -v code >/dev/null 2>&1; then
-    if command -v code-oss >/dev/null 2>&1; then
-        CODE_CMD="code-oss"
-        log "Utilisation de code-oss"
-    else
-        log "ERREUR: Aucun exécutable VS Code trouvé"
-        exit 1
-    fi
-else
-    CODE_CMD="code"
-    log "Utilisation de code"
-fi
-
-# Liste des extensions essentielles
-EXTENSIONS=(
-    # Langages de programmation
-    "ms-python.python"
-    "ms-vscode.cpptools"
-    "redhat.java"
-    "golang.go"
-    "rust-lang.rust-analyzer"
-    
-    # Web Development
-    "esbenp.prettier-vscode"
-    "dbaeumer.vscode-eslint"
-    "bradlc.vscode-tailwindcss"
-    "ritwickdey.liveserver"
-    "formulahendry.auto-rename-tag"
-    "formulahendry.auto-close-tag"
-    
-    # Outils de développement
-    "ms-azuretools.vscode-docker"
-    "ms-toolsai.jupyter"
-    "ms-vscode.makefile-tools"
-    "ms-vscode.cmake-tools"
-    
-    # Git et collaboration
-    "eamodio.gitlens"
-    "mhutchie.git-graph"
-    "donjayamanne.githistory"
-    
-    # Productivité
-    "aaron-bond.better-comments"
-    "usernamehw.errorlens"
-    "gruntfuggly.todo-tree"
-    "streetsidesoftware.code-spell-checker"
-    
-    # Thèmes et apparence
-    "pkief.material-icon-theme"
-    "dracula-theme.theme-dracula"
-    "zhuangtongfa.material-theme"
-    "rocketseat.theme-omni"
-    
-    # Markdown et documentation
-    "yzhang.markdown-all-in-one"
-    "shd101wyy.markdown-preview-enhanced"
-    
-    # AI et assistance (si disponibles)
-    "github.copilot"
-    "github.copilot-chat"
-)
-
-# Fonction d'installation avec retry
-install_extension() {
-    local ext="$1"
-    local retries=3
-    
-    for ((i=1; i<=retries; i++)); do
-        log "Installation $ext (tentative $i/$retries)"
-        
-        if timeout 60 $CODE_CMD --install-extension "$ext" --force >/dev/null 2>&1; then
-            log " $ext installé avec succès"
-            return 0
-        else
-            log "  $ext échec tentative $i"
-            sleep 2
-        fi
-    done
-    
-    log " $ext définitivement échoué"
-    return 1
-}
-
-# Installation des extensions
-SUCCESS_COUNT=0
-TOTAL_COUNT=${#EXTENSIONS[@]}
-
-log "Installation de $TOTAL_COUNT extensions..."
-
-for extension in "${EXTENSIONS[@]}"; do
-    if install_extension "$extension"; then
-        ((SUCCESS_COUNT++))
-    fi
-done
-
-# Configuration post-installation
-log "Configuration des thèmes..."
-$CODE_CMD --install-extension pkief.material-icon-theme >/dev/null 2>&1 || true
-$CODE_CMD --install-extension dracula-theme.theme-dracula >/dev/null 2>&1 || true
-
-# Mise à jour de la configuration avec les nouveaux thèmes
-cat > ~/.config/Code/User/settings.json <<'FINAL_SETTINGS'
-{
-    "workbench.colorTheme": "Dracula",
-    "workbench.iconTheme": "material-icon-theme",
-    "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-    "editor.fontLigatures": true,
-    "editor.fontSize": 14,
-    "editor.minimap.enabled": true,
-    "editor.lineNumbers": "on",
-    "editor.cursorBlinking": "smooth",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "files.autoSave": "afterDelay",
-    "files.autoSaveDelay": 1000,
-    "terminal.integrated.fontSize": 13,
-    "terminal.integrated.defaultProfile.linux": "bash",
-    "explorer.confirmDelete": false,
-    "explorer.confirmDragAndDrop": false,
-    "window.titleBarStyle": "custom",
-    "window.zoomLevel": 0,
-    "telemetry.telemetryLevel": "off",
-    "update.mode": "default",
-    "extensions.autoUpdate": true,
-    "extensions.autoCheckUpdates": true,
-    "security.workspace.trust.enabled": false,
-    "git.confirmSync": false,
-    "git.autofetch": true,
-    "materialTheme.accent": "Teal",
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.python",
-        "editor.tabSize": 4
-    },
-    "[javascript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[json]": {
-        "editor.defaultFormatter": "vscode.json-language-features"
-    },
-    "[html]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[css]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": true,
-        "source.organizeImports": true
-    },
-    "typescript.updateImportsOnFileMove.enabled": "always",
-    "javascript.updateImportsOnFileMove.enabled": "always",
-    "workbench.startupEditor": "welcomePage",
-    "editor.suggestSelection": "first",
-    "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue"
-}
-FINAL_SETTINGS
-
-log "INSTALLATION TERMINÉE"
-log "Extensions installées avec succès: $SUCCESS_COUNT/$TOTAL_COUNT"
-log "Log complet disponible: ~/vscode-extensions-install.log"
-
-# Marquer comme fait pour éviter de re-exécuter
-touch ~/.vscode-extensions-installed
-
-# Notification
-if command -v notify-send >/dev/null 2>&1; then
-    notify-send "VS Code" "Extensions installées: $SUCCESS_COUNT/$TOTAL_COUNT" 2>/dev/null || true
-fi
-
-log "Configuration VS Code terminée!"
-
-# Auto-suppression du script si tout s'est bien passé
-if [[ $SUCCESS_COUNT -gt $((TOTAL_COUNT / 2)) ]]; then
-    log "Auto-suppression du script d'installation..."
-    rm -f "$0"
-fi
-AUTO_INSTALL
-
-# Rendre le script exécutable
-chmod +x /home/$USERNAME/install-vscode-extensions.sh
-chown $USERNAME:$USERNAME /home/$USERNAME/install-vscode-extensions.sh
-
-# Création d'un .desktop file pour lancer automatiquement l'installation
-cat > /home/$USERNAME/.config/autostart/vscode-first-run.desktop <<'DESKTOP_AUTO'
-[Desktop Entry]
-Type=Application
-Name=VS Code Extensions Auto-Install
-Exec=/home/$USERNAME/install-vscode-extensions.sh
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-StartupNotify=false
-DESKTOP_AUTO
-
-# Permissions pour autostart
-mkdir -p /home/$USERNAME/.config/autostart
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/autostart
-chmod 755 /home/$USERNAME/.config/autostart
-chmod 644 /home/$USERNAME/.config/autostart/vscode-first-run.desktop
-SCRIPT_EOF
-
-    # Installation des polices pour VS Code
-    print_info "Installation des polices pour VS Code..."
-    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed \
-        ttf-jetbrains-mono \
-        ttf-fira-code \
-        ttf-liberation \
-        noto-fonts \
-        noto-fonts-emoji || {
-        print_warning "Certaines polices n'ont pas pu être installées"
-    }
-
-    # Création d'un script manuel d'installation pour dépannage
-    /usr/bin/arch-chroot /mnt /bin/bash <<'MANUAL_EOF'
-cat > /home/$USERNAME/manual-vscode-setup.sh <<'MANUAL_SCRIPT'
-#!/bin/bash
-# Script manuel de configuration VS Code en cas de problème
-
-echo "CONFIGURATION MANUELLE VS CODE"
-echo ""
-
-# Installation manuelle des extensions de base
-echo "Installation des extensions de base..."
-
-BASIC_EXTENSIONS=(
-    "ms-python.python"
-    "ms-vscode.cpptools"
-    "esbenp.prettier-vscode"
-    "pkief.material-icon-theme"
-    "dracula-theme.theme-dracula"
-    "eamodio.gitlens"
-)
-
-for ext in "${BASIC_EXTENSIONS[@]}"; do
-    echo "Installation: $ext"
-    code --install-extension "$ext" --force || echo "Échec: $ext"
-done
-
-echo ""
-echo "Extensions installées. Redémarrez VS Code pour voir les changements."
-MANUAL_SCRIPT
-
-chmod +x /home/$USERNAME/manual-vscode-setup.sh
-chown $USERNAME:$USERNAME /home/$USERNAME/manual-vscode-setup.sh
-MANUAL_EOF
-
-    print_success "VS Code configuré avec installation automatique des extensions au premier démarrage"
-    print_info " Scripts créés:"
-    print_info "  • ~/install-vscode-extensions.sh (automatique)"
-    print_info "  • ~/manual-vscode-setup.sh (manuel si besoin)"
-    
-    return 0
 }
 
 # Fonction pour indiquer à l'utilisateur ce qui se passera
@@ -3932,101 +3447,67 @@ EOF
 # Fastfetch s'exécute automatiquement
 install_fastfetch() {
     print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
-    if [[ "${DRY_RUN:-false}" == true ]]; then
-        print_info "[DRY RUN] Simulation fastfetch"
-        return 0
-    fi
 
-    # Installation de fastfetch dans le chroot
+    # Installer fastfetch si non présent
     if ! /usr/bin/arch-chroot /mnt command -v fastfetch &>/dev/null; then
-        /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed fastfetch || {
-            print_error "Échec installation fastfetch"; return 1; }
+        print_info "Installation de fastfetch..."
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch || {
+            print_error "Échec installation de fastfetch"
+            return 1
+        }
     fi
 
-    # Répertoires de config
-    /usr/bin/arch-chroot /mnt /bin/bash -c 'mkdir -p "/home/$USERNAME/.config/fastfetch" && chown -R $USERNAME:$USERNAME "/home/$USERNAME/.config"'
+    # Créer le répertoire de config utilisateur
+    local user_home="/home/$USERNAME"
+    /usr/bin/arch-chroot /mnt mkdir -p "$user_home/.config/fastfetch"
 
-    # Config JSONC (logo Arch couleur par défaut + modules détaillés + en-tête)
-    cat > "/mnt/home/$USERNAME/.config/fastfetch/config.jsonc" << 'EOF'
+    # Fichier de configuration fastfetch
+    cat > "/mnt$user_home/.config/fastfetch/config.jsonc" << 'EOF'
 {
-  "logo": "arch",
-  "modules": [
-    "title",
-    "os",
-    "host",
-    "kernel",
-    "uptime",
-    "packages",
-    "shell",
-    "resolution",
-    "de",
-    "wm",
-    "wmtheme",
-    "theme",
-    "icons",
-    "font",
-    "cpu",
-    "gpu",
-    "memory",
-    "swap",
-    "disk",
-    "display",
-    "battery",
-    "localip",
-    "publicip"
-  ],
-  "display": {
-    "separator": " : ",
-    "keyWidth": 18,
-    "showColors": true,
-    "header": "Powered by PapaOursPolaire - automatisation available on GitHub"
-  }
+    "display": {
+        "separator": " : ",
+        "keyWidth": 20,
+        "showColors": true
+    },
+    "logo": {
+        "type": "arch"
+    },
+    "modules": [
+        {
+            "type": "title",
+            "key": "Powered by PapaOursPolaire - available on GitHub"
+        },
+        { "type": "os" },
+        { "type": "kernel" },
+        { "type": "uptime" },
+        { "type": "shell" },
+        { "type": "de" },
+        { "type": "wm" },
+        { "type": "terminal" },
+        { "type": "cpu" },
+        { "type": "gpu" },
+        { "type": "memory" },
+        { "type": "disk" },
+        { "type": "packages" },
+        { "type": "localip" },
+        { "type": "publicip" }
+    ]
 }
 EOF
 
-    # Lancer fastfetch à chaque shell
-    for rc in "/mnt/home/$USERNAME/.bashrc" "/mnt/home/$USERNAME/.zshrc" "/mnt/etc/skel/.bashrc" "/mnt/etc/skel/.zshrc"; do
-        /usr/bin/arch-chroot /mnt /bin/bash -c "touch '${rc#/mnt}' || true"
-        echo 'command -v fastfetch >/dev/null 2>&1 && fastfetch' >> "$rc" 2>/dev/null || true
-    done
-    /usr/bin/arch-chroot /mnt chown $USERNAME:$USERNAME "/home/$USERNAME/.bashrc" "/home/$USERNAME/.zshrc" 2>/dev/null || true
+    # Ajuster les permissions
+    /usr/bin/arch-chroot /mnt chown -R "$USERNAME:$USERNAME" "$user_home/.config/fastfetch"
 
-    print_success "Fastfetch configuré pour $USERNAME"
-
-FASTFETCH_EOF
-
-# Nettoyer les anciennes entrées fastfetch
-# À l'intérieur du here-doc CHROOT_EOF (pas ici)
-sed -i '/fastfetch/d' "/home/$USERNAME/.bashrc" 2>/dev/null || true
-
-cat >> "/home/$USERNAME/.bashrc" <<'BASHRC_EOF'
-# ===============================================================================
-# FASTFETCH AUTOMATIQUE
-# ===============================================================================
-if [[ -z "${FASTFETCH_SHOWN:-}" && "$-" == *i* ]]; then
-    export FASTFETCH_SHOWN=1
-    if command -v fastfetch >/dev/null 2>&1; then
-        if [[ -f "$HOME/.config/fastfetch/config.jsonc" ]]; then
-            echo ""
-            fastfetch --config "$HOME/.config/fastfetch/config.jsonc" 2>/dev/null || fastfetch
-        else
-            echo ""
-            fastfetch
-        fi
-        echo ""
-    else
-        echo ""
-        echo -e "\033[1;32m Bienvenue sur l'installation automatique d'Arch Linux \033[0m"
-        echo -e "\033[1;36mUtilisateur:\033[0m $(whoami)"
-        echo -e "\033[1;36mHôte:\033[0m $(hostname)"
-        echo -e "\033[1;33mPowered by PapaOursPolaire, available on GitHub\033[0m"
-        echo ""
+    # Ajouter fastfetch dans .bashrc pour lancement automatique
+    local bashrc="/mnt$user_home/.bashrc"
+    if ! grep -q "fastfetch" "$bashrc" 2>/dev/null; then
+        echo -e "\n# Lancer fastfetch automatiquement\nif command -v fastfetch &>/dev/null; then fastfetch; fi" >> "$bashrc"
     fi
-fi
-BASHRC_EOF
 
-su - "$USERNAME" -c 'fastfetch --config "$HOME/.config/fastfetch/config.jsonc" || echo "Fastfetch installé, se lancera au prochain démarrage de terminal"'
-# (puis plus loin seulement) CHROOT_EOF
+    # Assurer que le fichier appartient à l’utilisateur
+    /usr/bin/arch-chroot /mnt chown "$USERNAME:$USERNAME" "$user_home/.bashrc"
+
+    print_success "Fastfetch installé, configuré et activé automatiquement pour $USERNAME"
 }
 
 # Fonctions pour la configuration finale du système
@@ -4074,7 +3555,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v444.2
+# Configuration Bash - Arch Linux Fallout Edition v422.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4466,7 +3947,7 @@ finish_installation() {
     echo -e "• Terminal amélioré avec Fastfetch et aliases utiles"
     echo ""
     echo -e "${GREEN}NAVIGATION WEB COMPLETE :${NC}"
-    echo -e "• Firefox (configuré pour Netflix/Disney+ DRM)"
+    echo -e "• Firefox"
     echo -e "• Google Chrome, Chromium, Brave Browser"
     echo -e "• DuckDuckGo Browser (si disponible)"
     echo ""
@@ -4488,13 +3969,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V444.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V422.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V444.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V422.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4531,7 +4012,7 @@ finish_installation() {
     fi
 
     # Création d'un script post-installation
-    cat > /mnt/home/$USERNAME/post-setup.sh <<'POST_EOF'
+    cat > /mnt/home/$USERNAME/post-install-setup.sh <<'POST_EOF'
 #!/bin/bash
 # Script de configuration post-installation Arch Linux
 
@@ -4571,10 +4052,10 @@ echo ""
 echo " Bon voyage dans le Wasteland!"
 POST_EOF
     
-    chmod +x "/mnt/home/$USERNAME/post-setup.sh"
+    chmod +x "/mnt/home/$USERNAME/post-install-setup.sh"
     # Changer propriétaire dans le système installé (résolution des uid/gid côté chroot)
     # Changer propriétaire dans le système installé (résolution des uid/gid côté chroot)
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -c 'id -u "$USERNAME" >/dev/null 2>&1 && chown "$USERNAME:$USERNAME" "/home/$USERNAME/post-setup.sh"' 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -c 'id -u "$USERNAME" >/dev/null 2>&1 && chown "$USERNAME:$USERNAME" "/home/$USERNAME/post-install-setup.sh"' 2>/dev/null || true
     
     if confirm_action "Voulez-vous redémarrer maintenant ?" "O"; then
         print_info "Redémarrage dans 5 secondes..."
@@ -4606,10 +4087,10 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V444.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V422.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
-        echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
+        echo -e "• ${WHITE}~/post-install-setup.sh${NC} - Script de vérification post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
@@ -4938,102 +4419,3 @@ main() {
 }
 
 main "$@"
-
-
-
-apply_fixes() {
-  print_header "APPLY HOTFIXES (clavier FR, splashscreen, navigateurs, post-install)"
-  if [[ "${DRY_RUN:-false}" == true ]]; then
-      print_info "[DRY RUN] Hotfixes"
-      return 0
-  fi
-
-  /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
-set -e
-# Clavier FR (console + X11)
-mkdir -p /etc
-echo 'KEYMAP=fr' > /etc/vconsole.conf
-localectl set-keymap fr || true
-localectl set-x11-keymap fr || true
-mkdir -p /etc/X11/xorg.conf.d
-cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<CONF
-Section "InputClass"
-    Identifier "system-keyboard"
-    MatchIsKeyboard "on"
-    Option "XkbLayout" "fr"
-EndSection
-CONF
-
-# Splashscreen Fallout via zip fourni
-TMP=$(mktemp -d)
-curl -fsSL -o "$TMP/fallout-splashscreen4k.zip" "https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip" || true
-if [ -s "$TMP/fallout-splashscreen4k.zip" ]; then
-  mkdir -p /usr/share/plasma/look-and-feel
-  unzip -o "$TMP/fallout-splashscreen4k.zip" -d /usr/share/plasma/look-and-feel/ >/dev/null 2>&1 || true
-  # Enregistrement du ksplash
-  mkdir -p /etc/xdg
-  cat > /etc/xdg/ksplashrc <<KS
-[KSplash]
-Theme=fallout-splashscreen4k
-KS
-fi
-
-# Navigateurs via Flatpak (plus robuste pour Chrome/Brave/DDG)
-pacman -S --noconfirm --needed flatpak || true
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
-flatpak install -y flathub com.brave.Browser || true
-flatpak install -y flathub com.google.Chrome || true
-flatpak install -y flathub com.duckduckgo.Desktop || true
-
-# Script post-install complet
-USER_HOME="/home/$USERNAME"
-cat > "$USER_HOME/post-install.sh" <<'PSH'
-#!/bin/bash
-set -e
-echo "[INFO] Fix Steam multilib"
-if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-  echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf >/dev/null
-  sudo pacman -Sy
-fi
-sudo pacman -S --noconfirm steam lib32-gnutls || true
-
-echo "[INFO] Android Studio"
-if command -v flatpak >/dev/null 2>&1; then
-  flatpak install -y flathub com.google.AndroidStudio || true
-fi
-
-echo "[INFO] Spotify + Spicetify"
-if command -v flatpak >/dev/null 2>&1; then
-  flatpak install -y flathub com.spotify.Client || true
-fi
-if ! command -v spicetify >/dev/null 2>&1; then
-  echo "Spicetify non installé (AUR). Installez spicetify-cli si nécessaire."
-fi
-
-echo "[INFO] VS Code + extensions"
-if ! command -v code >/dev/null 2>&1; then
-  if command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --noconfirm code || true
-  fi
-fi
-if command -v code >/dev/null 2>&1; then
-  exts=(ms-python.python esbenp.prettier-vscode eamodio.gitlens         ms-vscode.cpptools rust-lang.rust-analyzer golang.go redhat.java         dbaeumer.vscode-eslint pkief.material-icon-theme dracula-theme.theme-dracula         ms-toolsai.jupyter ms-azuretools.vscode-docker bradlc.vscode-tailwindcss         mhutchie.git-graph donjayamanne.githistory yzhang.markdown-all-in-one         streetsidesoftware.code-spell-checker)
-  for e in "${exts[@]}"; do code --install-extension "$e" --force || true; done
-fi
-echo "[OK] Post-install terminé."
-PSH
-chmod +x "$USER_HOME/post-install.sh"
-chown $USERNAME:$USERNAME "$USER_HOME/post-install.sh"
-
-# Renommage post-setup
-if [ -f "$USER_HOME/post-install-setup.sh" ]; then
-  mv "$USER_HOME/post-install-setup.sh" "$USER_HOME/post-setup.sh"
-  chown $USERNAME:$USERNAME "$USER_HOME/post-setup.sh"
-  chmod +x "$USER_HOME/post-setup.sh"
-fi
-EOS
-
-  print_success "Hotfixes appliqués."
-}
-
-apply_fixes
