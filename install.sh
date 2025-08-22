@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 445.2, correctif 2 de la version 445.2
-# Mise à jour : 22/08/2025 à 20:54
+# Version: 446.2, correctif 2 de la version 446.2
+# Mise à jour : 22/08/2025 à 21:46
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="445.2"
+readonly SCRIPT_VERSION="446.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 445.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 446.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2332,86 +2332,61 @@ plymouth-set-default-theme -R "$(basename "$THEME_DIR")"
 echo "[SUCCÈS] Plymouth configuré avec le thème arch-mac-style."
 EOF
 }
+
 configure_sddm() {
-    print_header "CONFIGURATION DU DISPLAY MANAGER (SDDM)"
-    if [[ "${DRY_RUN:-false}" == true ]]; then
-        print_info "[DRY RUN] Simulation SDDM"
-        return 0
-    fi
+    print_info "Configuration de SDDM avec le thème Fallout..."
 
-    # Paquets requis pour la vidéo dans SDDM + SDDM
-    /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed sddm qt6-multimedia qt6-multimedia-ffmpeg || {
-        print_error "Impossible d'installer sddm/qt6-multimedia"; return 1; }
+    # Installation de SDDM si manquant
+    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed sddm
 
-    # Copier le thème si présent à côté du script, sinon télécharger l'archive du repo (branche Projets)
-    THEME_NAME="SDD M Fallout Theme"
-    THEME_ID="Fallout"
-    TMPDIR="/mnt/tmp/sddm_theme.$$"
-    /usr/bin/arch-chroot /mnt /bin/bash -c "mkdir -p /tmp && chmod 1777 /tmp"
-    mkdir -p "$TMPDIR"
-    if [[ -d "SDDM-Fallout-theme" ]]; then
-        print_info "Copie du thème local SDDM-Fallout-theme"
-        cp -a "SDDM-Fallout-theme" "$TMPDIR/"
-    else
-        print_info "Téléchargement du dossier SDDM-Fallout-theme depuis GitHub (branche Projets)"
-        curl -Ls -o "$TMPDIR/repo.tar.gz" "https://codeload.github.com/PapaOursPolaire/arch/tar.gz/refs/heads/Projets" || {
-            print_error "Téléchargement du repo échoué"; return 1; }
-        tar -xzf "$TMPDIR/repo.tar.gz" -C "$TMPDIR" || { print_error "Extraction repo échouée"; return 1; }
-        # Cherche le dossier thème
-        SRC_DIR="$(find "$TMPDIR" -maxdepth 2 -type d -name 'SDDM-Fallout-theme' | head -n1)"
-        [[ -d "$SRC_DIR" ]] || { print_error "Dossier SDDM-Fallout-theme introuvable dans l'archive"; return 1; }
-        cp -a "$SRC_DIR" "$TMPDIR/"
-    fi
+    # Activer SDDM au boot
+    /usr/bin/arch-chroot /mnt systemctl enable sddm.service
 
-    # Installation du thème dans le chroot
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
-set -e
-THEME_SRC="/tmp/SDDM-Fallout-theme"
-[[ -d "$THEME_SRC" ]] || THEME_SRC="$(find /tmp -maxdepth 2 -type d -name 'SDDM-Fallout-theme' | head -n1)"
-install -d /usr/share/sddm/themes/Fallout
-cp -a "$THEME_SRC/"* /usr/share/sddm/themes/Fallout/
+    # Télécharger et installer le thème Fallout
+    local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
+    /usr/bin/arch-chroot /mnt bash -c "
+        rm -rf \"$theme_dir\"
+        git clone --depth=1 https://github.com/PapaOursPolaire/arch.git /tmp/fallout-theme
+        cp -r /tmp/fallout-theme/SDDM-Fallout-theme \"$theme_dir\"
+        chown -R root:root \"$theme_dir\"
+        chmod -R 755 \"$theme_dir\"
+    "
 
-# Forcer l'utilisation de la vidéo si présente
-if [[ -f /usr/share/sddm/themes/Fallout/background.mp4 ]]; then
-    sed -i 's#^\s*Background\s*=.*#Background=background.mp4#g' /usr/share/sddm/themes/Fallout/theme.conf 2>/dev/null || true
-    sed -i 's#background\\.gif#background.mp4#g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-fi
+    # Ajouter la vidéo comme fond d’écran
+    /usr/bin/arch-chroot /mnt bash -c "
+        if [[ -f \"$theme_dir/background.mp4\" ]]; then
+            sed -i 's|background.gif|background.mp4|g' \"$theme_dir/Main.qml\"
+        fi
+    "
 
-# Pré-remplir le champ utilisateur via sddm.lastUser si le QML expose un champ texte
-sed -i 's/\btext:\s*""/text: sddm.lastUser/g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-sed -i 's/\bplaceholderText:\s*""/placeholderText: sddm.lastUser/g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-sed -i 's/\buserName\s*:\s*""/userName: sddm.lastUser/g' /usr/share/sddm/themes/Fallout/Main.qml 2>/dev/null || true
-EOS
+    # Préremplir le champ username mais garder modifiable
+    /usr/bin/arch-chroot /mnt bash -c "
+        sed -i \"s|property string presetUser:.*|property string presetUser: \\\"$USERNAME\\\"|\" \"$theme_dir/Main.qml\"
+    "
 
-    # SDDM.conf.d (thème + clavier FR + mémoriser le dernier utilisateur)
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
-set -e
-install -d /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/10-theme.conf <<CONF
+    # Définir le thème Fallout dans SDDM
+    /usr/bin/arch-chroot /mnt bash -c "
+        mkdir -p /etc/sddm.conf.d
+        cat > /etc/sddm.conf.d/theme.conf <<EOF
 [Theme]
-Current=Fallout
-CONF
+Current=SDDM-Fallout-theme
 
-cat > /etc/sddm.conf.d/10-keyboard.conf <<CONF
 [X11]
-ServerArguments=-nolisten tcp
-DisplayCommand=/usr/share/sddm/scripts/Xsetup
-GreeterEnvironment=LANG=fr_FR.UTF-8,LC_ALL=fr_FR.UTF-8,XKB_DEFAULT_LAYOUT=fr
-CONF
+DisplayCommand=/etc/sddm/Xsetup
+EOF
+    "
 
-cat > /etc/sddm.conf.d/10-users.conf <<CONF
-[General]
-RememberLastUser=true
-MinimumUid=1000
-CONF
-EOS
+    # Fix clavier français dans SDDM
+    /usr/bin/arch-chroot /mnt bash -c "
+        cat > /etc/sddm/Xsetup <<EOF
+#!/bin/sh
+setxkbmap fr
+EOF
+        chmod +x /etc/sddm/Xsetup
+    "
 
-    # Activer SDDM
-    /usr/bin/arch-chroot /mnt systemctl enable sddm.service || print_warning "Activation SDDM échouée"
-
-    print_success "SDDM configuré (thème Fallout, FR, vidéo, préremplissage utilisateur)."
+    print_success "SDDM configuré avec le thème Fallout et clavier FR"
 }
-
 
 configure_kde_splash() {
     print_header "ETAPE $((++CURRENT_STEP))/$TOTAL_STEPS: CONFIGURATION KDE SPLASHSCREEN FALLOUT"
@@ -4074,7 +4049,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v445.2
+# Configuration Bash - Arch Linux Fallout Edition v446.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4488,13 +4463,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V445.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V446.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V445.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V446.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4606,7 +4581,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V445.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V446.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
