@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 412.2, correctif 2 de la version 412.2
-# Mise à jour : 22/08/2025 à 15:42
+# Version: 422.2, correctif 2 de la version 422.2
+# Mise à jour : 22/08/2025 à 16:51
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="412.2"
+readonly SCRIPT_VERSION="422.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1055,7 +1055,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 412.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 422.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2784,486 +2784,7 @@ systemctl enable docker
 usermod -aG docker \"\$USERNAME\"
 "
 
-    # Vérifier que VS Code (Flatpak) est bien installé
-    if ! /usr/bin/arch-chroot /mnt flatpak list | grep -q com.visualstudio.code; then
-        print_warning "VS Code (Flatpak) introuvable, tentative d'installation..."
-        /usr/bin/arch-chroot /mnt flatpak install -y flathub com.visualstudio.code || {
-            print_error "Impossible d'installer VS Code"
-            return 1
-        }
-    fi
-
-    # Extensions à installer dans VS Code
-    local vscode_extensions=(
-        ms-python.python
-        ms-toolsai.jupyter
-        ms-vscode.cpptools
-        vscjava.vscode-java-pack
-        github.copilot
-        esbenp.prettier-vscode
-        dbaeumer.vscode-eslint
-        bradlc.vscode-tailwindcss
-        ritwickdey.liveserver
-        ms-azuretools.vscode-docker
-        ms-vscode.makefile-tools
-        ms-vscode.cmake-tools
-        ms-vscode.cpptools-extension-pack
-        pkief.material-icon-theme
-        usernamehw.errorlens
-    )
-
-    print_info "Installation des extensions VS Code..."
-    for ext in "${vscode_extensions[@]}"; do
-        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -lc \
-            "flatpak run com.visualstudio.code --install-extension $ext" \
-            && print_success "Extension installée : $ext" \
-            || print_warning "Échec installation extension : $ext"
-    done
-
     print_success "Environnement de développement installé et configuré"
-}
-
-# Fonction pour installation manuelle VSCode
-install_vscode_manual() {
-    print_info "Installation manuelle de Visual Studio Code..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Installation manuelle VSCode échouée"
-set -e
-cd /tmp
-
-# Téléchargement VSCode
-curl -L -o vscode.tar.gz 'https://code.visualstudio.com/sha/download?build=stable&os=linux-x64'
-tar -xzf vscode.tar.gz
-
-# Installation
-sudo mkdir -p /opt/visual-studio-code
-sudo cp -r VSCode-linux-x64/* /opt/visual-studio-code/
-sudo ln -sf /opt/visual-studio-code/code /usr/local/bin/code
-
-# Création du .desktop
-cat > /usr/share/applications/visual-studio-code.desktop <<'DESKTOP_EOF'
-[Desktop Entry]
-Name=Visual Studio Code
-Comment=Code Editing. Redefined.
-GenericName=Text Editor
-Exec=/opt/visual-studio-code/code --unity-launch %F
-Icon=/opt/visual-studio-code/resources/app/resources/linux/code.png
-Type=Application
-StartupNotify=true
-StartupWMClass=Code
-Categories=TextEditor;Development;IDE;
-MimeType=text/plain;inode/directory;
-Actions=new-empty-window;
-Keywords=vscode;
-
-[Desktop Action new-empty-window]
-Name=New Empty Window
-Exec=/opt/visual-studio-code/code --new-window %F
-Icon=/opt/visual-studio-code/resources/app/resources/linux/code.png
-DESKTOP_EOF
-
-update-desktop-database
-EOF
-    print_success "VSCode installé manuellement"
-}
-
-# Configuration des extensions VSCode séparée
-configure_vscode_extensions() {
-    print_header "ETAPE 18 bis/$TOTAL_STEPS: CONFIGURATION VSCODE"
-    CURRENT_STEP=18
-
-    if [[ "${DRY_RUN:-false}" == true ]]; then
-        print_info "[DRY RUN] Simulation de la configuration VSCode"
-        return 0
-    fi
-
-    if [[ -z "${USERNAME:-}" ]]; then
-        print_error "USERNAME non défini"
-        return 1
-    fi
-
-    print_info "Installation de Visual Studio Code..."
-    
-    # Installation de VSCode seulement (pas d'extensions dans le chroot)
-    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code || {
-        print_warning "Échec installation code officiel, tentative code-oss"
-        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code-oss || {
-            print_error "Impossible d'installer VS Code"
-            return 1
-        }
-    }
-
-    print_info "Création des répertoires de configuration..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-# Création des répertoires pour l'utilisateur
-mkdir -p /home/$USERNAME/.config/Code/User
-mkdir -p /home/$USERNAME/.vscode/extensions
-
-# Configuration settings.json
-cat > /home/$USERNAME/.config/Code/User/settings.json <<'SETTINGS_EOF'
-{
-    "workbench.colorTheme": "Default Dark+",
-    "workbench.iconTheme": "vs-seti",
-    "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-    "editor.fontLigatures": true,
-    "editor.fontSize": 14,
-    "editor.minimap.enabled": true,
-    "editor.lineNumbers": "on",
-    "editor.cursorBlinking": "smooth",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "files.autoSave": "afterDelay",
-    "files.autoSaveDelay": 1000,
-    "terminal.integrated.fontSize": 13,
-    "terminal.integrated.defaultProfile.linux": "bash",
-    "terminal.integrated.profiles.linux": {
-        "bash": {
-            "path": "/bin/bash",
-            "args": []
-        }
-    },
-    "explorer.confirmDelete": false,
-    "explorer.confirmDragAndDrop": false,
-    "window.titleBarStyle": "custom",
-    "window.zoomLevel": 0,
-    "telemetry.telemetryLevel": "off",
-    "update.mode": "default",
-    "extensions.autoUpdate": true,
-    "extensions.autoCheckUpdates": true,
-    "security.workspace.trust.enabled": false,
-    "git.confirmSync": false,
-    "git.autofetch": true,
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.python",
-        "editor.tabSize": 4
-    },
-    "[javascript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[json]": {
-        "editor.defaultFormatter": "vscode.json-language-features"
-    },
-    "[html]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[css]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": true,
-        "source.organizeImports": true
-    },
-    "typescript.updateImportsOnFileMove.enabled": "always",
-    "javascript.updateImportsOnFileMove.enabled": "always",
-    "workbench.startupEditor": "welcomePage",
-    "editor.suggestSelection": "first",
-    "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue"
-}
-SETTINGS_EOF
-
-# Configuration keybindings.json (raccourcis clavier)
-cat > /home/$USERNAME/.config/Code/User/keybindings.json <<'KEYBINDINGS_EOF'
-[
-    {
-        "key": "ctrl+shift+alt+f",
-        "command": "editor.action.formatDocument"
-    },
-    {
-        "key": "ctrl+shift+`",
-        "command": "terminal.new"
-    },
-    {
-        "key": "ctrl+shift+c",
-        "command": "terminal.openNativeConsole",
-        "when": "!terminalFocus"
-    }
-]
-KEYBINDINGS_EOF
-
-# Permissions correctes
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/Code
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.vscode
-chmod -R 755 /home/$USERNAME/.config/Code
-chmod -R 755 /home/$USERNAME/.vscode
-EOF
-
-    print_info "Création du script d'auto-configuration des extensions..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'SCRIPT_EOF'
-cat > /home/$USERNAME/install-vscode-extensions.sh <<'AUTO_INSTALL'
-#!/bin/bash
-# Script d'installation automatique des extensions VS Code
-# S'exécute automatiquement au premier démarrage de VS Code
-
-# Configuration pour éviter les messages d'erreur
-export DISPLAY=${DISPLAY:-:0}
-
-# Fonction de log
-log() {
-    echo "[$(date '+%H:%M:%S')] $1" | tee -a ~/vscode-extensions-install.log
-}
-
-log "DÉBUT INSTALLATION EXTENSIONS VSCODE"
-
-# Vérification que VS Code est installé
-if ! command -v code >/dev/null 2>&1; then
-    if command -v code-oss >/dev/null 2>&1; then
-        CODE_CMD="code-oss"
-        log "Utilisation de code-oss"
-    else
-        log "ERREUR: Aucun exécutable VS Code trouvé"
-        exit 1
-    fi
-else
-    CODE_CMD="code"
-    log "Utilisation de code"
-fi
-
-# Liste des extensions essentielles
-EXTENSIONS=(
-    # Langages de programmation
-    "ms-python.python"
-    "ms-vscode.cpptools"
-    "redhat.java"
-    "golang.go"
-    "rust-lang.rust-analyzer"
-    
-    # Web Development
-    "esbenp.prettier-vscode"
-    "dbaeumer.vscode-eslint"
-    "bradlc.vscode-tailwindcss"
-    "ritwickdey.liveserver"
-    "formulahendry.auto-rename-tag"
-    "formulahendry.auto-close-tag"
-    
-    # Outils de développement
-    "ms-azuretools.vscode-docker"
-    "ms-toolsai.jupyter"
-    "ms-vscode.makefile-tools"
-    "ms-vscode.cmake-tools"
-    
-    # Git et collaboration
-    "eamodio.gitlens"
-    "mhutchie.git-graph"
-    "donjayamanne.githistory"
-    
-    # Productivité
-    "aaron-bond.better-comments"
-    "usernamehw.errorlens"
-    "gruntfuggly.todo-tree"
-    "streetsidesoftware.code-spell-checker"
-    
-    # Thèmes et apparence
-    "pkief.material-icon-theme"
-    "dracula-theme.theme-dracula"
-    "zhuangtongfa.material-theme"
-    "rocketseat.theme-omni"
-    
-    # Markdown et documentation
-    "yzhang.markdown-all-in-one"
-    "shd101wyy.markdown-preview-enhanced"
-    
-    # AI et assistance (si disponibles)
-    "github.copilot"
-    "github.copilot-chat"
-)
-
-# Fonction d'installation avec retry
-install_extension() {
-    local ext="$1"
-    local retries=3
-    
-    for ((i=1; i<=retries; i++)); do
-        log "Installation $ext (tentative $i/$retries)"
-        
-        if timeout 60 $CODE_CMD --install-extension "$ext" --force >/dev/null 2>&1; then
-            log " $ext installé avec succès"
-            return 0
-        else
-            log "  $ext échec tentative $i"
-            sleep 2
-        fi
-    done
-    
-    log " $ext définitivement échoué"
-    return 1
-}
-
-# Installation des extensions
-SUCCESS_COUNT=0
-TOTAL_COUNT=${#EXTENSIONS[@]}
-
-log "Installation de $TOTAL_COUNT extensions..."
-
-for extension in "${EXTENSIONS[@]}"; do
-    if install_extension "$extension"; then
-        ((SUCCESS_COUNT++))
-    fi
-done
-
-# Configuration post-installation
-log "Configuration des thèmes..."
-$CODE_CMD --install-extension pkief.material-icon-theme >/dev/null 2>&1 || true
-$CODE_CMD --install-extension dracula-theme.theme-dracula >/dev/null 2>&1 || true
-
-# Mise à jour de la configuration avec les nouveaux thèmes
-cat > ~/.config/Code/User/settings.json <<'FINAL_SETTINGS'
-{
-    "workbench.colorTheme": "Dracula",
-    "workbench.iconTheme": "material-icon-theme",
-    "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-    "editor.fontLigatures": true,
-    "editor.fontSize": 14,
-    "editor.minimap.enabled": true,
-    "editor.lineNumbers": "on",
-    "editor.cursorBlinking": "smooth",
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "files.autoSave": "afterDelay",
-    "files.autoSaveDelay": 1000,
-    "terminal.integrated.fontSize": 13,
-    "terminal.integrated.defaultProfile.linux": "bash",
-    "explorer.confirmDelete": false,
-    "explorer.confirmDragAndDrop": false,
-    "window.titleBarStyle": "custom",
-    "window.zoomLevel": 0,
-    "telemetry.telemetryLevel": "off",
-    "update.mode": "default",
-    "extensions.autoUpdate": true,
-    "extensions.autoCheckUpdates": true,
-    "security.workspace.trust.enabled": false,
-    "git.confirmSync": false,
-    "git.autofetch": true,
-    "materialTheme.accent": "Teal",
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.python",
-        "editor.tabSize": 4
-    },
-    "[javascript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[json]": {
-        "editor.defaultFormatter": "vscode.json-language-features"
-    },
-    "[html]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[css]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": true,
-        "source.organizeImports": true
-    },
-    "typescript.updateImportsOnFileMove.enabled": "always",
-    "javascript.updateImportsOnFileMove.enabled": "always",
-    "workbench.startupEditor": "welcomePage",
-    "editor.suggestSelection": "first",
-    "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue"
-}
-FINAL_SETTINGS
-
-log "INSTALLATION TERMINÉE"
-log "Extensions installées avec succès: $SUCCESS_COUNT/$TOTAL_COUNT"
-log "Log complet disponible: ~/vscode-extensions-install.log"
-
-# Marquer comme fait pour éviter de re-exécuter
-touch ~/.vscode-extensions-installed
-
-# Notification
-if command -v notify-send >/dev/null 2>&1; then
-    notify-send "VS Code" "Extensions installées: $SUCCESS_COUNT/$TOTAL_COUNT" 2>/dev/null || true
-fi
-
-log "Configuration VS Code terminée!"
-
-# Auto-suppression du script si tout s'est bien passé
-if [[ $SUCCESS_COUNT -gt $((TOTAL_COUNT / 2)) ]]; then
-    log "Auto-suppression du script d'installation..."
-    rm -f "$0"
-fi
-AUTO_INSTALL
-
-# Rendre le script exécutable
-chmod +x /home/$USERNAME/install-vscode-extensions.sh
-chown $USERNAME:$USERNAME /home/$USERNAME/install-vscode-extensions.sh
-
-# Création d'un .desktop file pour lancer automatiquement l'installation
-cat > /home/$USERNAME/.config/autostart/vscode-first-run.desktop <<'DESKTOP_AUTO'
-[Desktop Entry]
-Type=Application
-Name=VS Code Extensions Auto-Install
-Exec=/home/$USERNAME/install-vscode-extensions.sh
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-StartupNotify=false
-DESKTOP_AUTO
-
-# Permissions pour autostart
-mkdir -p /home/$USERNAME/.config/autostart
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/autostart
-chmod 755 /home/$USERNAME/.config/autostart
-chmod 644 /home/$USERNAME/.config/autostart/vscode-first-run.desktop
-SCRIPT_EOF
-
-    # Installation des polices pour VS Code
-    print_info "Installation des polices pour VS Code..."
-    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed \
-        ttf-jetbrains-mono \
-        ttf-fira-code \
-        ttf-liberation \
-        noto-fonts \
-        noto-fonts-emoji || {
-        print_warning "Certaines polices n'ont pas pu être installées"
-    }
-
-    # Création d'un script manuel d'installation pour dépannage
-    /usr/bin/arch-chroot /mnt /bin/bash <<'MANUAL_EOF'
-cat > /home/$USERNAME/manual-vscode-setup.sh <<'MANUAL_SCRIPT'
-#!/bin/bash
-# Script manuel de configuration VS Code en cas de problème
-
-echo "CONFIGURATION MANUELLE VS CODE"
-echo ""
-
-# Installation manuelle des extensions de base
-echo "Installation des extensions de base..."
-
-BASIC_EXTENSIONS=(
-    "ms-python.python"
-    "ms-vscode.cpptools"
-    "esbenp.prettier-vscode"
-    "pkief.material-icon-theme"
-    "dracula-theme.theme-dracula"
-    "eamodio.gitlens"
-)
-
-for ext in "${BASIC_EXTENSIONS[@]}"; do
-    echo "Installation: $ext"
-    code --install-extension "$ext" --force || echo "Échec: $ext"
-done
-
-echo ""
-echo "Extensions installées. Redémarrez VS Code pour voir les changements."
-MANUAL_SCRIPT
-
-chmod +x /home/$USERNAME/manual-vscode-setup.sh
-chown $USERNAME:$USERNAME /home/$USERNAME/manual-vscode-setup.sh
-MANUAL_EOF
-
-    print_success "VS Code configuré avec installation automatique des extensions au premier démarrage"
-    print_info " Scripts créés:"
-    print_info "  • ~/install-vscode-extensions.sh (automatique)"
-    print_info "  • ~/manual-vscode-setup.sh (manuel si besoin)"
-    
-    return 0
 }
 
 # Fonction pour indiquer à l'utilisateur ce qui se passera
@@ -4034,7 +3555,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v412.2
+# Configuration Bash - Arch Linux Fallout Edition v422.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4448,13 +3969,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V412.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V422.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V412.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V422.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4566,7 +4087,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V412.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V422.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-install-setup.sh${NC} - Script de vérification post-installation"
