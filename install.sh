@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 448.2, correctif 2 de la version 448.2
-# Mise à jour : 22/08/2025 à 22:46
+# Version: 449.2, correctif 2 de la version 449.2
+# Mise à jour : 22/08/2025 à 22:49
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="448.2"
+readonly SCRIPT_VERSION="449.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 448.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 449.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3438,101 +3438,156 @@ EOF
 # Fastfetch s'exécute automatiquement
 install_fastfetch() {
     print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
-    if [[ "${DRY_RUN:-false}" == true ]]; then
-        print_info "[DRY RUN] Simulation fastfetch"
-        return 0
+    local user_home="/mnt/home/$USERNAME"
+    local skel_dir="/mnt/etc/skel"
+    local config_rel=".config/fastfetch/config.jsonc"
+    local config_abs="/mnt/home/$USERNAME/$config_rel"
+    local rc_block_marker="# ===== FASTFETCH AUTOMATIQUE (NE PAS DUPLIQUER) ====="
+
+    # --- Préconditions ---
+    if [[ -z "${USERNAME:-}" ]]; then
+        print_error "USERNAME n'est pas défini."
+        return 1
+    fi
+    if [[ ! -d "$user_home" ]]; then
+        print_warning "Le home de $USERNAME n'existe pas encore dans /mnt/home. Tentative de création..."
+        /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "id -u '$USERNAME' >/dev/null 2>&1 || useradd -m '$USERNAME'" || true
+        if [[ ! -d "$user_home" ]]; then
+            /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "mkdir -p '/home/$USERNAME' && chown -R '$USERNAME:$USERNAME' '/home/$USERNAME'"
+        fi
+        [[ -d "$user_home" ]] || { print_error "Impossible de préparer /home/$USERNAME"; return 1; }
     fi
 
-    # Installation de fastfetch dans le chroot
-    if ! /usr/bin/arch-chroot /mnt command -v fastfetch &>/dev/null; then
-        /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed fastfetch || {
-            print_error "Échec installation fastfetch"; return 1; }
+    # --- Installation fastfetch ---
+    if ! /usr/bin/arch-chroot /mnt command -v fastfetch >/dev/null 2>&1; then
+        print_info "Installation de fastfetch via pacman…"
+        /usr/bin/arch-chroot /mnt pacman -Syu --noconfirm --needed fastfetch || {
+            print_error "Échec de l’installation de fastfetch."
+            return 1
+        }
+    else
+        print_info "fastfetch déjà présent."
     fi
 
-    # Répertoires de config
-    /usr/bin/arch-chroot /mnt /bin/bash -c 'mkdir -p "/home/$USERNAME/.config/fastfetch" && chown -R $USERNAME:$USERNAME "/home/$USERNAME/.config"'
+    # --- Arborescence de config ---
+    print_info "Création de l’arborescence de configuration…"
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
+        mkdir -p '/home/$USERNAME/.config/fastfetch' \
+                    '/home/$USERNAME/.cache' \
+                    '/home/$USERNAME/.local/share'
+        mkdir -p '/etc/skel/.config/fastfetch'
+        chown -R '$USERNAME:$USERNAME' '/home/$USERNAME/.config' '/home/$USERNAME/.cache' '/home/$USERNAME/.local'
+    " || {
+        print_error "Impossible de créer les répertoires de configuration."
+        return 1
+    }
 
-    # Config JSONC (logo Arch couleur par défaut + modules détaillés + en-tête)
-    cat > "/mnt/home/$USERNAME/.config/fastfetch/config.jsonc" << 'EOF'
+    # --- Fichier de configuration JSONC complet ---
+    print_info "Écriture de la configuration fastfetch…"
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "cat > '/home/$USERNAME/.config/fastfetch/config.jsonc' <<'JSON_EOF'
 {
-  "logo": "arch",
-  "modules": [
-    "title",
-    "os",
-    "host",
-    "kernel",
-    "uptime",
-    "packages",
-    "shell",
-    "resolution",
-    "de",
-    "wm",
-    "wmtheme",
-    "theme",
-    "icons",
-    "font",
-    "cpu",
-    "gpu",
-    "memory",
-    "swap",
-    "disk",
-    "display",
-    "battery",
-    "localip",
-    "publicip"
-  ],
-  "display": {
-    "separator": " : ",
-    "keyWidth": 18,
-    "showColors": true,
-    "header": "Powered by PapaOursPolaire - automatisation available on GitHub"
-  }
+  // Affiche un titre personnalisé en tête
+    \"modules\": [
+    { \"type\": \"title\", \"key\": \"Powered by PapaOursPolaire - automatisation disponible sur GitHub\" },
+
+    // Logo + infos principales
+    { \"type\": \"os\" },
+    { \"type\": \"host\" },
+    { \"type\": \"kernel\" },
+    { \"type\": \"uptime\" },
+    { \"type\": \"packages\" },
+    { \"type\": \"shell\" },
+    { \"type\": \"terminal\" },
+
+    // Environnement graphique
+    { \"type\": \"de\" },
+    { \"type\": \"wm\" },
+    { \"type\": \"theme\" },
+    { \"type\": \"icons\" },
+    { \"type\": \"font\" },
+    { \"type\": \"display\" },
+
+    // Matériel & perfs
+    { \"type\": \"cpu\" },
+    { \"type\": \"gpu\" },
+    { \"type\": \"memory\" },
+    { \"type\": \"swap\" },
+    { \"type\": \"disk\" },
+
+    // Réseau
+    { \"type\": \"localip\" },
+    { \"type\": \"publicip\" }
+    ],
+
+  // Séparateur lisible
+    \"display\": {
+    \"separator\": \" : \",
+    \"keyWidth\": 18,
+    \"showColors\": true
+    },
+
+  // Logo par défaut d’Arch Linux (couleurs par défaut – pas de forçage de mauve)
+    \"logo\": \"arch\"
 }
-EOF
+JSON_EOF" || {
+        print_error "Échec d’écriture de /home/$USERNAME/.config/fastfetch/config.jsonc"
+        return 1
+    }
 
-    # Lancer fastfetch à chaque shell
-    for rc in "/mnt/home/$USERNAME/.bashrc" "/mnt/home/$USERNAME/.zshrc" "/mnt/etc/skel/.bashrc" "/mnt/etc/skel/.zshrc"; do
-        /usr/bin/arch-chroot /mnt /bin/bash -c "touch '${rc#/mnt}' || true"
-        echo 'command -v fastfetch >/dev/null 2>&1 && fastfetch' >> "$rc" 2>/dev/null || true
-    done
-    /usr/bin/arch-chroot /mnt chown $USERNAME:$USERNAME "/home/$USERNAME/.bashrc" "/home/$USERNAME/.zshrc" 2>/dev/null || true
+    # --- Ajout auto dans .bashrc / .zshrc (idempotent) ---
+    print_info "Configuration de l’exécution automatique (bash/zsh)…"
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
+        set -e
+        for rc in '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc' '/etc/skel/.bashrc' '/etc/skel/.zshrc'; do
+            touch \"\$rc\" || true
+            # Nettoyage des anciennes lignes fastfetch
+            sed -i '/fastfetch/d' \"\$rc\" 2>/dev/null || true
+            sed -i '/FASTFETCH AUTOMATIQUE/d' \"\$rc\" 2>/dev/null || true
 
-    print_success "Fastfetch configuré pour $USERNAME"
-
-FASTFETCH_EOF
-
-# Nettoyer les anciennes entrées fastfetch
-# À l'intérieur du here-doc CHROOT_EOF (pas ici)
-sed -i '/fastfetch/d' "/home/$USERNAME/.bashrc" 2>/dev/null || true
-
-cat >> "/home/$USERNAME/.bashrc" <<'BASHRC_EOF'
-# ===============================================================================
-# FASTFETCH AUTOMATIQUE
-# ===============================================================================
-if [[ -z "${FASTFETCH_SHOWN:-}" && "$-" == *i* ]]; then
+            # Ajout d'un bloc propre avec garde
+            if ! grep -q \"^$rc_block_marker\" \"\$rc\" 2>/dev/null; then
+                cat >> \"\$rc\" <<'RC_EOF'
+$rc_block_marker
+# Lancement unique par session interactive
+if [[ -z \"\${FASTFETCH_SHOWN:-}\" && \"\$-\" == *i* ]]; then
     export FASTFETCH_SHOWN=1
     if command -v fastfetch >/dev/null 2>&1; then
-        if [[ -f "$HOME/.config/fastfetch/config.jsonc" ]]; then
-            echo ""
-            fastfetch --config "$HOME/.config/fastfetch/config.jsonc" 2>/dev/null || fastfetch
+        if [[ -f \"\$HOME/.config/fastfetch/config.jsonc\" ]]; then
+            fastfetch --config \"\$HOME/.config/fastfetch/config.jsonc\" 2>/dev/null || fastfetch
         else
-            echo ""
             fastfetch
         fi
-        echo ""
-    else
-        echo ""
-        echo -e "\033[1;32m Bienvenue sur l'installation automatique d'Arch Linux \033[0m"
-        echo -e "\033[1;36mUtilisateur:\033[0m $(whoami)"
-        echo -e "\033[1;36mHôte:\033[0m $(hostname)"
-        echo -e "\033[1;33mPowered by PapaOursPolaire, available on GitHub\033[0m"
-        echo ""
     fi
 fi
-BASHRC_EOF
+RC_EOF
+            fi
+        done
 
-su - "$USERNAME" -c 'fastfetch --config "$HOME/.config/fastfetch/config.jsonc" || echo "Fastfetch installé, se lancera au prochain démarrage de terminal"'
-# (puis plus loin seulement) CHROOT_EOF
+        # Propriété/permissions côté utilisateur
+        chown '$USERNAME:$USERNAME' '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc' 2>/dev/null || true
+    " || {
+        print_error "Échec de l’ajout de fastfetch aux shells."
+        return 1
+    }
+
+    # --- Test immédiat pour l’utilisateur ---
+    print_info "Test immédiat de fastfetch pour $USERNAME…"
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "su - '$USERNAME' -c 'FASTFETCH_SHOWN=; command -v fastfetch >/dev/null 2>&1 && fastfetch --config \"\$HOME/.config/fastfetch/config.jsonc\" >/dev/null 2>&1 || true'"
+
+    # --- Ajout d’un alias pratique (optionnel et idempotent) ---
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
+        for rc in '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc'; do
+            grep -q '^alias ff=' \"\$rc\" 2>/dev/null || echo \"alias ff='fastfetch --config \\\"\\\$HOME/.config/fastfetch/config.jsonc\\\"'\" >> \"\$rc\"
+        done
+        chown '$USERNAME:$USERNAME' '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc' 2>/dev/null || true
+    " || true
+
+    # --- Vérifications finales ---
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
+        test -x \$(command -v fastfetch) && test -s '/home/$USERNAME/.config/fastfetch/config.jsonc'
+    " && print_success "Fastfetch installé et configuré pour $USERNAME" || {
+        print_warning "Fastfetch installé mais une vérification a échoué. Lancement manuel possible: fastfetch"
+    }
 }
 
 # Fonctions pour la configuration finale du système
@@ -3580,7 +3635,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v448.2
+# Configuration Bash - Arch Linux Fallout Edition v449.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -3994,13 +4049,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V448.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V449.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V448.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V449.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4112,7 +4167,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V448.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V449.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
