@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 422.2, correctif 2 de la version 422.2
-# Mise à jour : 22/08/2025 à 16:51
+# Version: 442.2, correctif 2 de la version 442.2
+# Mise à jour : 22/08/2025 à 19:02
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="422.2"
+readonly SCRIPT_VERSION="442.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1055,7 +1055,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 422.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 442.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3555,7 +3555,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v422.2
+# Configuration Bash - Arch Linux Fallout Edition v442.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -3969,13 +3969,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V422.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V442.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V422.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V442.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4012,7 +4012,7 @@ finish_installation() {
     fi
 
     # Création d'un script post-installation
-    cat > /mnt/home/$USERNAME/post-install-setup.sh <<'POST_EOF'
+    cat > /mnt/home/$USERNAME/post-setup.sh <<'POST_EOF'
 #!/bin/bash
 # Script de configuration post-installation Arch Linux
 
@@ -4052,10 +4052,10 @@ echo ""
 echo " Bon voyage dans le Wasteland!"
 POST_EOF
     
-    chmod +x "/mnt/home/$USERNAME/post-install-setup.sh"
+    chmod +x "/mnt/home/$USERNAME/post-setup.sh"
     # Changer propriétaire dans le système installé (résolution des uid/gid côté chroot)
     # Changer propriétaire dans le système installé (résolution des uid/gid côté chroot)
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -c 'id -u "$USERNAME" >/dev/null 2>&1 && chown "$USERNAME:$USERNAME" "/home/$USERNAME/post-install-setup.sh"' 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt /usr/bin/bash -c 'id -u "$USERNAME" >/dev/null 2>&1 && chown "$USERNAME:$USERNAME" "/home/$USERNAME/post-setup.sh"' 2>/dev/null || true
     
     if confirm_action "Voulez-vous redémarrer maintenant ?" "O"; then
         print_info "Redémarrage dans 5 secondes..."
@@ -4087,10 +4087,10 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V422.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V442.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
-        echo -e "• ${WHITE}~/post-install-setup.sh${NC} - Script de vérification post-installation"
+        echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
@@ -4417,5 +4417,224 @@ main() {
     ok "FINI. Si Spotify vient d'être installé, lancez-le une première fois pour générer les prefs."
     echo "  – Journal détaillé: $LOG"
 }
+
+############################################################
+# === PATCH BLOCK (PapaOursPolaire fixes) ===
+# Les fonctions ci-dessous REMPLACENT les versions précédentes
+# si elles existaient. Elles sont injectées juste avant l'appel
+# à main pour garantir qu'elles seront utilisées.
+############################################################
+
+print_header(){ echo -e "${CYAN:-}==>${RESET:-} $*"; }
+print_info(){   echo -e "${CYAN:-}[INFO]${RESET:-} $*"; }
+print_success(){echo -e "${GREEN:-}[OK]${RESET:-}  $*"; }
+print_warning(){echo -e "${YELLOW:-}[WARN]${RESET:-} $*"; }
+print_error(){  echo -e "${RED:-}[ERR]${RESET:-}  $*"; }
+
+CHROOT(){ /usr/bin/arch-chroot /mnt "$@"; }
+
+configure_keyboard_fr(){
+  print_header "CLAVIER FR (console + X11 + SDDM)"
+  CHROOT bash -lc 'echo KEYMAP=fr > /etc/vconsole.conf || true'
+  CHROOT mkdir -p /etc/X11/xorg.conf.d
+  CHROOT bash -lc 'cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<EOF
+Section "InputClass"
+  Identifier "system-keyboard"
+  MatchIsKeyboard "on"
+  Option "XkbLayout" "fr"
+  Option "XkbVariant" "latin9"
+EndSection
+EOF'
+  CHROOT localectl set-x11-keymap fr "" "" latin9 || true
+  print_success "Clavier FR configuré"
+}
+
+install_fastfetch(){
+  print_header "FASTFETCH (logo Arch + auto-lancement)"
+  if ! CHROOT command -v fastfetch >/dev/null 2>&1; then
+    CHROOT pacman -S --noconfirm --needed fastfetch || { print_error "fastfetch KO"; return 1; }
+  fi
+  local user_home="/home/${USERNAME}"
+  CHROOT mkdir -p "${user_home}/.config/fastfetch"
+  CHROOT bash -c "cat > ${user_home}/.config/fastfetch/config.jsonc <<'EOF'
+{
+  "display": { "separator": " : ", "keyWidth": 18, "showColors": true },
+  "modules": [
+    { "type": "title", "key": "Powered by PapaOursPolaire - automatisation available on GitHub" },
+    { "type": "os" }, { "type": "host" }, { "type": "kernel" }, { "type": "uptime" },
+    { "type": "shell" }, { "type": "de" }, { "type": "wm" }, { "type": "terminal" }, { "type": "display" },
+    { "type": "cpu" }, { "type": "gpu" }, { "type": "memory" }, { "type": "disk" }, { "type": "battery" },
+    { "type": "packages" }, { "type": "localip" }, { "type": "publicip" },
+    { "type": "ascii", "key": "Arch" }
+  ]
+}
+EOF"
+  # auto-run
+  CHROOT bash -lc "grep -qxF fastfetch ${user_home}/.bashrc 2>/dev/null || echo fastfetch >> ${user_home}/.bashrc"
+  CHROOT chown -R "${USERNAME}:${USERNAME}" "${user_home}/.config/fastfetch" || true
+  print_success "Fastfetch configuré et auto-lancé"
+}
+
+install_kde_splash(){
+  print_header "SPLASHSCREEN KDE (fallout-splashscreen4k)"
+  CHROOT pacman -S --noconfirm --needed unzip curl plasma-workspace || true
+  local tmp="/root/fallout-splashscreen4k.zip"
+  local dest="/usr/share/plasma/look-and-feel"
+  local url="${KDESPLASH_URL:-https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip}"
+  if ! CHROOT curl -fL "$url" -o "$tmp"; then
+    print_warning "Téléchargement splash échoué ($url)"; return 0
+  fi
+  CHROOT unzip -o "$tmp" -d /root/ >/dev/null || { print_warning "Extraction splash échouée"; return 0; }
+  local packname
+  packname=$(CHROOT bash -lc "ls -1 /root | grep -E '^fallout-splashscreen4k$|^org\\.' | head -n1" || true)
+  if [[ -z "$packname" ]]; then print_warning "Pack splash introuvable"; return 0; fi
+  CHROOT rm -rf "${dest}/${packname}"
+  CHROOT mv "/root/${packname}" "${dest}/"
+  CHROOT bash -lc "command -v lookandfeeltool >/dev/null && lookandfeeltool -a ${packname} || true"
+  print_success "Splash installé: ${packname}"
+}
+
+configure_sddm(){
+  print_header "SDDM (thème Fallout depuis GitHub, vidéo, user prérempli)"
+  # GNOME => GDM
+  if CHROOT pacman -Qi gdm &>/dev/null && CHROOT pacman -Qi gnome-shell &>/dev/null; then
+    print_info "GNOME détecté → activation de GDM (SDDM ignoré)"
+    CHROOT pacman -S --noconfirm --needed gdm || { print_error "GDM KO"; return 1; }
+    CHROOT systemctl enable gdm.service
+    return 0
+  fi
+
+  CHROOT pacman -S --noconfirm --needed sddm unzip curl || { print_error "SDDM/Deps KO"; return 1; }
+
+  local repo_zip="https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip"
+  local zip="/root/arch-Projets.zip"
+  local root_extract="/root/arch-Projets"
+  local theme_src="${root_extract}/SDDM-Fallout-theme"
+  local theme_dst="/usr/share/sddm/themes/SDDM-Fallout-theme"
+
+  print_info "Téléchargement du dépôt (branche Projets)…"
+  CHROOT curl -fL "$repo_zip" -o "$zip" || { print_error "Téléchargement dépôt échoué"; return 1; }
+  CHROOT rm -rf "$root_extract" "$theme_dst"
+  CHROOT unzip -o "$zip" -d /root/ >/dev/null
+
+  local topdir
+  topdir=$(CHROOT bash -lc "ls -1 /root | grep -E '^arch-Projets$|^arch-Projets-[0-9a-f]+' | head -n1" || true)
+  [[ -n "$topdir" ]] && CHROOT mv "/root/${topdir}" "$root_extract" || { print_error "Extraction arch-Projets introuvable"; return 1; }
+
+  if ! CHROOT test -d "$theme_src"; then
+    print_error "Dossier ${theme_src} introuvable"; return 1
+  fi
+  CHROOT mv "$theme_src" "$theme_dst"
+
+  # Fichiers requis
+  CHROOT test -f "${theme_dst}/Main.qml" || { print_error "Main.qml manquant"; return 1; }
+  if ! CHROOT test -f "${theme_dst}/background.mp4"; then
+    print_warning "background.mp4 manquant — fallback gif"
+  fi
+
+  # Username prérempli
+  CHROOT bash -c "cat > ${theme_dst}/theme.conf.user <<EOF
+PreFillUser=${USERNAME}
+EOF"
+
+  # Config SDDM (Xorg + clavier fr)
+  CHROOT mkdir -p /etc/sddm.conf.d
+  CHROOT bash -c "cat > /etc/sddm.conf.d/10-theme.conf <<'EOF'
+[Theme]
+Current=SDDM-Fallout-theme
+EOF"
+  CHROOT bash -c "cat > /etc/sddm.conf.d/20-x11.conf <<'EOF'
+[X11]
+ServerArguments=-layout fr -variant latin9
+EOF"
+  CHROOT bash -c "cat > /etc/sddm.conf <<'EOF'
+[General]
+DisplayServer=x11
+EOF"
+
+  # Activer SDDM
+  CHROOT systemctl enable sddm.service
+  print_success "SDDM configuré avec thème Fallout"
+}
+
+generate_post_setup(){
+  print_header "GÉNÉRATION post-setup.sh (Steam/Android Studio/Spotify/VSCode/Navigateurs)"
+  local user_home="/home/${USERNAME}"
+  CHROOT bash -c "cat > ${user_home}/post-setup.sh <<'EOS'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+echo '[post-setup] Démarrage…'
+
+sudo pacman -Sy --noconfirm
+sudo pacman -S --noconfirm --needed git curl unzip base-devel
+
+# Installer yay si absent
+if ! command -v yay >/dev/null 2>&1; then
+  tmpdir=$(mktemp -d); pushd "$tmpdir"
+  git clone https://aur.archlinux.org/yay.git
+  cd yay && makepkg -si --noconfirm || true
+  popd; rm -rf "$tmpdir"
+fi
+
+# Navigateurs
+command -v brave >/dev/null 2>&1 || yay -S --noconfirm brave-bin || true
+command -v google-chrome >/dev/null 2>&1 || yay -S --noconfirm google-chrome || true
+command -v duckduckgo >/dev/null 2>&1 || yay -S --noconfirm duckduckgo-browser-bin || true
+
+# Steam + fixes
+sudo pacman -S --noconfirm --needed steam-native-runtime || sudo pacman -S --noconfirm steam
+sudo pacman -S --noconfirm --needed lib32-vulkan-icd-loader || true
+
+# Android Studio
+command -v studio.sh >/dev/null 2>&1 || yay -S --noconfirm android-studio || true
+
+# Spotify + Spicetify
+command -v spotify >/dev/null 2>&1 || yay -S --noconfirm spotify || true
+command -v spicetify >/dev/null 2>&1 || yay -S --noconfirm spicetify-cli || true
+spicetify backup apply || true
+
+# VS Code + extensions
+if ! command -v code >/dev/null 2>&1; then
+  sudo pacman -S --noconfirm --needed code || sudo pacman -S --noconfirm code-oss || true
+fi
+CODEBIN=$(command -v code || command -v code-oss || echo '')
+if [[ -n "$CODEBIN" ]]; then
+  EXTS=(
+    ms-python.python ms-vscode.cpptools redhat.java golang.go rust-lang.rust-analyzer
+    esbenp.prettier-vscode dbaeumer.vscode-eslint bradlc.vscode-tailwindcss ritwickdey.liveserver
+    formulahendry.auto-rename-tag formulahendry.auto-close-tag
+    ms-azuretools.vscode-docker ms-toolsai.jupyter ms-vscode.makefile-tools ms-vscode.cmake-tools
+    eamodio.gitlens mhutchie.git-graph donjayamanne.githistory
+    aaron-bond.better-comments usernamehw.errorlens gruntfuggly.todo-tree streetsidesoftware.code-spell-checker
+    pkief.material-icon-theme dracula-theme.theme-dracula zhuangtongfa.material-theme rocketseat.theme-omni
+    yzhang.markdown-all-in-one shd101wyy.markdown-preview-enhanced
+    github.copilot github.copilot-chat
+  )
+  for e in "${EXTS[@]}"; do "$CODEBIN" --install-extension "$e" --force || true; done
+fi
+
+echo '[post-setup] Terminé.'
+EOS"
+  CHROOT chown "${USERNAME}:${USERNAME}" "${user_home}/post-setup.sh"
+  CHROOT chmod +x "${user_home}/post-setup.sh"
+  print_success "post-setup.sh prêt dans le home utilisateur"
+}
+
+# Wrapper pour s'assurer que notre clavier/fastfetch/sddm/splash/post-setup sont appelés
+__papaours_apply_all_patches(){
+  # Ces appels n'auront d'effet que si le reste du script ne l'a pas déjà fait
+  [[ -n "${USERNAME:-}" ]] || { echo "[ERR] USERNAME non défini"; return 1; }
+  configure_keyboard_fr || true
+  install_fastfetch || true
+  install_kde_splash || true
+  configure_sddm || true
+  generate_post_setup || true
+}
+############################################################
+# === FIN PATCH BLOCK ===
+############################################################
+
+# --- Patches appliqués ---
+__papaours_apply_all_patches || true
 
 main "$@"
