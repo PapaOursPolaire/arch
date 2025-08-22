@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 410.2, correctif 2 de la version 410.2
-# Mise à jour : 22/08/2025 à 14:17
+# Version: 411.2, correctif 2 de la version 411.2
+# Mise à jour : 22/08/2025 à 15:25
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="410.2"
+readonly SCRIPT_VERSION="411.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1055,7 +1055,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 410.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 411.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2335,13 +2335,13 @@ EOF
 configure_sddm() {
     print_header "CONFIGURATION DU DISPLAY MANAGER"
 
-    local theme_zip="/root/SDDM-Fallout-theme.zip"
+    local repo_zip="/root/arch-Projets.zip"
+    local extract_dir="/root/arch-Projets"
     local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
-    local mega_key="/etc/pacman.d/MEGA_signing.key"
 
     # 1) GNOME détecté → bascule sur GDM
     if /usr/bin/arch-chroot /mnt pacman -Qi gdm &>/dev/null && \
-       /usr/bin/arch-chroot /mnt pacman -Qi gnome-shell &>/dev/null; then
+        /usr/bin/arch-chroot /mnt pacman -Qi gnome-shell &>/dev/null; then
         print_info "GNOME détecté → configuration de GDM"
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed gdm || {
             print_error "Impossible d’installer GDM"
@@ -2358,61 +2358,35 @@ configure_sddm() {
         return 1
     }
 
-    # 3) Télécharger et valider l’archive ZIP du thème
-    print_info "Téléchargement du thème Fallout..."
-    if ! /usr/bin/arch-chroot /mnt curl -fL "$SDDM_THEME_URL" -o "$theme_zip"; then
-        print_error "Échec du téléchargement ($SDDM_THEME_URL)"
-        return 1
-    fi
-    if ! /usr/bin/arch-chroot /mnt file "$theme_zip" | grep -q "Zip archive data"; then
-        print_error "Ce n’est pas une archive ZIP valide"
+    # 3) Télécharger l’archive auto de GitHub
+    print_info "Téléchargement du dépôt GitHub (branche Projets)..."
+    if ! /usr/bin/arch-chroot /mnt curl -fL "https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip" -o "$repo_zip"; then
+        print_error "Échec du téléchargement de l’archive GitHub"
         return 1
     fi
 
-    # 4) Extraction du thème
-    /usr/bin/arch-chroot /mnt rm -rf "$theme_dir"
-    print_info "Extraction de l’archive..."
-    if ! /usr/bin/arch-chroot /mnt unzip -o "$theme_zip" -d /usr/share/sddm/themes/; then
-        print_error "Échec extraction du thème ZIP."
+    # 4) Extraction
+    /usr/bin/arch-chroot /mnt rm -rf "$extract_dir" "$theme_dir"
+    if ! /usr/bin/arch-chroot /mnt unzip -o "$repo_zip" -d /root/; then
+        print_error "Échec extraction de l’archive GitHub"
         return 1
     fi
 
-    # Corriger si dossier imbriqué
-    if /usr/bin/arch-chroot /mnt test -d "$theme_dir/SDDM-Fallout-theme"; then
-        print_info "Dossier imbriqué détecté, correction..."
-        /usr/bin/arch-chroot /mnt mv "$theme_dir/SDDM-Fallout-theme/"* "$theme_dir/"
-        /usr/bin/arch-chroot /mnt rm -rf "$theme_dir/SDDM-Fallout-theme"
+    # 5) Déplacement du thème
+    if /usr/bin/arch-chroot /mnt test -d "$extract_dir/SDDM-Fallout-theme"; then
+        /usr/bin/arch-chroot /mnt mv "$extract_dir/SDDM-Fallout-theme" "$theme_dir"
+    else
+        print_error "Le dossier SDDM-Fallout-theme n’a pas été trouvé dans l’archive"
+        return 1
     fi
 
-    # Vérification finale
+    # 6) Vérification du contenu
     if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/Main.qml"; then
         print_error "Main.qml introuvable — thème incomplet"
         return 1
     fi
-
-    # 5) Ajout dépôt Mega + clé GPG (robuste, silencieux)
-    print_info "Ajout du dépôt Mega..."
-    /usr/bin/arch-chroot /mnt curl -fsSL "https://mega.nz/linux/repo/MEGAsync/Arch_Extra/$(uname -m)/Release.key" -o "$mega_key"
-    /usr/bin/arch-chroot /mnt pacman-key --add "$mega_key" >/dev/null 2>&1 || print_warning "Impossible d’ajouter la clé Mega"
-    /usr/bin/arch-chroot /mnt pacman-key --lsign-key 6D920D30C9E4F44B --yes >/dev/null 2>&1 || print_warning "Impossible de signer la clé Mega"
-
-    /usr/bin/arch-chroot /mnt bash -c "echo '
-[DEB_Arch_Extra]
-SigLevel = Optional TrustAll
-Server = https://mega.nz/linux/MEGAsync/Arch_Extra/\$arch
-' >> /etc/pacman.conf"
-
-    /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm megacmd || {
-        print_warning "Échec installation de MegaCmd → vidéo non installée"
-    }
-
-    # 6) Télécharger la vidéo Fallout (background.mp4)
-    if /usr/bin/arch-chroot /mnt command -v mega-get &>/dev/null; then
-        if /usr/bin/arch-chroot /mnt mega-get "$SDDM_VIDEO_URL" "$theme_dir/background.mp4"; then
-            print_success "Vidéo Fallout téléchargée dans $theme_dir/background.mp4"
-        else
-            print_warning "Impossible de télécharger la vidéo depuis Mega.nz"
-        fi
+    if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/background.mp4"; then
+        print_warning "Attention : la vidéo background.mp4 est manquante"
     fi
 
     # 7) Configurer SDDM
@@ -4058,7 +4032,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v410.2
+# Configuration Bash - Arch Linux Fallout Edition v411.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4472,13 +4446,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V410.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V411.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V410.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V411.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4590,7 +4564,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V410.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V411.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-install-setup.sh${NC} - Script de vérification post-installation"
