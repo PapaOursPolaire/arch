@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 463.2, correctif 2 de la version 463.2
-# Mise à jour : 23/08/2025 à 12:20
+# Version: 464.2, correctif 2 de la version 464.2
+# Mise à jour : 23/08/2025 à 12:27
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="463.2"
+readonly SCRIPT_VERSION="464.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 463.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 464.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1254,28 +1254,6 @@ test_environment() {
     if ! unzip -hh &>/dev/null; then
         print_error "unzip est installé mais semble défectueux"
         return 1
-    fi
-
-    # Installation de paru (helper AUR) si absent
-    if ! command -v paru &>/dev/null; then
-        print_info "paru non détecté, installation en cours..."
-        pushd /tmp >/dev/null
-        rm -rf paru-bin
-        if git clone https://aur.archlinux.org/paru-bin.git; then
-            cd paru-bin || return 1
-            if ! makepkg -si --noconfirm; then
-                print_error "Échec de l'installation de paru"
-                popd >/dev/null
-                return 1
-            fi
-        else
-            print_error "Impossible de cloner paru depuis AUR"
-            popd >/dev/null
-            return 1
-        fi
-        popd >/dev/null
-    else
-        print_success "paru déjà installé"
     fi
 
     print_success "Environnement vérifié et toutes les dépendances sont prêtes"
@@ -3680,7 +3658,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v463.2
+# Configuration Bash - Arch Linux Fallout Edition v464.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4094,13 +4072,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V463.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V464.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V463.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V464.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4212,7 +4190,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V463.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V464.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
