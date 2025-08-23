@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 480.3, correctif 3 de la version 480.3
-# Mise à jour : 23/08/2025 à 17:32
+# Version: 480.4, correctif 4 de la version 480.4
+# Mise à jour : 23/08/2025 à 17:37
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="480.3"
+readonly SCRIPT_VERSION="480.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 480.3:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 480.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2453,7 +2453,7 @@ configure_sddm() {
     print_info "Taille thème: ${SRC_SIZE_MB} Mo (vidéo: ${MP4_SIZE_MB} Mo) | Libre /mnt: ${FREE_MNT_MB} Mo"
 
     if (( FREE_MNT_MB < SRC_SIZE_MB + 100 )); then
-        if [[ "$INCLUDE_VIDEO" == "true" && (( FREE_MNT_MB >= EST_NO_MP4_MB + 100 )) ]]; then
+        if [[ "${INCLUDE_VIDEO:-false}" == "true" ]] && (( ${FREE_MNT_MB:-0} >= ${EST_NO_MP4_MB:-0} + 100 )); then
             print_warning "Espace insuffisant pour la vidéo → on copie sans la vidéo"
             INCLUDE_VIDEO="false"
         else
@@ -3647,7 +3647,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v480.3
+# Configuration Bash - Arch Linux Fallout Edition v480.4
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4061,13 +4061,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V480.3 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V480.4 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V480.3 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V480.4 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4179,7 +4179,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V480.3 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V480.4 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
