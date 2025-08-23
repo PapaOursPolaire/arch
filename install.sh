@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 465.2, correctif 2 de la version 465.2
-# Mise à jour : 23/08/2025 à 12:32
+# Version: 466.2, correctif 2 de la version 466.2
+# Mise à jour : 23/08/2025 à 12:38
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="465.2"
+readonly SCRIPT_VERSION="466.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 465.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 466.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1191,7 +1191,7 @@ check_requirements() {
 }
 
 test_environment() {
-    print_header "ETAPE 2/$TOTAL_STEPS: VERIFICATION DE L'ENVIRONNEMENT"
+    print_header "ETAPE 1/$TOTAL_STEPS: VERIFICATION DE L'ENVIRONNEMENT"
     CURRENT_STEP=1
 
     # Vérifie root
@@ -1245,24 +1245,23 @@ test_environment() {
         }
     fi
 
-    # Vérification/installation de unzip (live)
+    # Vérification/installation de unzip (dans le live)
     print_info "Vérification de 'unzip' (live)..."
     if ! command -v unzip >/dev/null 2>&1; then
-        pacman -S --noconfirm --needed unzip \
-        || { print_warning "Tentative avec pacman -Sy..."; \
-                pacman -Sy --noconfirm && pacman -S --noconfirm --needed unzip \
-                || { print_error "Impossible d’installer unzip (live)"; return 1; }; }
+        pacman -S --noconfirm --needed unzip || {
+            print_error "Impossible d’installer unzip dans l’environnement live"
+            return 1
+        }
     fi
     print_success "'unzip' disponible dans le live"
 
-    # Vérification/installation de unzip (chroot)
+    # Vérification/installation de unzip (dans le chroot final)
     print_info "Vérification de 'unzip' (chroot)..."
     if ! /usr/bin/arch-chroot /mnt bash -lc 'command -v unzip >/dev/null 2>&1'; then
-        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip \
-        || { print_warning "Tentative avec pacman -Sy dans le chroot..."; \
-                /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm && \
-                /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip \
-                || { print_error "Impossible d’installer unzip (chroot)"; return 1; }; }
+        /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed unzip || {
+            print_error "Impossible d’installer unzip dans le chroot"
+            return 1
+        }
     fi
     print_success "'unzip' disponible dans le chroot"
 
@@ -3673,7 +3672,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v465.2
+# Configuration Bash - Arch Linux Fallout Edition v466.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4087,13 +4086,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V465.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V466.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V465.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V466.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4205,7 +4204,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V465.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V466.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
