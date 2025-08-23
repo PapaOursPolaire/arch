@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 471.2, correctif 2 de la version 471.2
-# Mise à jour : 23/08/2025 à 13:16
+# Version: 472.2, correctif 2 de la version 472.2
+# Mise à jour : 23/08/2025 à 13:53
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="471.2"
+readonly SCRIPT_VERSION="472.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 471.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 472.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2334,64 +2334,73 @@ EOF
 }
 
 configure_sddm() {
-    print_header "CONFIGURATION DE SDDM - THEME Fallout"
-    
+    print_header "CONFIGURATION DE SDDM - THEME (Fallout)"
+    CURRENT_STEP=$((CURRENT_STEP+1))
+
+    local theme_repo="https://github.com/PapaOursPolaire/arch"
+    local theme_branch="Projets"
     local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
-    local repo_url="https://github.com/PapaOursPolaire/arch.git"
-    local branch="Projets"
-    local tmp_dir="/tmp/sddm_fallout"
-    
-    # Nettoyage de l'ancien thème
-    rm -rf "$theme_dir" "$tmp_dir"
-    mkdir -p "$theme_dir"
-    
-    # Vérification des dépendances nécessaires
-    if ! command -v git &>/dev/null; then
-        print_info "Installation de git..."
-        pacman -S --noconfirm --needed git || {
-            print_error "Impossible d’installer git"
-            return 1
-        }
-    fi
-    
-    # Récupération du thème
-    print_info "Téléchargement du thème depuis $repo_url ($branch)..."
-    if ! git clone --depth=1 --branch "$branch" "$repo_url" "$tmp_dir"; then
-        print_error "Échec du téléchargement du thème SDDM"
+    local tmp_dir="/tmp/sddm_theme.$$"
+
+    # Nettoyage préalable
+    print_info "Nettoyage des installations précédentes..."
+    rm -rf "$tmp_dir"
+    mkdir -p "$tmp_dir"
+
+    /usr/bin/arch-chroot /mnt bash -c "
+        rm -rf '$theme_dir' || true
+        mkdir -p '$theme_dir'
+    "
+
+    # Téléchargement du thème depuis GitHub
+    print_info "Téléchargement du thème Fallout depuis GitHub..."
+    if ! git clone --depth=1 --branch \"$theme_branch\" \"$theme_repo\" \"$tmp_dir\"; then
+        print_error "Échec du téléchargement du thème Fallout"
+        rm -rf "$tmp_dir"
         return 1
     fi
-    
-    # Copie des fichiers du thème en vérifiant leur présence
-    if [[ -d "$tmp_dir/SDDM-Fallout-theme" ]]; then
-        cp -r "$tmp_dir/SDDM-Fallout-theme/"* "$theme_dir"/ 2>/dev/null || true
+
+    # Vérifie la présence du dossier SDDM-Fallout-theme
+    if [[ -d \"$tmp_dir/SDDM-Fallout-theme\" ]]; then
+        print_info "Thème trouvé dans l’archive"
     else
         print_error "Le dossier SDDM-Fallout-theme est introuvable dans le dépôt"
+        rm -rf \"$tmp_dir\"
         return 1
     fi
-    
-    # Vérification que le fichier Main.qml existe
-    if [[ ! -f "$theme_dir/Main.qml" ]]; then
-        print_error "Le thème est incomplet : Main.qml manquant"
+
+    # Copie vers le chroot
+    print_info "Installation du thème dans $theme_dir..."
+    rsync -a --delete \"$tmp_dir/SDDM-Fallout-theme/\" \"/mnt$theme_dir/\"
+
+    # Vérifie si Main.qml existe
+    if [[ ! -f \"/mnt$theme_dir/Main.qml\" ]]; then
+        print_error "Le fichier Main.qml est manquant dans le thème !"
+        rm -rf \"$tmp_dir\"
         return 1
     fi
-    
-    # Création du fichier Xsetup si absent
-    if [[ ! -f /etc/sddm/Xsetup ]]; then
-        mkdir -p /etc/sddm
-        touch /etc/sddm/Xsetup
-    fi
-    
-    chmod +x /etc/sddm/Xsetup
-    
-    # Application du thème dans sddm.conf
-    mkdir -p /etc/sddm.conf.d
-    cat > /etc/sddm.conf.d/theme.conf <<EOF
+
+    # Configuration de SDDM pour utiliser ce thème
+    print_info "Application du thème Fallout à SDDM..."
+    /usr/bin/arch-chroot /mnt bash -c "
+        mkdir -p /etc/sddm.conf.d
+        cat > /etc/sddm.conf.d/theme.conf <<EOF
 [Theme]
 Current=SDDM-Fallout-theme
-CursorTheme=breeze_cursors
 EOF
-    
-    print_success "Thème SDDM Fallout installé et configuré avec succès"
+    "
+
+    # Fix pour Xsetup (évite ton ancienne erreur)
+    /usr/bin/arch-chroot /mnt bash -c "
+        mkdir -p /etc/sddm
+        touch /etc/sddm/Xsetup
+        chmod +x /etc/sddm/Xsetup
+    "
+
+    # Nettoyage
+    rm -rf \"$tmp_dir\"
+
+    print_success "SDDM configuré avec succès avec le thème Fallout"
 }
 
 configure_kde_lockscreen() {
@@ -3641,7 +3650,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v471.2
+# Configuration Bash - Arch Linux Fallout Edition v472.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4055,13 +4064,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V471.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V472.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V471.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V472.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4173,7 +4182,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V471.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V472.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
