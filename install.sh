@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 469.2, correctif 2 de la version 469.2
-# Mise à jour : 23/08/2025 à 12:48
+# Version: 470.2, correctif 2 de la version 470.2
+# Mise à jour : 23/08/2025 à 12:57
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="469.2"
+readonly SCRIPT_VERSION="470.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 469.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 470.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1191,54 +1191,100 @@ check_requirements() {
 }
 
 test_environment() {
-    print_header "ETAPE 2/$TOTAL_STEPS : TEST DE L'ENVIRONNEMENT"
-
-    # Vérifie que pacman est présent
-    if ! command -v pacman &>/dev/null; then
-        print_error "Pacman introuvable. Ce script doit être exécuté sur Arch Linux ou une dérivée."
-        return 1
-    fi
-
-    # Vérifie la connexion Internet
-    print_info "Vérification de la connexion Internet..."
-    local test_hosts=("archlinux.org" "8.8.8.8" "1.1.1.1" "github.com")
-    local connected=false
-    for host in "${test_hosts[@]}"; do
-        if ping -c 1 -W 3 "$host" &> /dev/null; then
-            print_success "Connexion Internet active (testé : $host)"
-            connected=true
+    print_header "TEST DE L'ENVIRONNEMENT D'INSTALLATION"
+    
+    local errors=0
+    
+    # Commandes requises
+    local required_commands=(
+        "pacman" "pacstrap" "genfstab" "/usr/bin/arch-chroot"
+        "parted" "mkfs.fat" "mkfs.ext4" "lsblk"
+        "curl" "git" "timedatectl" "unzip"
+    )
+    
+    for cmd in "${required_commands[@]}"; do
+        if command -v "$cmd" &> /dev/null; then
+            print_success " $cmd trouvé"
+        else
+            print_error " $cmd manquant"
+            errors=$((errors + 1))
+        fi
+    done
+    
+    # Test internet avec plusieurs serveurs
+    local test_servers=("archlinux.org" "github.com" "google.com")
+    local internet_ok=false
+    for server in "${test_servers[@]}"; do
+        if ping -c 1 -W 3 "$server" &> /dev/null; then
+            print_success " Connexion Internet active (testé: $server)"
+            internet_ok=true
             break
         fi
     done
-    if [[ "$connected" != true ]]; then
-        print_error "Aucune connexion Internet détectée !"
+    
+    if [[ "$internet_ok" != true ]]; then
+        print_error " Aucune connexion Internet détectée"
+        errors=$((errors + 1))
+    fi
+    
+    # Test UEFI
+    if [[ -d /sys/firmware/efi ]]; then
+        print_success " Système UEFI détecté"
+    else
+        print_error " Système UEFI requis"
+        errors=$((errors + 1))
+    fi
+    
+    # Test root
+    if [[ $EUID -eq 0 ]]; then
+        print_success " Permissions root"
+    else
+        print_error " Permissions root requises"
+        errors=$((errors + 1))
+    fi
+    
+    # Test espace disque
+    local available_space
+    available_space=$(df /tmp | awk 'NR==2 {print int($4/1024)}')
+    if [[ $available_space -gt 2000 ]]; then
+        print_success " Espace temporaire suffisant (${available_space}MB)"
+    else
+        print_warning "  Espace temporaire limité (${available_space}MB)"
+    fi
+    
+    # Test RAM
+    local ram_gb=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
+    if [[ $ram_gb -ge 8 ]]; then
+        print_success " RAM optimale (${ram_gb}GB)"
+    elif [[ $ram_gb -ge 4 ]]; then
+        print_success " RAM suffisante (${ram_gb}GB)"
+    else
+        print_warning "  RAM limitée (${ram_gb}GB) - installation possible mais lente"
+    fi
+    
+    # Test vitesse Internet (approximatif)
+    print_info "Test de vitesse de connexion..."
+    local speed_test_start=$(date +%s%N)
+    curl -s -o /dev/null -w "" "http://archlinux.org" || true
+    local speed_test_end=$(date +%s%N)
+    local response_time=$(( (speed_test_end - speed_test_start) / 1000000 ))
+    
+    if [[ $response_time -lt 500 ]]; then
+        print_success " Connexion rapide (${response_time}ms)"
+    elif [[ $response_time -lt 2000 ]]; then
+        print_success " Connexion correcte (${response_time}ms)"
+    else
+        print_warning "  Connexion lente (${response_time}ms) - installation plus longue"
+    fi
+    
+    echo ""
+    if [[ $errors -eq 0 ]]; then
+        print_success " Environnement optimal pour l'installation Fallout Edition"
+        return 0
+    else
+        print_error " $errors erreur(s) critique(s) - installation impossible"
         return 1
     fi
-
-    # Vérifie et installe les dépendances nécessaires
-    local required_pkgs=(
-        base-devel
-        git
-        wget
-        curl
-        unzip   
-    )
-    local missing_pkgs=()
-    for pkg in "${required_pkgs[@]}"; do
-        if ! pacman -Qi "$pkg" &>/dev/null; then
-            missing_pkgs+=("$pkg")
-        fi
-    done
-
-    if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
-        print_info "Installation des dépendances manquantes : ${missing_pkgs[*]}"
-        if ! pacman -S --noconfirm --needed "${missing_pkgs[@]}"; then
-            print_error "Impossible d’installer les dépendances requises"
-            return 1
-        fi
-    fi
-
-    print_success "Environnement vérifié avec succès"
 }
 
 # Fonctions de gestion des disques et partitions
@@ -3640,7 +3686,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v469.2
+# Configuration Bash - Arch Linux Fallout Edition v470.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4054,13 +4100,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V469.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V470.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V469.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V470.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4172,7 +4218,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V469.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V470.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
