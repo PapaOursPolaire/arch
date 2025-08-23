@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 466.2, correctif 2 de la version 466.2
-# Mise à jour : 23/08/2025 à 12:38
+# Version: 468.2, correctif 2 de la version 468.2
+# Mise à jour : 23/08/2025 à 12:45
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="466.2"
+readonly SCRIPT_VERSION="468.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 466.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 468.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1191,28 +1191,28 @@ check_requirements() {
 }
 
 test_environment() {
-    print_header "ETAPE 1/$TOTAL_STEPS: VERIFICATION DE L'ENVIRONNEMENT"
-    CURRENT_STEP=1
+    print_header "ETAPE X/$TOTAL_STEPS : TEST DE L'ENVIRONNEMENT"
 
-    # Vérifie root
+    # Vérification root
     if [[ $EUID -ne 0 ]]; then
-        print_error "Ce script doit être exécuté en tant que root !"
+        print_error "Ce script doit être exécuté en tant que root"
         return 1
     fi
 
-    # Vérifie UEFI
+    # Vérification UEFI
     if [[ ! -d /sys/firmware/efi ]]; then
-        print_error "Ce script nécessite un système UEFI !"
+        print_error "Le système doit être démarré en mode UEFI"
         return 1
     fi
+    print_success "Système UEFI détecté"
 
-    # Vérifie la connexion Internet
+    # Vérification connexion Internet
     print_info "Vérification de la connexion Internet..."
     local test_hosts=("archlinux.org" "github.com" "8.8.8.8" "1.1.1.1")
     local connected=false
     for host in "${test_hosts[@]}"; do
         if ping -c 1 -W 3 "$host" &>/dev/null; then
-            print_success "Connexion Internet active (test: $host)"
+            print_success "Connexion Internet valide (via $host)"
             connected=true
             break
         fi
@@ -1222,21 +1222,16 @@ test_environment() {
         return 1
     fi
 
-    # Active user namespaces si nécessaire
-    if sysctl -n kernel.unprivileged_userns_clone 2>/dev/null | grep -q '^0$'; then
-        print_info "Activation de kernel.unprivileged_userns_clone=1"
-        sysctl -w kernel.unprivileged_userns_clone=1 || true
-        echo "kernel.unprivileged_userns_clone=1" > /etc/sysctl.d/00-local-userns.conf
+    # Vérification pacman
+    if ! command -v pacman &>/dev/null; then
+        print_error "Pacman introuvable, ce script est prévu pour Arch Linux ou dérivées"
+        return 1
     fi
 
-    # Synchronise l’horloge
-    timedatectl set-ntp true || true
-    sleep 2
-
-    # Mise à jour pacman
-    print_info "Mise à jour des bases de données pacman..."
+    # Mise à jour des bases de données pacman
+    print_info "Synchronisation de pacman..."
     if ! pacman -Sy --noconfirm; then
-        print_warning "Erreur lors de la mise à jour, tentative de correction..."
+        print_warning "Échec de synchronisation, tentative de nettoyage..."
         pacman -Scc --noconfirm || true
         rm -rf /var/lib/pacman/sync/* || true
         pacman -Sy --noconfirm || {
@@ -1245,31 +1240,36 @@ test_environment() {
         }
     fi
 
-    # Vérification/installation de unzip (dans le live)
-    print_info "Vérification de 'unzip' (live)..."
-    if ! command -v unzip >/dev/null 2>&1; then
-        pacman -S --noconfirm --needed unzip || {
-            print_error "Impossible d’installer unzip dans l’environnement live"
+    # Vérification des paquets essentiels
+    local required_pkgs=(
+        base-devel
+        git
+        wget
+        curl
+        unzip
+        nano
+        vim
+        arch-install-scripts
+        sudo
+        bash
+    )
+    local missing_pkgs=()
+    for pkg in "${required_pkgs[@]}"; do
+        if ! pacman -Qi "$pkg" &>/dev/null; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
+
+    if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+        print_info "Installation des dépendances manquantes : ${missing_pkgs[*]}"
+        if ! pacman -S --noconfirm --needed "${missing_pkgs[@]}"; then
+            print_error "Impossible d’installer les dépendances requises"
             return 1
-        }
+        fi
     fi
-    print_success "'unzip' disponible dans le live"
 
-    # Vérification/installation de unzip (dans le chroot final)
-    print_info "Vérification de 'unzip' (chroot)..."
-    if ! /usr/bin/arch-chroot /mnt bash -lc 'command -v unzip >/dev/null 2>&1'; then
-        /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed unzip || {
-            print_error "Impossible d’installer unzip dans le chroot"
-            return 1
-        }
-    fi
-    print_success "'unzip' disponible dans le chroot"
-
-    # Nettoyage cache pacman pour économiser l’espace disque
-    paccache -rk 1 2>/dev/null || true
-    /usr/bin/arch-chroot /mnt paccache -rk 1 2>/dev/null || true
-
-    print_success "Environnement vérifié"
+    # Validation finale
+    print_success "Tous les tests d’environnement sont validés"
     return 0
 }
 
@@ -3672,7 +3672,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v466.2
+# Configuration Bash - Arch Linux Fallout Edition v468.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4086,13 +4086,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V466.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V468.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V466.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V468.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4204,7 +4204,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V466.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V468.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
