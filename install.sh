@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 474.3, correctif 3 de la version 474.3
-# Mise à jour : 23/08/2025 à 14:54
+# Version: 475.3, correctif 3 de la version 475.3
+# Mise à jour : 23/08/2025 à 16:18
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="474.3"
+readonly SCRIPT_VERSION="475.3"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 474.3:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 475.3:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2391,216 +2391,100 @@ EOF
 }
 
 configure_kde_lockscreen() {
-    print_header "CONFIGURATION KDE SPLASH (LOOK-AND-FEEL) - fallout-splashscreen4k"
+    print_header "CONFIGURATION KDE SPLASH (look-and-feel)"
+    CURRENT_STEP=$((CURRENT_STEP+1))
 
-    # Variables modifiables (tu peux définir KDESPLASH_URL et LOCKSCREEN_THEME_DIR en amont)
-    : "${KDESPLASH_URL:=https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip}"   # ex: https://raw.githubusercontent.com/..../fallout-splashscreen4k.zip
-    : "${KDESPLASH_GITHUB_REPO:=https://github.com/PapaOursPolaire/arch}"
-    : "${KDESPLASH_GITHUB_BRANCH:=Projets}"
-    : "${LOCKSCREEN_THEME_DIR:=/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
-    # Détecte si on installe dans un chroot (installation offline) : on prefixe par /mnt si /mnt/etc existe
-    local PREFIX=""
-    if [[ -d /mnt && -f /mnt/etc/os-release ]]; then
-        PREFIX="/mnt"
-        print_info "Chroot détecté -> installation ciblée dans $PREFIX$LOCKSCREEN_THEME_DIR"
+    # Variables (adapter si besoin)
+    readonly KDESPLASH_URL="${KDESPLASH_URL:-https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip}"
+    readonly DEST_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
+    local tmp_dir archive_zip theme_root avail_kb needed_kb
+
+    # Vérifier unzip dans le chroot et l'installer si possible
+    if ! command -v unzip >/dev/null 2>&1; then
+        print_info "unzip introuvable — tentative d'installation dans le chroot"
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip || {
+            print_warning "Impossible d'installer unzip automatiquement. Installez-le manuellement."
+        }
     fi
 
-    # Préconditions simples
-    command -v unzip >/dev/null 2>&1 || {
-        print_warning "unzip introuvable — tentative d'installation (pacman dans chroot si possible)"
-        if [[ -n "$PREFIX" ]]; then
-            /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip 2>/dev/null || true
-        else
-            print_warning "Installe 'unzip' manuellement (apt/pacman/dnf) si nécessaire."
-        fi
+    # Create tmp dir on the host (not inside /mnt root)
+    tmp_dir=$(mktemp -d /tmp/kde_splash.XXXX) || {
+        print_error "Impossible de créer un répertoire temporaire"
+        return 1
     }
+    # Ensure cleanup even on error
+    trap 'rm -rf "$tmp_dir"' EXIT
 
-    # create a temp workdir (host side)
-    local TMP
-    TMP="$(mktemp -d -t kde_splash_XXXX)" || { print_error "Impossible de créer un répertoire temporaire"; return 1; }
-    trap 'rm -rf "$TMP"' RETURN
+    archive_zip="$tmp_dir/splash.zip"
 
-    local UNPACK="$TMP/unpack"
-    mkdir -p "$UNPACK"
-
-    # 1) récupérer l'archive (priorité à KDESPLASH_URL si fournie et est un zip)
-    if [[ -n "${KDESPLASH_URL:-}" && "${KDESPLASH_URL##*.}" == "zip" ]]; then
-        print_info "Téléchargement du zip KDESPLASH_URL..."
-        if ! curl -fL --retry 3 -o "$TMP/splash.zip" "$KDESPLASH_URL"; then
-            print_warning "Échec téléchargement $KDESPLASH_URL — fallback vers GitHub archive"
-            rm -f "$TMP/splash.zip" || true
-        else
-            if ! unzip -q "$TMP/splash.zip" -d "$UNPACK"; then
-                print_error "Impossible d'extraire le zip ($KDESPLASH_URL)"
-                return 1
-            fi
-        fi
-    fi
-
-    # 2) fallback : télécharger l'archive GitHub de la branche (si on n'a pas déjà extrait)
-    if [[ ! -d "$UNPACK" || -z "$(ls -A "$UNPACK" 2>/dev/null)" ]]; then
-        print_info "Téléchargement de l'archive GitHub ${KDESPLASH_GITHUB_REPO} (branche ${KDESPLASH_GITHUB_BRANCH})"
-        local ZIPURL="${KDESPLASH_GITHUB_REPO%.*}/archive/refs/heads/${KDESPLASH_GITHUB_BRANCH}.zip"
-        if ! curl -fL --retry 3 -o "$TMP/repo.zip" "$ZIPURL"; then
-            print_error "Impossible de télécharger l'archive GitHub : $ZIPURL"
-            return 1
-        fi
-        if ! unzip -q "$TMP/repo.zip" -d "$UNPACK"; then
-            print_error "Impossible d'extraire l'archive GitHub"
-            return 1
-        fi
-    fi
-
-    # 3) trouver le dossier racine du splash : on cherche un répertoire parent contenant 'contents/Splash.qml' et 'metadata.desktop'
-    print_info "Recherche du dossier du splash (recherche de contents/Splash.qml et metadata.desktop)..."
-    local splash_qml_paths=()
-    mapfile -t splash_qml_paths < <(find "$UNPACK" -type f -iname 'Splash.qml' -print 2>/dev/null || true)
-
-    local THEME_SRC=""
-    if [[ ${#splash_qml_paths[@]} -gt 0 ]]; then
-        for f in "${splash_qml_paths[@]}"; do
-            # si Splash.qml est dans .../contents/Splash.qml, la racine probable = dirname(dirname(f))
-            local maybe_root
-            maybe_root="$(dirname "$(dirname "$f")")"
-            # vérifier metadata.desktop ou pipboyanim.gif
-            if [[ -f "$maybe_root/metadata.desktop" || -f "$maybe_root/contents/Splash.qml" || -f "$maybe_root/contents/pipboyanim.gif" ]]; then
-                THEME_SRC="$maybe_root"
-                break
-            fi
-        done
-    fi
-
-    # Si non trouvé, essayer de trouver un répertoire nommé fallout-splashscreen4k (n'importe où)
-    if [[ -z "$THEME_SRC" ]]; then
-        THEME_SRC="$(find "$UNPACK" -type d -iname 'fallout-splashscreen4k' -print | head -n1 || true)"
-    fi
-
-    # dernier fallback : trouver tout répertoire contenant metadata.desktop and contents
-    if [[ -z "$THEME_SRC" ]]; then
-        mapfile -t cand < <(find "$UNPACK" -type f -iname 'metadata.desktop' -printf '%h\n' | sort -u 2>/dev/null || true)
-        if [[ ${#cand[@]} -gt 0 ]]; then
-            THEME_SRC="${cand[0]}"
-        fi
-    fi
-
-    if [[ -z "$THEME_SRC" ]]; then
-        print_error "Impossible de localiser le splashscreen dans l'archive. Contenu extrait pour debug :"
-        ls -R "$UNPACK" || true
+    print_info "Téléchargement du splash depuis : $KDESPLASH_URL"
+    if ! curl -L --fail --retry 3 -o "$archive_zip" "$KDESPLASH_URL"; then
+        print_error "Échec du téléchargement du splash"
         return 1
     fi
-    print_info "Thème splash trouvé : $THEME_SRC"
 
-    # 4) Flatten double nesting: si THEME_SRC contient un seul sous-dossier qui a un 'contents', on préfère ça
-    # e.g. /tmp/unpack/.../fallout-splashscreen4k/fallout-splashscreen4k -> use inner
-    if [[ -d "$THEME_SRC" ]]; then
-        local inner_candidate
-        inner_candidate="$(find "$THEME_SRC" -maxdepth 2 -type d -name 'fallout-splashscreen4k' -print | head -n1 || true)"
-        if [[ -n "$inner_candidate" && "$inner_candidate" != "$THEME_SRC" ]]; then
-            print_info "Double-nesting détecté -> utilisation du dossier interne : $inner_candidate"
-            THEME_SRC="$inner_candidate"
-        fi
+    # Vérifier la place disponible sur la partition de DEST_DIR (en KB)
+    avail_kb=$(df --output=avail -k "$(dirname "$DEST_DIR")" 2>/dev/null | tail -n1 | tr -d ' ')
+    # estimation conservatrice : 200 MB (200*1024 KB) minimum requis (ajuste si nécessaire)
+    needed_kb=$((200 * 1024))
+    if [[ -z "$avail_kb" ]] || (( avail_kb < needed_kb )); then
+        print_warning "Espace faible sur la partition cible (${avail_kb:-0} KB). Tentative d'extraction en temporaire."
+        # still continue but warn; extraction could fail
     fi
 
-    # 5) vérifier structure attendue : must have 'contents/Splash.qml' or 'contents' with files
-    if [[ ! -f "$THEME_SRC/contents/Splash.qml" && ! -f "$THEME_SRC/Splash.qml" ]]; then
-        print_warning "Structure non standard : 'contents/Splash.qml' introuvable, on cherchera des fichiers plausibles"
-        # list possible files for debugging
-        find "$THEME_SRC" -maxdepth 3 -type f -iname 'splash*' -o -iname '*pipboy*' -o -iname 'metadata.desktop' -print || true
+    # Extraction (silencieuse) dans tmp_dir
+    print_info "Extraction du zip..."
+    if ! unzip -q "$archive_zip" -d "$tmp_dir"; then
+        print_error "Échec de l'extraction (archive corrompue ou unzip absent)."
+        return 1
     fi
 
-    # 6) Destination : LOCKSCREEN_THEME_DIR (avec PREFIX si chroot)
-    local DEST_DIR="${PREFIX}${LOCKSCREEN_THEME_DIR}"
-    print_info "Installation finale dans : $DEST_DIR"
+    # Trouver le dossier racine réel qui contient 'contents' ou metadata.desktop
+    theme_root=$(find "$tmp_dir" -maxdepth 3 -type d -name 'fallout-splashscreen4k*' -print -quit || true)
+    if [[ -z "$theme_root" ]]; then
+        # fallback : first directory that contains metadata.desktop or Splash.qml
+        theme_root=$(find "$tmp_dir" -mindepth 1 -maxdepth 4 -type d \( -exec test -e "{}/metadata.desktop" \; -o -exec test -e "{}/contents/Splash.qml" \; \) -print -quit 2>/dev/null || true)
+    fi
+    # if still empty, set to tmp_dir
+    theme_root="${theme_root:-$tmp_dir}"
 
-    # Safety: create parent, backup existing
+    print_info "Contenu trouvé dans: $theme_root"
+
+    # Création du dossier destination (si déjà présent, on sauvegarde l'ancien)
     if [[ -d "$DEST_DIR" ]]; then
-        print_info "Sauvegarde du dossier existant (si présent)"
-        mv "$DEST_DIR" "${DEST_DIR}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+        print_info "Sauvegarde du dossier existant $DEST_DIR -> ${DEST_DIR}.bak.$(date +%s)"
+        mv "$DEST_DIR" "${DEST_DIR}.bak.$(date +%s)" || print_warning "Impossible de sauvegarder l'ancien dossier (permission?)"
     fi
-    mkdir -p "$DEST_DIR" || { print_error "Impossible de créer $DEST_DIR"; return 1; }
 
-    # 7) Copier le contenu du THEME_SRC vers DEST_DIR ; mais s'assurer d'installer la structure telle que look-and-feel attend
-    # Copie avec rsync pour préserver sous-arborescence et éviter les erreurs de nom
+    mkdir -p "$DEST_DIR" || {
+        print_error "Impossible de créer $DEST_DIR"
+        return 1
+    }
+
+    # Copier le contenu en évitant les erreurs 'No space left' grâce à rsync (meilleure gestion)
     if command -v rsync >/dev/null 2>&1; then
-        rsync -a --delete "$THEME_SRC"/ "$DEST_DIR"/ || { print_error "Erreur lors de la copie (rsync)"; return 1; }
+        rsync -a --delete "$theme_root/" "$DEST_DIR/" || {
+            print_error "Erreur lors de la copie du splash vers $DEST_DIR"
+            return 1
+        }
     else
-        # fallback cp
-        cp -a "$THEME_SRC"/. "$DEST_DIR"/ || { print_error "Erreur lors de la copie (cp)"; return 1; }
+        # fallback sur cp -a
+        cp -a "$theme_root/." "$DEST_DIR/" || {
+            print_error "Erreur lors de la copie du splash vers $DEST_DIR"
+            return 1
+        }
     fi
 
-    # 8) Si la structure attendue est emballée dans an extra nested subfolder (ex fallout-splashscreen4k/fallout-splashscreen4k/contents)
-    # ensure $DEST_DIR/contents exists and contains Splash.qml
-    if [[ ! -f "$DEST_DIR/contents/Splash.qml" && -f "$DEST_DIR/Splash.qml" ]]; then
-        # move Splash.qml into contents (best-effort)
-        mkdir -p "$DEST_DIR/contents"
-        mv "$DEST_DIR/Splash.qml" "$DEST_DIR/contents/Splash.qml" 2>/dev/null || true
-    fi
+    # Permissions
+    chown -R root:root "$DEST_DIR" || true
+    chmod -R 755 "$DEST_DIR" || true
 
-    # 9) créer un metadata.desktop minimal si absent (nécessaire pour look-and-feel)
-    if [[ ! -f "$DEST_DIR/metadata.desktop" ]]; then
-        print_warning "metadata.desktop absent -> création d'un metadata.desktop minimal"
-        cat > "$DEST_DIR/metadata.desktop" <<MD
-[Desktop Entry]
-Name=Fallout Splashscreen 4k
-Comment=Fallout-style splashscreen / lockscreen
-X-KDE-PluginInfo-Author=PapaOursPolaire
-X-KDE-PluginInfo-Name=org.kde.falloutlock
-X-KDE-PluginInfo-Version=1.0
-X-KDE-PluginInfo-Website=https://github.com/PapaOursPolaire/arch
-X-KDE-PluginInfo-EnabledByDefault=true
-MD
-    fi
-
-    # 10) permissions & ownership: root:root, dossiers 755, fichiers 644 (sauf executables)
-    print_info "Fixation des permissions"
-    find "$DEST_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
-    find "$DEST_DIR" -type f -exec chmod 644 {} \; 2>/dev/null || true
-    # set some files executable if necessary (scripts)
-    find "$DEST_DIR" -type f -iname '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-
-    if [[ -n "$PREFIX" ]]; then
-        # Si on est dans chroot, corriger propriétaire via arch-chroot (pour garantir root:root dans la cible)
-        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R root:root '${LOCKSCREEN_THEME_DIR}'" 2>/dev/null || true
-    else
-        chown -R root:root "$DEST_DIR" 2>/dev/null || true
-    fi
-
-    # 11) essaye d'installer la look-and-feel via kpackagetool5 si présent (dans chroot si besoin)
-    if [[ -n "$PREFIX" ]]; then
-        if /usr/bin/arch-chroot /mnt bash -lc 'command -v kpackagetool5 >/dev/null 2>&1'; then
-            print_info "kpackagetool5 trouvé dans chroot -> enregistrement de la look-and-feel"
-            /usr/bin/arch-chroot /mnt kpackagetool5 -i "$LOCKSCREEN_THEME_DIR" >/dev/null 2>&1 || print_warning "kpackagetool5 -i a échoué (possible path mismatch)"
-        elif /usr/bin/arch-chroot /mnt bash -lc 'command -v plasmapkg2 >/dev/null 2>&1'; then
-            print_info "plasmapkg2 trouvé dans chroot -> tentative d'installation"
-            /usr/bin/arch-chroot /mnt plasmapkg2 --install "$LOCKSCREEN_THEME_DIR" >/dev/null 2>&1 || true
-        else
-            print_info "kpackagetool5/plasmapkg2 introuvable dans chroot ; l'utilisateur devra exécuter kpackagetool5 manuellement après le 1er démarrage"
-        fi
-    else
-        if command -v kpackagetool5 >/dev/null 2>&1; then
-            print_info "kpackagetool5 trouvé -> enregistrement"
-            kpackagetool5 -i "$DEST_DIR" >/dev/null 2>&1 || print_warning "kpackagetool5 -i a renvoyé une erreur"
-        else
-            print_info "kpackagetool5 introuvable : exécutez 'kpackagetool5 -i $DEST_DIR' ou redémarrez Plasma pour que le look-and-feel apparaisse"
-        fi
-    fi
-
-    # 12) Forcer un rebuild des caches Plasma si possible (kbuildsycoca5)
-    if [[ -n "$PREFIX" ]]; then
-        /usr/bin/arch-chroot /mnt bash -lc 'if command -v kbuildsycoca5 >/dev/null 2>&1; then kbuildsycoca5 --noincremental >/dev/null 2>&1 || true; fi' 2>/dev/null || true
-    else
-        if command -v kbuildsycoca5 >/dev/null 2>&1; then
-            kbuildsycoca5 --noincremental >/dev/null 2>&1 || true
-        fi
-    fi
-
-    # Nettoyage des fichiers temporaires
-    rm -rf "$tmp_dir" "$archive"
+    # Nettoyage : suppression du zip et du tmp_dir (trap le fait déjà, mais on supprime explicitement)
+    rm -f "$archive_zip" 2>/dev/null || true
+    rm -rf "$tmp_dir" 2>/dev/null || true
+    trap - EXIT
 
     print_success "Splashscreen KDE (look-and-feel) installé dans $DEST_DIR"
-    print_info "Si le splash n'apparaît pas immédiatement : redémarre Plasma (plasmashell) ou la machine, ou exécute kpackagetool5 -i $DEST_DIR sur la cible."
-
-    # fin
     return 0
 }
 
@@ -3640,7 +3524,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v474.3
+# Configuration Bash - Arch Linux Fallout Edition v475.3
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4054,13 +3938,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V474.3 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V475.3 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V474.3 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V475.3 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4172,7 +4056,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V474.3 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V475.3 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
