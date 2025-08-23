@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 449.2, correctif 2 de la version 449.2
-# Mise à jour : 22/08/2025 à 22:49
+# Version: 460.2, correctif 2 de la version 460.2
+# Mise à jour : 23/08/2025 à 11:10
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="449.2"
+readonly SCRIPT_VERSION="460.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 449.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 460.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2334,201 +2334,320 @@ EOF
 }
 
 configure_sddm() {
-    print_info "Configuration de SDDM avec le thème Fallout..."
+    print_header "CONFIGURATION SDDM - THÈME (robuste)"
 
-    /usr/bin/arch-chroot /mnt /bin/bash <<'CHROOT_EOF'
-set -euo pipefail
+    : "${SDDM_THEME_DIR:=/usr/share/sddm/themes/SDDM-Fallout-theme}"
+    : "${SDDM_GITHUB_REPO:=https://github.com/PapaOursPolaire/arch}"
+    : "${SDDM_GITHUB_BRANCH:=Projets}"
+    : "${SDDM_THEME_SUBPATH:=SDDM-Fallout-theme}"
 
-echo "[INFO] Vérification et installation de SDDM..."
-if ! pacman -Qi sddm >/dev/null 2>&1; then
-    pacman -S --noconfirm --needed sddm || {
-        echo "[ERREUR] Impossible d’installer SDDM"
-        exit 1
-    }
-fi
+    TMP="$(mktemp -d -t sddmtheme.XXXX)" || { print_error "Impossible de créer tmpdir"; return 1; }
+    trap 'rm -rf "$TMP"' RETURN
 
-echo "[INFO] Création du dossier des thèmes..."
-mkdir -p /usr/share/sddm/themes || true
-
-echo "[INFO] Suppression de l'ancien thème Fallout..."
-rm -rf /usr/share/sddm/themes/SDDM-Fallout-theme 2>/dev/null || true
-
-echo "[INFO] Téléchargement du thème Fallout depuis GitHub..."
-tmpdir=$(mktemp -d)
-if git clone --depth=1 --branch Projets https://github.com/PapaOursPolaire/arch.git "$tmpdir"; then
-    cp -r "$tmpdir/SDDM-Fallout-theme" /usr/share/sddm/themes/ || {
-        echo "[ERREUR] Impossible de copier le thème Fallout"
-        rm -rf "$tmpdir"
-        exit 1
-    }
-else
-    echo "[ERREUR] Échec du clonage du dépôt GitHub"
-    rm -rf "$tmpdir"
-    exit 1
-fi
-rm -rf "$tmpdir"
-
-echo "[INFO] Configuration du thème Fallout dans SDDM..."
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/theme.conf <<'EOF'
-[Theme]
-Current=SDDM-Fallout-theme
-EOF
-
-echo "[INFO] Vérification de /etc/sddm/Xsetup..."
-mkdir -p /etc/sddm
-if [ ! -f /etc/sddm/Xsetup ]; then
-    echo "#!/bin/sh" > /etc/sddm/Xsetup
-fi
-# Éviter doublons "setxkbmap fr"
-if ! grep -q "setxkbmap fr" /etc/sddm/Xsetup; then
-    echo "setxkbmap fr" >> /etc/sddm/Xsetup
-fi
-chmod +x /etc/sddm/Xsetup
-
-echo "[INFO] Activation de SDDM..."
-systemctl enable sddm.service || {
-    echo "[ERREUR] Impossible d’activer SDDM"
-    exit 1
-}
-
-echo "[SUCCÈS] SDDM est installé et configuré avec le thème Fallout."
-CHROOT_EOF
-
-    print_success "SDDM installé et configuré avec le thème Fallout."
-}
-
-configure_kde_splash() {
-    print_header "ETAPE $((++CURRENT_STEP))/$TOTAL_STEPS: CONFIGURATION KDE SPLASHSCREEN FALLOUT"
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation configuration KDE Splash"
-        return 0
+    # 1) Télécharge / extrait
+    if [[ -n "${SDDM_THEME_URL:-}" && "${SDDM_THEME_URL##*.}" == "zip" ]]; then
+        print_info "Téléchargement du zip depuis SDDM_THEME_URL..."
+        if ! curl -fL --retry 3 -o "$TMP/theme.zip" "$SDDM_THEME_URL"; then
+            print_warning "Échec téléchargement ZIP, tentative archive GitHub..."
+            rm -f "$TMP/theme.zip" || true
+        else
+            unzip -q "$TMP/theme.zip" -d "$TMP/unpack" || { print_error "Échec extraction zip"; return 1; }
+        fi
     fi
 
-    # On injecte les variables dans l'environnement du chroot
-    /usr/bin/arch-chroot /mnt env KDESPLASH_URL="$KDESPLASH_URL" USERNAME="$USERNAME" /bin/bash <<'EOF'
-set -euo pipefail
+    if [[ ! -d "$TMP/unpack" ]]; then
+        print_info "Téléchargement de l'archive GitHub: $SDDM_GITHUB_REPO (branche $SDDM_GITHUB_BRANCH)"
+        if ! curl -fL --retry 3 -o "$TMP/repo.zip" "$SDDM_GITHUB_REPO/archive/refs/heads/$SDDM_GITHUB_BRANCH.zip"; then
+            print_error "Impossible de télécharger l'archive GitHub"
+            return 1
+        fi
+        unzip -q "$TMP/repo.zip" -d "$TMP/unpack" || { print_error "Impossible d'extraire l'archive GitHub"; return 1; }
+    fi
 
-echo "[INFO] Préparation outils (curl/unzip)…"
-pacman -Sy --noconfirm --needed curl unzip >/dev/null
+    # 2) Détermine le bon répertoire source (Main.qml ou theme.conf ou metadata.desktop)
+    mapfile -t candidates < <(find "$TMP/unpack" -type f \( -iname 'Main.qml' -o -iname 'metadata.desktop' -o -iname 'theme.conf' \) -printf '%h\n' | sort -u)
+    THEME_SRC_DIR=""
+    if (( ${#candidates[@]} )); then
+        for c in "${candidates[@]}"; do
+            if [[ "$c" == *"$SDDM_THEME_SUBPATH"* ]]; then
+                THEME_SRC_DIR="$c"
+                break
+            fi
+        done
+        if [[ -z "$THEME_SRC_DIR" ]]; then
+            THEME_SRC_DIR="${candidates[0]}"
+        fi
+    else
+        # fallback: dir explicite
+        if [[ -d "$TMP/unpack/${SDDM_GITHUB_REPO##*/}-$SDDM_GITHUB_BRANCH/$SDDM_THEME_SUBPATH" ]]; then
+            THEME_SRC_DIR="$TMP/unpack/${SDDM_GITHUB_REPO##*/}-$SDDM_GITHUB_BRANCH/$SDDM_THEME_SUBPATH"
+        else
+            print_error "Impossible de localiser le dossier thème dans l'archive. Contenu extrait pour debug:"
+            ls -R "$TMP/unpack" || true
+            return 1
+        fi
+    fi
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+    print_info "Source du thème trouvée: $THEME_SRC_DIR"
 
-echo "[INFO] Téléchargement du splash: $KDESPLASH_URL"
-curl -fsSL "$KDESPLASH_URL" -o "$TMP/splash.zip"
+    # 3) Installe proprement dans SDDM_THEME_DIR
+    print_info "Installation dans $SDDM_THEME_DIR"
+    rm -rf "$SDDM_THEME_DIR" 2>/dev/null || true
+    mkdir -p "$SDDM_THEME_DIR" || { print_error "Impossible de créer $SDDM_THEME_DIR"; return 1; }
+    cp -a "$THEME_SRC_DIR/." "$SDDM_THEME_DIR/" || { print_error "Échec copie thème"; return 1; }
 
-echo "[INFO] Extraction…"
-unzip -oq "$TMP/splash.zip" -d "$TMP/unpacked"
+    # 4) Corrige les typos QML fréquentes (cause principale du message plugin cannot be loaded)
+    if [[ -f "$SDDM_THEME_DIR/Main.qml" ]]; then
+        print_info "Patch Main.qml: correction casse/typos import QtQuick.Controls si besoin"
+        # correction insensible à la casse pour 'QtQuick.Controls' variants
+        sed -i -E 's/[Qq]t[Qq]uick\.[Cc][Oo][Nn][Tt][Rr][Oo][Ll][Ss]/QtQuick.Controls/g' "$SDDM_THEME_DIR/Main.qml" 2>/dev/null || true
+        # ajouter import QtQuick.Controls 2.15 après first import QtQuick si absent
+        if ! grep -q 'import QtQuick.Controls' "$SDDM_THEME_DIR/Main.qml"; then
+            awk 'BEGIN{p=0} {print; if(p==0 && $0 ~ /^import QtQuick/) {print "import QtQuick.Controls 2.15"; p=1}}' "$SDDM_THEME_DIR/Main.qml" > "$TMP/Main.qml.patched" && mv "$TMP/Main.qml.patched" "$SDDM_THEME_DIR/Main.qml" || true
+        fi
+        # épure caractères invisibles
+        tr -cd '\11\12\15\40-\176' < "$SDDM_THEME_DIR/Main.qml" > "$TMP/Main.qml.clean" && mv "$TMP/Main.qml.clean" "$SDDM_THEME_DIR/Main.qml" || true
+    else
+        print_warning "Main.qml non trouvé: vérifie la composition du thème (SDDM peut utiliser un autre greeter QML)."
+    fi
 
-# Trouver la racine du paquet (présence metadata.desktop)
-PKG_ROOT="$(find "$TMP/unpacked" -maxdepth 3 -type f -name 'metadata.desktop' -printf '%h\n' | head -n1)"
-if [[ -z "${PKG_ROOT}" ]]; then
-    echo "[ERREUR] Archive invalide: metadata.desktop introuvable."
-    echo "[DEBUG] Contenu: "; ls -R "$TMP/unpacked" || true
-    exit 1
-fi
+    # 5) Crée Xsetup si absent (évite "no such file or directory")
+    if [[ ! -f "/mnt/etc/sddm/Xsetup" && ! -f "/etc/sddm/Xsetup" ]]; then
+        print_info "Création de /etc/sddm/Xsetup (dans le chroot) - layout FR par défaut"
+        mkdir -p "/mnt/etc/sddm" || true
+        cat > "/mnt/etc/sddm/Xsetup" <<'XSETUP_EOF'
+#!/bin/sh
+# Xsetup exécuté avant le greeter SDDM
+setxkbmap fr || true
+# set minimal env for greeter
+export XDG_RUNTIME_DIR=/run/user/$(id -u 2>/dev/null || echo 0)
+XSETUP_EOF
+        chmod +x "/mnt/etc/sddm/Xsetup" || true
+    fi
 
-# Déterminer l'ID du plugin (fallback si absent)
-PKG_ID="$(awk -F= '/^X-KDE-PluginInfo-Name=/{print $2}' "$PKG_ROOT/metadata.desktop" | tr -d '[:space:]')"
-[[ -z "$PKG_ID" ]] && PKG_ID="org.kde.pipboy"
+    # 6) Défini le thème via /etc/sddm.conf.d
+    mkdir -p "/mnt/etc/sddm.conf.d"
+    cat > "/mnt/etc/sddm.conf.d/99-theme.conf" <<CONF_EOF
+[Theme]
+Current=$(basename "$SDDM_THEME_DIR")
+CONF_EOF
 
-DEST="/usr/share/plasma/look-and-feel/$PKG_ID"
-echo "[INFO] Installation dans: $DEST"
-rm -rf "$DEST"
-install -d -m 0755 "$DEST"
-cp -a "$PKG_ROOT/." "$DEST/"
+    # 7) Droits
+    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R root:root '$SDDM_THEME_DIR' || true; chmod -R 755 '$SDDM_THEME_DIR' || true" || true
 
-# Si Splash.qml est directement sous contents/, on le remet au bon endroit
-if [[ -f "$DEST/contents/Splash.qml" && ! -f "$DEST/contents/splash/Splash.qml" ]]; then
-    mkdir -p "$DEST/contents/splash"
-    mv "$DEST/contents/Splash.qml" "$DEST/contents/splash/Splash.qml"
-fi
-
-# S'assurer que defaults force bien le splash
-cat > "$DEST/contents/defaults" <<DEF
-[KSplash]
-Theme=$PKG_ID
-DEF
-
-# Appliquer pour l'utilisateur cible si présent
-if id "$USERNAME" &>/dev/null; then
-    sudo -u "$USERNAME" kwriteconfig5 --file ksplashrc --group KSplash --key Theme "$PKG_ID" || true
-fi
-
-echo "[SUCCES] Splashscreen KDE installé et configuré: $PKG_ID"
-EOF
-
-    print_success "Splashscreen KDE Fallout installé et défini"
+    print_success "Installation/Configuration SDDM terminée (vérifier les logs SDDM si problème)"
+    return 0
 }
 
 configure_kde_lockscreen() {
-    print_header "ETAPE $((++CURRENT_STEP))/$TOTAL_STEPS: CONFIGURATION KDE LOCKSCREEN FALLOUT"
+    print_header "CONFIGURATION KDE SPLASH (LOOK-AND-FEEL) - fallout-splashscreen4k"
 
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation configuration KDE LockScreen"
-        return 0
+    # Variables modifiables (tu peux définir KDESPLASH_URL et LOCKSCREEN_THEME_DIR en amont)
+    : "${KDESPLASH_URL:=}"   # ex: https://raw.githubusercontent.com/..../fallout-splashscreen4k.zip
+    : "${KDESPLASH_GITHUB_REPO:=https://github.com/PapaOursPolaire/arch}"
+    : "${KDESPLASH_GITHUB_BRANCH:=Projets}"
+    : "${LOCKSCREEN_THEME_DIR:=/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
+    # Détecte si on installe dans un chroot (installation offline) : on prefixe par /mnt si /mnt/etc existe
+    local PREFIX=""
+    if [[ -d /mnt && -f /mnt/etc/os-release ]]; then
+        PREFIX="/mnt"
+        print_info "Chroot détecté -> installation ciblée dans $PREFIX$LOCKSCREEN_THEME_DIR"
     fi
 
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-set -e
-# Création d’un thème lockscreen Fallout type terminal
-mkdir -p $LOCKSCREEN_THEME_DIR/contents/components
-
-# QML custom lockscreen avec effet terminal vert + bug ligne descendante
-cat > $LOCKSCREEN_THEME_DIR/contents/components/LockScreen.qml <<'QML'
-import QtQuick 2.15
-import QtGraphicalEffects 1.15
-
-Rectangle {
-    id: root
-    width: Screen.width
-    height: Screen.height
-    color: "#001100"   // vert foncé style CRT
-
-    // Ligne verte animée style "glitch CRT"
-    Rectangle {
-        id: scanline
-        width: parent.width
-        height: 2
-        color: "#00FF00"
-        opacity: 0.5
-        y: -2
-
-        SequentialAnimation on y {
-            loops: Animation.Infinite
-            NumberAnimation { from: -2; to: parent.height; duration: 2000; easing.type: Easing.Linear }
-        }
+    # Préconditions simples
+    command -v unzip >/dev/null 2>&1 || {
+        print_warning "unzip introuvable — tentative d'installation (pacman dans chroot si possible)"
+        if [[ -n "$PREFIX" ]]; then
+            /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip 2>/dev/null || true
+        else
+            print_warning "Installe 'unzip' manuellement (apt/pacman/dnf) si nécessaire."
+        fi
     }
 
-    // Texte Fallout
-    Text {
-        text: "Ecran de verrouillage"
-        anchors.centerIn: parent
-        font.pixelSize: 32
-        color: "#00FF00"
-    }
-}
-QML
+    # create a temp workdir (host side)
+    local TMP
+    TMP="$(mktemp -d -t kde_splash_XXXX)" || { print_error "Impossible de créer un répertoire temporaire"; return 1; }
+    trap 'rm -rf "$TMP"' RETURN
 
-# Metadata du thème
-cat > $LOCKSCREEN_THEME_DIR/metadata.desktop <<META
+    local UNPACK="$TMP/unpack"
+    mkdir -p "$UNPACK"
+
+    # 1) récupérer l'archive (priorité à KDESPLASH_URL si fournie et est un zip)
+    if [[ -n "${KDESPLASH_URL:-}" && "${KDESPLASH_URL##*.}" == "zip" ]]; then
+        print_info "Téléchargement du zip KDESPLASH_URL..."
+        if ! curl -fL --retry 3 -o "$TMP/splash.zip" "$KDESPLASH_URL"; then
+            print_warning "Échec téléchargement $KDESPLASH_URL — fallback vers GitHub archive"
+            rm -f "$TMP/splash.zip" || true
+        else
+            if ! unzip -q "$TMP/splash.zip" -d "$UNPACK"; then
+                print_error "Impossible d'extraire le zip ($KDESPLASH_URL)"
+                return 1
+            fi
+        fi
+    fi
+
+    # 2) fallback : télécharger l'archive GitHub de la branche (si on n'a pas déjà extrait)
+    if [[ ! -d "$UNPACK" || -z "$(ls -A "$UNPACK" 2>/dev/null)" ]]; then
+        print_info "Téléchargement de l'archive GitHub ${KDESPLASH_GITHUB_REPO} (branche ${KDESPLASH_GITHUB_BRANCH})"
+        local ZIPURL="${KDESPLASH_GITHUB_REPO%.*}/archive/refs/heads/${KDESPLASH_GITHUB_BRANCH}.zip"
+        if ! curl -fL --retry 3 -o "$TMP/repo.zip" "$ZIPURL"; then
+            print_error "Impossible de télécharger l'archive GitHub : $ZIPURL"
+            return 1
+        fi
+        if ! unzip -q "$TMP/repo.zip" -d "$UNPACK"; then
+            print_error "Impossible d'extraire l'archive GitHub"
+            return 1
+        fi
+    fi
+
+    # 3) trouver le dossier racine du splash : on cherche un répertoire parent contenant 'contents/Splash.qml' et 'metadata.desktop'
+    print_info "Recherche du dossier du splash (recherche de contents/Splash.qml et metadata.desktop)..."
+    local splash_qml_paths=()
+    mapfile -t splash_qml_paths < <(find "$UNPACK" -type f -iname 'Splash.qml' -print 2>/dev/null || true)
+
+    local THEME_SRC=""
+    if [[ ${#splash_qml_paths[@]} -gt 0 ]]; then
+        for f in "${splash_qml_paths[@]}"; do
+            # si Splash.qml est dans .../contents/Splash.qml, la racine probable = dirname(dirname(f))
+            local maybe_root
+            maybe_root="$(dirname "$(dirname "$f")")"
+            # vérifier metadata.desktop ou pipboyanim.gif
+            if [[ -f "$maybe_root/metadata.desktop" || -f "$maybe_root/contents/Splash.qml" || -f "$maybe_root/contents/pipboyanim.gif" ]]; then
+                THEME_SRC="$maybe_root"
+                break
+            fi
+        done
+    fi
+
+    # Si non trouvé, essayer de trouver un répertoire nommé fallout-splashscreen4k (n'importe où)
+    if [[ -z "$THEME_SRC" ]]; then
+        THEME_SRC="$(find "$UNPACK" -type d -iname 'fallout-splashscreen4k' -print | head -n1 || true)"
+    fi
+
+    # dernier fallback : trouver tout répertoire contenant metadata.desktop and contents
+    if [[ -z "$THEME_SRC" ]]; then
+        mapfile -t cand < <(find "$UNPACK" -type f -iname 'metadata.desktop' -printf '%h\n' | sort -u 2>/dev/null || true)
+        if [[ ${#cand[@]} -gt 0 ]]; then
+            THEME_SRC="${cand[0]}"
+        fi
+    fi
+
+    if [[ -z "$THEME_SRC" ]]; then
+        print_error "Impossible de localiser le splashscreen dans l'archive. Contenu extrait pour debug :"
+        ls -R "$UNPACK" || true
+        return 1
+    fi
+    print_info "Thème splash trouvé : $THEME_SRC"
+
+    # 4) Flatten double nesting: si THEME_SRC contient un seul sous-dossier qui a un 'contents', on préfère ça
+    # e.g. /tmp/unpack/.../fallout-splashscreen4k/fallout-splashscreen4k -> use inner
+    if [[ -d "$THEME_SRC" ]]; then
+        local inner_candidate
+        inner_candidate="$(find "$THEME_SRC" -maxdepth 2 -type d -name 'fallout-splashscreen4k' -print | head -n1 || true)"
+        if [[ -n "$inner_candidate" && "$inner_candidate" != "$THEME_SRC" ]]; then
+            print_info "Double-nesting détecté -> utilisation du dossier interne : $inner_candidate"
+            THEME_SRC="$inner_candidate"
+        fi
+    fi
+
+    # 5) vérifier structure attendue : must have 'contents/Splash.qml' or 'contents' with files
+    if [[ ! -f "$THEME_SRC/contents/Splash.qml" && ! -f "$THEME_SRC/Splash.qml" ]]; then
+        print_warning "Structure non standard : 'contents/Splash.qml' introuvable, on cherchera des fichiers plausibles"
+        # list possible files for debugging
+        find "$THEME_SRC" -maxdepth 3 -type f -iname 'splash*' -o -iname '*pipboy*' -o -iname 'metadata.desktop' -print || true
+    fi
+
+    # 6) Destination : LOCKSCREEN_THEME_DIR (avec PREFIX si chroot)
+    local DEST_DIR="${PREFIX}${LOCKSCREEN_THEME_DIR}"
+    print_info "Installation finale dans : $DEST_DIR"
+
+    # Safety: create parent, backup existing
+    if [[ -d "$DEST_DIR" ]]; then
+        print_info "Sauvegarde du dossier existant (si présent)"
+        mv "$DEST_DIR" "${DEST_DIR}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+    fi
+    mkdir -p "$DEST_DIR" || { print_error "Impossible de créer $DEST_DIR"; return 1; }
+
+    # 7) Copier le contenu du THEME_SRC vers DEST_DIR ; mais s'assurer d'installer la structure telle que look-and-feel attend
+    # Copie avec rsync pour préserver sous-arborescence et éviter les erreurs de nom
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete "$THEME_SRC"/ "$DEST_DIR"/ || { print_error "Erreur lors de la copie (rsync)"; return 1; }
+    else
+        # fallback cp
+        cp -a "$THEME_SRC"/. "$DEST_DIR"/ || { print_error "Erreur lors de la copie (cp)"; return 1; }
+    fi
+
+    # 8) Si la structure attendue est emballée dans an extra nested subfolder (ex fallout-splashscreen4k/fallout-splashscreen4k/contents)
+    # ensure $DEST_DIR/contents exists and contains Splash.qml
+    if [[ ! -f "$DEST_DIR/contents/Splash.qml" && -f "$DEST_DIR/Splash.qml" ]]; then
+        # move Splash.qml into contents (best-effort)
+        mkdir -p "$DEST_DIR/contents"
+        mv "$DEST_DIR/Splash.qml" "$DEST_DIR/contents/Splash.qml" 2>/dev/null || true
+    fi
+
+    # 9) créer un metadata.desktop minimal si absent (nécessaire pour look-and-feel)
+    if [[ ! -f "$DEST_DIR/metadata.desktop" ]]; then
+        print_warning "metadata.desktop absent -> création d'un metadata.desktop minimal"
+        cat > "$DEST_DIR/metadata.desktop" <<MD
 [Desktop Entry]
-Name=Fallout LockScreen
-Comment=Custom Fallout CRT Terminal LockScreen
+Name=Fallout Splashscreen 4k
+Comment=Fallout-style splashscreen / lockscreen
 X-KDE-PluginInfo-Author=PapaOursPolaire
 X-KDE-PluginInfo-Name=org.kde.falloutlock
 X-KDE-PluginInfo-Version=1.0
-X-KDE-PluginInfo-Category=LockScreen
-X-KDE-PluginInfo-License=GPL
-META
+X-KDE-PluginInfo-Website=https://github.com/PapaOursPolaire/arch
+X-KDE-PluginInfo-EnabledByDefault=true
+MD
+    fi
 
-# Appliquer comme lockscreen
-kwriteconfig5 --file kscreensaverrc --group Greeter --key Theme org.kde.falloutlock || true
-EOF
+    # 10) permissions & ownership: root:root, dossiers 755, fichiers 644 (sauf executables)
+    print_info "Fixation des permissions"
+    find "$DEST_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    find "$DEST_DIR" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    # set some files executable if necessary (scripts)
+    find "$DEST_DIR" -type f -iname '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 
-    print_success "KDE LockScreen Fallout appliqué avec succès"
+    if [[ -n "$PREFIX" ]]; then
+        # Si on est dans chroot, corriger propriétaire via arch-chroot (pour garantir root:root dans la cible)
+        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R root:root '${LOCKSCREEN_THEME_DIR}'" 2>/dev/null || true
+    else
+        chown -R root:root "$DEST_DIR" 2>/dev/null || true
+    fi
+
+    # 11) essaye d'installer la look-and-feel via kpackagetool5 si présent (dans chroot si besoin)
+    if [[ -n "$PREFIX" ]]; then
+        if /usr/bin/arch-chroot /mnt bash -lc 'command -v kpackagetool5 >/dev/null 2>&1'; then
+            print_info "kpackagetool5 trouvé dans chroot -> enregistrement de la look-and-feel"
+            /usr/bin/arch-chroot /mnt kpackagetool5 -i "$LOCKSCREEN_THEME_DIR" >/dev/null 2>&1 || print_warning "kpackagetool5 -i a échoué (possible path mismatch)"
+        elif /usr/bin/arch-chroot /mnt bash -lc 'command -v plasmapkg2 >/dev/null 2>&1'; then
+            print_info "plasmapkg2 trouvé dans chroot -> tentative d'installation"
+            /usr/bin/arch-chroot /mnt plasmapkg2 --install "$LOCKSCREEN_THEME_DIR" >/dev/null 2>&1 || true
+        else
+            print_info "kpackagetool5/plasmapkg2 introuvable dans chroot ; l'utilisateur devra exécuter kpackagetool5 manuellement après le 1er démarrage"
+        fi
+    else
+        if command -v kpackagetool5 >/dev/null 2>&1; then
+            print_info "kpackagetool5 trouvé -> enregistrement"
+            kpackagetool5 -i "$DEST_DIR" >/dev/null 2>&1 || print_warning "kpackagetool5 -i a renvoyé une erreur"
+        else
+            print_info "kpackagetool5 introuvable : exécutez 'kpackagetool5 -i $DEST_DIR' ou redémarrez Plasma pour que le look-and-feel apparaisse"
+        fi
+    fi
+
+    # 12) Forcer un rebuild des caches Plasma si possible (kbuildsycoca5)
+    if [[ -n "$PREFIX" ]]; then
+        /usr/bin/arch-chroot /mnt bash -lc 'if command -v kbuildsycoca5 >/dev/null 2>&1; then kbuildsycoca5 --noincremental >/dev/null 2>&1 || true; fi' 2>/dev/null || true
+    else
+        if command -v kbuildsycoca5 >/dev/null 2>&1; then
+            kbuildsycoca5 --noincremental >/dev/null 2>&1 || true
+        fi
+    fi
+
+    print_success "Splashscreen KDE (look-and-feel) installé dans $DEST_DIR"
+    print_info "Si le splash n'apparaît pas immédiatement : redémarre Plasma (plasmashell) ou la machine, ou exécute kpackagetool5 -i $DEST_DIR sur la cible."
+
+    # fin
+    return 0
 }
 
 prepare_aur_in_chroot() {
@@ -3436,158 +3555,90 @@ EOF
 }
 
 # Fastfetch s'exécute automatiquement
+# ----- Remplacer / coller cette fonction dans install2.sh -----
 install_fastfetch() {
     print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
-    local user_home="/mnt/home/$USERNAME"
-    local skel_dir="/mnt/etc/skel"
-    local config_rel=".config/fastfetch/config.jsonc"
-    local config_abs="/mnt/home/$USERNAME/$config_rel"
-    local rc_block_marker="# ===== FASTFETCH AUTOMATIQUE (NE PAS DUPLIQUER) ====="
 
-    # --- Préconditions ---
     if [[ -z "${USERNAME:-}" ]]; then
-        print_error "USERNAME n'est pas défini."
+        print_error "USERNAME non défini. Abandon."
         return 1
     fi
-    if [[ ! -d "$user_home" ]]; then
-        print_warning "Le home de $USERNAME n'existe pas encore dans /mnt/home. Tentative de création..."
-        /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "id -u '$USERNAME' >/dev/null 2>&1 || useradd -m '$USERNAME'" || true
-        if [[ ! -d "$user_home" ]]; then
-            /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "mkdir -p '/home/$USERNAME' && chown -R '$USERNAME:$USERNAME' '/home/$USERNAME'"
-        fi
-        [[ -d "$user_home" ]] || { print_error "Impossible de préparer /home/$USERNAME"; return 1; }
+
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        print_info "[DRY RUN] Simulation fastfetch"
+        return 0
     fi
 
-    # --- Installation fastfetch ---
-    if ! /usr/bin/arch-chroot /mnt command -v fastfetch >/dev/null 2>&1; then
-        print_info "Installation de fastfetch via pacman…"
-        /usr/bin/arch-chroot /mnt pacman -Syu --noconfirm --needed fastfetch || {
-            print_error "Échec de l’installation de fastfetch."
-            return 1
-        }
-    else
-        print_info "fastfetch déjà présent."
+    # installer fastfetch si absent
+    if ! /usr/bin/arch-chroot /mnt /usr/bin/env bash -c 'command -v fastfetch >/dev/null 2>&1'; then
+        print_info "Installation de fastfetch dans le chroot..."
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch || print_warning "Impossible d'installer fastfetch via pacman"
     fi
 
-    # --- Arborescence de config ---
-    print_info "Création de l’arborescence de configuration…"
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
-        mkdir -p '/home/$USERNAME/.config/fastfetch' \
-                    '/home/$USERNAME/.cache' \
-                    '/home/$USERNAME/.local/share'
-        mkdir -p '/etc/skel/.config/fastfetch'
-        chown -R '$USERNAME:$USERNAME' '/home/$USERNAME/.config' '/home/$USERNAME/.cache' '/home/$USERNAME/.local'
-    " || {
-        print_error "Impossible de créer les répertoires de configuration."
-        return 1
-    }
+    # config utilisateur
+    USER_HOME="/home/$USERNAME"
+    CFG_DIR="/mnt$USER_HOME/.config/fastfetch"
+    mkdir -p "$CFG_DIR" || true
 
-    # --- Fichier de configuration JSONC complet ---
-    print_info "Écriture de la configuration fastfetch…"
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "cat > '/home/$USERNAME/.config/fastfetch/config.jsonc' <<'JSON_EOF'
+    cat > "$CFG_DIR/config.jsonc" <<'FFCFG'
 {
-  // Affiche un titre personnalisé en tête
-    \"modules\": [
-    { \"type\": \"title\", \"key\": \"Powered by PapaOursPolaire - automatisation disponible sur GitHub\" },
-
-    // Logo + infos principales
-    { \"type\": \"os\" },
-    { \"type\": \"host\" },
-    { \"type\": \"kernel\" },
-    { \"type\": \"uptime\" },
-    { \"type\": \"packages\" },
-    { \"type\": \"shell\" },
-    { \"type\": \"terminal\" },
-
-    // Environnement graphique
-    { \"type\": \"de\" },
-    { \"type\": \"wm\" },
-    { \"type\": \"theme\" },
-    { \"type\": \"icons\" },
-    { \"type\": \"font\" },
-    { \"type\": \"display\" },
-
-    // Matériel & perfs
-    { \"type\": \"cpu\" },
-    { \"type\": \"gpu\" },
-    { \"type\": \"memory\" },
-    { \"type\": \"swap\" },
-    { \"type\": \"disk\" },
-
-    // Réseau
-    { \"type\": \"localip\" },
-    { \"type\": \"publicip\" }
-    ],
-
-  // Séparateur lisible
-    \"display\": {
-    \"separator\": \" : \",
-    \"keyWidth\": 18,
-    \"showColors\": true
-    },
-
-  // Logo par défaut d’Arch Linux (couleurs par défaut – pas de forçage de mauve)
-    \"logo\": \"arch\"
+  "display": {
+    "separator": " : ",
+    "keyWidth": 18,
+    "showColors": true
+  },
+  "modules": [
+    { "type": "title", "key": "Powered by PapaOursPolaire - available on GitHub" },
+    { "type": "ascii", "logo": "arch" },
+    { "type": "os" },
+    { "type": "kernel" },
+    { "type": "uptime" },
+    { "type": "shell" },
+    { "type": "de" },
+    { "type": "wm" },
+    { "type": "terminal" },
+    { "type": "cpu" },
+    { "type": "gpu" },
+    { "type": "memory" },
+    { "type": "disk" },
+    { "type": "packages" },
+    { "type": "localip" }
+  ]
 }
-JSON_EOF" || {
-        print_error "Échec d’écriture de /home/$USERNAME/.config/fastfetch/config.jsonc"
-        return 1
-    }
+FFCFG
 
-    # --- Ajout auto dans .bashrc / .zshrc (idempotent) ---
-    print_info "Configuration de l’exécution automatique (bash/zsh)…"
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
-        set -e
-        for rc in '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc' '/etc/skel/.bashrc' '/etc/skel/.zshrc'; do
-            touch \"\$rc\" || true
-            # Nettoyage des anciennes lignes fastfetch
-            sed -i '/fastfetch/d' \"\$rc\" 2>/dev/null || true
-            sed -i '/FASTFETCH AUTOMATIQUE/d' \"\$rc\" 2>/dev/null || true
+    # droits
+    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R $USERNAME:$USERNAME '/home/$USERNAME/.config/fastfetch' || true" || true
 
-            # Ajout d'un bloc propre avec garde
-            if ! grep -q \"^$rc_block_marker\" \"\$rc\" 2>/dev/null; then
-                cat >> \"\$rc\" <<'RC_EOF'
-$rc_block_marker
-# Lancement unique par session interactive
-if [[ -z \"\${FASTFETCH_SHOWN:-}\" && \"\$-\" == *i* ]]; then
-    export FASTFETCH_SHOWN=1
-    if command -v fastfetch >/dev/null 2>&1; then
-        if [[ -f \"\$HOME/.config/fastfetch/config.jsonc\" ]]; then
-            fastfetch --config \"\$HOME/.config/fastfetch/config.jsonc\" 2>/dev/null || fastfetch
-        else
-            fastfetch
-        fi
+    # Ajouter le lancement automatique dans les fichiers rc (dans le chroot)
+    for rc in "/mnt/home/$USERNAME/.bashrc" "/mnt/home/$USERNAME/.zshrc" "/mnt/etc/skel/.bashrc" "/mnt/etc/skel/.zshrc"; do
+        touch "$rc" || true
+        sed -i '/# --- FASTFETCH AUTO (added by installer) ---/,+10d' "$rc" 2>/dev/null || true
+        cat >> "$rc" <<'BASHRC_EOF'
+# --- FASTFETCH AUTO (added by installer) ---
+if [[ -z "${FASTFETCH_SHOWN:-}" && "$-" == *i* ]]; then
+  export FASTFETCH_SHOWN=1
+  if command -v fastfetch >/dev/null 2>&1; then
+    if [[ -f "$HOME/.config/fastfetch/config.jsonc" ]]; then
+      echo
+      fastfetch --config "$HOME/.config/fastfetch/config.jsonc" 2>/dev/null || fastfetch
+      echo
+    else
+      echo
+      fastfetch 2>/dev/null || true
+      echo
     fi
+  fi
 fi
-RC_EOF
-            fi
-        done
+# --- END FASTFETCH AUTO ---
+BASHRC_EOF
+    done
 
-        # Propriété/permissions côté utilisateur
-        chown '$USERNAME:$USERNAME' '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc' 2>/dev/null || true
-    " || {
-        print_error "Échec de l’ajout de fastfetch aux shells."
-        return 1
-    }
+    # corriger propriétaires
+    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R $USERNAME:$USERNAME /home/$USERNAME/.config /home/$USERNAME/.bashrc /home/$USERNAME/.zshrc || true" || true
 
-    # --- Test immédiat pour l’utilisateur ---
-    print_info "Test immédiat de fastfetch pour $USERNAME…"
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "su - '$USERNAME' -c 'FASTFETCH_SHOWN=; command -v fastfetch >/dev/null 2>&1 && fastfetch --config \"\$HOME/.config/fastfetch/config.jsonc\" >/dev/null 2>&1 || true'"
-
-    # --- Ajout d’un alias pratique (optionnel et idempotent) ---
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
-        for rc in '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc'; do
-            grep -q '^alias ff=' \"\$rc\" 2>/dev/null || echo \"alias ff='fastfetch --config \\\"\\\$HOME/.config/fastfetch/config.jsonc\\\"'\" >> \"\$rc\"
-        done
-        chown '$USERNAME:$USERNAME' '/home/$USERNAME/.bashrc' '/home/$USERNAME/.zshrc' 2>/dev/null || true
-    " || true
-
-    # --- Vérifications finales ---
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -lc "
-        test -x \$(command -v fastfetch) && test -s '/home/$USERNAME/.config/fastfetch/config.jsonc'
-    " && print_success "Fastfetch installé et configuré pour $USERNAME" || {
-        print_warning "Fastfetch installé mais une vérification a échoué. Lancement manuel possible: fastfetch"
-    }
+    print_success "Fastfetch configuré pour l'utilisateur $USERNAME"
+    return 0
 }
 
 # Fonctions pour la configuration finale du système
@@ -3635,7 +3686,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v449.2
+# Configuration Bash - Arch Linux Fallout Edition v460.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4049,13 +4100,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V449.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V460.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V449.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V460.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4167,7 +4218,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V449.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V460.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
@@ -4197,404 +4248,439 @@ fi
 
 cat > post-install.sh << 'EOF'
     #!/usr/bin/env bash
-    # post-install.sh — Arch Linux (KDE/desktop) post-install focused on:
-    # 1) Spotify + Spicetify (Flatpak Spotify, spicetify-cli native if available)
-    # 2) Steam (Flatpak)
-    # 3) VS Code (Flatpak) + extensions
-    # Safe-by-default: no makepkg/yay/paru as root, no language toolchains.
-    set -Eeuo pipefail
+# post-install.sh
+# Post-install tasks complets pour usage en session utilisateur.
+# - Journalise UNIQUEMENT stderr dans ~/post-install-errors.log
+# - Continue après chaque échec (affiche un warning, logue l'erreur)
+# - Idempotent : réexécutable sans casse
+#
+# Utilisation :
+#   chmod +x ~/post-install.sh
+#   ~/post-install.sh
+#
+# NOTE : adapte certaines commandes selon ta distro (le script tente de détecter le gestionnaire de paquets)
 
-    LOG="${HOME}/post-install.log"
-    exec > >(tee -a "$LOG") 2>&1
+###############################################################################
+# Configuration initiale
+###############################################################################
 
-    err() { printf "\033[31m[ERREUR]\033[0m %s\n" "$*" >&2; }
-    ok()  { printf "\033[32m[OK]\033[0m %s\n" "$*"; }
-    info(){ printf "\033[36m[INFO]\033[0m %s\n" "$*"; }
-    warn(){ printf "\033[33m[ATTN]\033[0m %s\n" "$*"; }
+set -o pipefail
 
-        require_not_root() {
-        if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-            err "Ne PAS exécuter ce script en root. Lancez-le en utilisateur normal."
-            exit 1
-        fi
-        }
+LOGFILE="$HOME/post-install-errors.log"
+: > "$LOGFILE"   # tronquer le log précédent (erreurs uniquement)
 
-        have() { command -v "$1" >/dev/null 2>&1; }
+# Redirecter uniquement stderr vers LOGFILE, garder stdout visible
+exec 3>&2
+exec 2>>"$LOGFILE"
 
-        sudo_ok() {
-        if ! have sudo; then
-            err "sudo est requis. Installez sudo et donnez les droits à votre utilisateur (groupe wheel)."
-            exit 1
-        fi
-        sudo -v || { err "Impossible d'utiliser sudo."; exit 1; }
-        }
+echo "[INFO] post-install started at $(date '+%Y-%m-%d %H:%M:%S')"
 
-        ensure_flatpak() {
-        if ! have flatpak; then
-            info "Installation de Flatpak…"
-            sudo pacman -Sy --noconfirm --needed flatpak
-        fi
-        info "Activation du dépôt Flathub…"
-        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
-        }
+# Helper pour afficher en vert (succès), jaune (info), rouge (erreur)
+green() { printf "\033[1;32m%s\033[0m\n" "$1"; }
+yellow() { printf "\033[1;33m%s\033[0m\n" "$1"; }
+red() { printf "\033[1;31m%s\033[0m\n" ; printf "%s\n" "$1" >&3 ; }
 
-        install_spotify() {
-        info "Installation de Spotify (Flatpak)…"
-        flatpak install -y flathub com.spotify.Client || {
-            warn "Échec d'installation de Spotify via Flatpak."
-            return 1
-        }
-        ok "Spotify installé (Flatpak)."
-        }
-
-        install_spicetify_cli() {
-        if have spicetify; then
-            ok "spicetify-cli déjà présent."
-            return 0
-        fi
-        info "Installation de spicetify-cli…"
-        if pacman -Si spicetify-cli >/dev/null 2>&1; then
-            sudo pacman -S --noconfirm --needed spicetify-cli && { ok "spicetify-cli installé (pacman)."; return 0; }
-        fi
-        # Fallback via AUR helper si dispo (toujours en utilisateur, JAMAIS en sudo)
-        if have paru; then
-            paru -S --noconfirm spicetify-cli && { ok "spicetify-cli installé (paru)."; return 0; }
-        elif have yay; then
-            yay -S --noconfirm spicetify-cli && { ok "spicetify-cli installé (yay)."; return 0; }
-        fi
-        warn "spicetify-cli non installé (ni pacman, ni AUR helper). Spicetify sera sauté."
-        return 1
-        }
-
-        configure_spicetify_for_flatpak() {
-        # Fonctionne que si spicetify-cli est dispo
-        have spicetify || { warn "spicetify-cli absent — configuration sautée."; return 0; }
-
-        SPOTIFY_PREFS="${HOME}/.var/app/com.spotify.Client/config/spotify/prefs"
-        mkdir -p "$(dirname "$SPOTIFY_PREFS")"
-
-        if [[ -s "$SPOTIFY_PREFS" ]]; then
-            info "Prefs Spotify détecté — application de Spicetify…"
-            spicetify config prefs_path "$SPOTIFY_PREFS" || true
-            spicetify backup || true
-            spicetify apply || true
-            ok "Spicetify appliqué."
-        else
-        info "Prefs Spotify pas encore généré. Mise en place d'un correctif post-premier-lancement…"
-        AUTOSTART_DIR="${HOME}/.config/autostart"
-        BIN_DIR="${HOME}/.local/bin"
-        mkdir -p "$AUTOSTART_DIR" "$BIN_DIR"
-
-        FIX_SCRIPT="${BIN_DIR}/spicetify-postfirststart.sh"
-        DESKTOP_FILE="${AUTOSTART_DIR}/spicetify-postfirststart.desktop"
-
-        cat > "$FIX_SCRIPT" << 'EOSH'
-    #!/usr/bin/env bash
-set -u
-
-TRIES=60
-SLEEP_SECS=2
-log(){ echo "[spicetify-postfirststart] $*"; }
-
-configure_spicetify_for_flatpak() {
-    info "Configuration de Spicetify pour Spotify (Flatpak)…"
-
-    FIX_SCRIPT="${HOME}/.local/bin/spicetify-postfirststart.sh"
-    DESKTOP_FILE="${HOME}/.config/autostart/spicetify-postfirststart.desktop"
-
-    mkdir -p "$(dirname "$FIX_SCRIPT")" "$(dirname "$DESKTOP_FILE")"
-
-    cat > "$FIX_SCRIPT" <<'EOSH'
-#!/usr/bin/env bash
-set -u
-TRIES=60
-SLEEP_SECS=2
-log(){ echo "[spicetify-postfirststart] $*"; }
-
-CANDIDATES=(
-    "${HOME}/.var/app/com.spotify.Client/config/spotify/prefs"
-    "${HOME}/.config/spotify/prefs"
-)
-
-FOUND=""
-for ((i=0; i<TRIES; i++)); do
-    for p in "${CANDIDATES[@]}"; do
-        if [[ -s "$p" ]]; then FOUND="$p"; break; fi
-    done
-    [[ -n "$FOUND" ]] && break
-    sleep "$SLEEP_SECS"
-done
-
-if [[ -z "$FOUND" ]]; then
-    log "prefs introuvable après attente — abandon silencieux."
-    exit 0
-fi
-
-log "prefs détecté: $FOUND"
-if command -v spicetify >/dev/null 2>&1; then
-    spicetify config prefs_path "$FOUND" || true
-    spicetify backup || true
-    spicetify apply || true
-fi
-
-# Auto-nettoyage
-rm -f "${HOME}/.config/autostart/spicetify-postfirststart.desktop" 2>/dev/null || true
-rm -f "${HOME}/.local/bin/spicetify-postfirststart.sh" 2>/dev/null || true
-exit 0
-EOSH
-
-    chmod +x "$FIX_SCRIPT"
-
-    cat > "$DESKTOP_FILE" <<EOF
-[Desktop Entry]
-Type=Application
-Name=Spicetify Post-First-Start
-Comment=Finalise Spicetify après le premier lancement de Spotify
-Exec=${FIX_SCRIPT}
-X-GNOME-Autostart-enabled=true
-NoDisplay=true
-EOF
-
-    ok "Correctif Spicetify post-premier-lancement prêt (${DESKTOP_FILE})."
-    print_warning "Spicetify non installé — pas de configuration Spotify Flatpak."
-
-
-install_steam() {
-    info "Installation de Steam (Flatpak)…"
-    flatpak install -y flathub com.valvesoftware.Steam || {
-        warn "Échec d'installation de Steam via Flatpak."
-        return 1
-    }
-    ok "Steam installé (Flatpak)."
+# Helper : exécuter une commande, afficher résultat et logger erreur si échoue
+run_cmd() {
+  # usage: run_cmd "Description" command args...
+  local desc="$1"; shift
+  echo "--------------------------------------------------------------------------------"
+  yellow "[STEP] $desc"
+  if "$@" 1>/dev/null; then
+    green "[OK] $desc"
+    return 0
+  else
+    # Capture stdout+stderr of the command? We already redirected stderr to LOGFILE.
+    red "[ERROR] $desc — voir $LOGFILE pour les détails"
+    return 1
+  fi
 }
 
-install_vscode_and_extensions() {
-    info "Installation de Visual Studio Code (Flatpak)…"
-    flatpak install -y flathub com.visualstudio.code || {
-        warn "Échec d'installation de VS Code via Flatpak."
-        return 1
-    }
-    ok "VS Code installé (Flatpak)."
+# Helper : exécuter une commande qui doit être root, tente sudo si pas root
+run_cmd_sudo() {
+  local desc="$1"; shift
+  if (( EUID == 0 )); then
+    run_cmd "$desc" "$@"
+  else
+    if command -v sudo >/dev/null 2>&1; then
+      run_cmd "$desc" sudo "$@"
+    else
+      red "[ERROR] sudo introuvable — impossible d'exécuter (root) : $desc"
+      return 1
+    fi
+  fi
+}
 
-    info "Installation des extensions VS Code…"
-    EXT=(
-        # Langages
-        ms-python.python
-        ms-vscode.cpptools
-        redhat.java
-        golang.go
-        rust-lang.rust-analyzer
+###############################################################################
+# Détection de la distribution et du package manager
+###############################################################################
+PKG_MANAGER=""
+DISTRO=""
+if [[ -f /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  DISTRO="${ID_LIKE:-$ID}"
+fi
 
-        # Web
-        esbenp.prettier-vscode
-        dbaeumer.vscode-eslint
-        bradlc.vscode-tailwindcss
-        ritwickdey.liveserver
-        formulahendry.auto-rename-tag
-        formulahendry.auto-close-tag
+if command -v pacman >/dev/null 2>&1; then
+  PKG_MANAGER="pacman"
+elif command -v apt >/dev/null 2>&1; then
+  PKG_MANAGER="apt"
+elif command -v dnf >/dev/null 2>&1; then
+  PKG_MANAGER="dnf"
+elif command -v zypper >/dev/null 2>&1; then
+  PKG_MANAGER="zypper"
+elif command -v apk >/dev/null 2>&1; then
+  PKG_MANAGER="apk"
+elif command -v emerge >/dev/null 2>&1; then
+  PKG_MANAGER="emerge"
+else
+  PKG_MANAGER=""
+fi
 
-        # Outils
-        ms-azuretools.vscode-docker
-        ms-toolsai.jupyter
-        ms-vscode.makefile-tools
-        ms-vscode.cmake-tools
+echo "[INFO] Détection: PKG_MANAGER=$PKG_MANAGER, DISTRO=$DISTRO"
 
-        # Git/Collab
-        eamodio.gitlens
-        mhutchie.git-graph
-        donjayamanne.githistory
+###############################################################################
+# Fonctions utilitaires multi-distro
+###############################################################################
 
-        # Productivité
-        aaron-bond.better-comments
-        usernamehw.errorlens
-        gruntfuggly.todo-tree
-        streetsidesoftware.code-spell-checker
+update_db() {
+  case "$PKG_MANAGER" in
+    pacman) run_cmd_sudo "pacman -Syu (update)" pacman -Syu --noconfirm ;;
+    apt) run_cmd_sudo "apt update" apt update -y ;;
+    dnf) run_cmd_sudo "dnf check-update" dnf check-update || true ;;
+    zypper) run_cmd_sudo "zypper refresh" zypper refresh ;;
+    apk) run_cmd_sudo "apk update" apk update ;;
+    emerge) run_cmd_sudo "emerge --sync" emerge --sync ;;
+    *) red "[WARN] Aucun gestionnaire de paquets pris en charge détecté pour update_db" ;;
+  esac
+}
 
-        # Thèmes
-        pkief.material-icon-theme
-        dracula-theme.theme-dracula
+install_packages() {
+  # usage: install_packages pkg1 pkg2 ...
+  local pkgs=( "$@" )
+  if [[ ${#pkgs[@]} -eq 0 ]]; then
+    return 0
+  fi
 
-        # Markdown
-        yzhang.markdown-all-in-one
-        shd101wyy.markdown-preview-enhanced
+  case "$PKG_MANAGER" in
+    pacman)
+      run_cmd_sudo "pacman -S --noconfirm ${pkgs[*]}" pacman -S --noconfirm --needed "${pkgs[@]}" ;;
+    apt)
+      run_cmd_sudo "apt install -y ${pkgs[*]}" apt install -y "${pkgs[@]}" ;;
+    dnf)
+      run_cmd_sudo "dnf install -y ${pkgs[*]}" dnf install -y "${pkgs[@]}" ;;
+    zypper)
+      run_cmd_sudo "zypper install -y ${pkgs[*]}" zypper install -y "${pkgs[@]}" ;;
+    apk)
+      run_cmd_sudo "apk add ${pkgs[*]}" apk add "${pkgs[@]}" ;;
+    emerge)
+      run_cmd_sudo "emerge ${pkgs[*]}" emerge "${pkgs[@]}" ;;
+    *)
+      red "[WARN] install_packages: gestionnaire inconnu, tenter apt-get/pacman manuellement"
+      return 1 ;;
+  esac
+}
 
-        # IA
-        github.copilot
-        github.copilot-chat
+install_flatpak() {
+  # usage: install_flatpak <ref>
+  local ref="$1"
+  if ! command -v flatpak >/dev/null 2>&1; then
+    run_cmd_sudo "Installer flatpak" bash -c "true" || true
+    case "$PKG_MANAGER" in
+      pacman) run_cmd_sudo "pacman -S --noconfirm flatpak" pacman -S --noconfirm flatpak || true ;;
+      apt) run_cmd_sudo "apt install -y flatpak" apt install -y flatpak || true ;;
+      dnf) run_cmd_sudo "dnf install -y flatpak" dnf install -y flatpak || true ;;
+      zypper) run_cmd_sudo "zypper install -y flatpak" zypper install -y flatpak || true ;;
+      apk) run_cmd_sudo "apk add flatpak" apk add flatpak || true ;;
+      *) red "[WARN] flatpak non installé (gestionnaire inconnu)" ;;
+    esac
+  fi
+
+  if command -v flatpak >/dev/null 2>&1; then
+    run_cmd "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    run_cmd "Installer flatpak ref $ref" flatpak install -y flathub "$ref"
+  else
+    red "[ERROR] flatpak indisponible, impossible d'installer $ref"
+  fi
+}
+
+install_aur_pkg() {
+  # usage: install_aur_pkg pkgname
+  local pkg="$1"
+  # only for Arch derivatives; try paru then yay
+  if command -v paru >/dev/null 2>&1; then
+    run_cmd "paru -S --noconfirm $pkg" paru -S --noconfirm "$pkg"
+  elif command -v yay >/dev/null 2>&1; then
+    run_cmd "yay -S --noconfirm $pkg" yay -S --noconfirm "$pkg"
+  else
+    red "[WARN] Pas d'AUR helper détecté (paru/yay). Ignorer $pkg ou installez un helper AUR."
+    return 1
+  fi
+}
+
+###############################################################################
+# Préparation / sanity checks
+###############################################################################
+
+# Ensure HOME variable exists
+if [[ -z "${HOME:-}" ]]; then
+  export HOME="/home/$(whoami)"
+fi
+
+# Ensure sudo is present or we are root for operations needing root
+if ! command -v sudo >/dev/null 2>&1 && (( EUID != 0 )); then
+  red "[WARN] sudo non trouvé et vous n'êtes pas root — certaines opérations nécessiteront root"
+fi
+
+###############################################################################
+# SECTION A: Debug Steam / fixes Steam common issues
+###############################################################################
+steam_debug() {
+  echo
+  yellow "[TASK] Debug Steam / verification bibliothèques 32-bit (lib32)"
+
+  # On Arch check for multilib packages like lib32-gnutls, lib32-mesa
+  if [[ "$PKG_MANAGER" == "pacman" ]]; then
+    install_packages lib32-glibc lib32-mesa lib32-libpulse lib32-gnutls 2>/dev/null || true
+    run_cmd "Vérifier steam via steam --reset si présent" bash -c 'if command -v steam >/dev/null 2>&1; then steam --reset || true; else echo "steam absent"; fi'
+  else
+    # On other distros, advise user
+    run_cmd "Vérifier que Steam (proton) est installé" bash -c 'if command -v steam >/dev/null 2>&1; then echo "steam ok"; else echo "steam non présent"; fi'
+  fi
+}
+
+###############################################################################
+# SECTION B: Android Studio installation (flatpak preferred)
+###############################################################################
+install_android_studio() {
+  echo
+  yellow "[TASK] Installation Android Studio (flatpak preferred)"
+
+  if command -v flatpak >/dev/null 2>&1; then
+    install_flatpak com.google.AndroidStudio || true
+  else
+    # Try package manager or snap
+    case "$PKG_MANAGER" in
+      pacman) install_packages android-studio || true ;;
+      apt) run_cmd "Installer Android Studio via snap/apt" bash -c 'echo "Veuillez installer Android Studio manuellement (apt/snap)"; exit 0' || true ;;
+      dnf) install_packages android-studio || true ;;
+      *) red "[WARN] Pas d'installation automatique fiable pour Android Studio sur cette distro" ;;
+    esac
+  fi
+}
+
+###############################################################################
+# SECTION C: Spotify & Spicetify
+###############################################################################
+install_spotify_and_spicetify() {
+  echo
+  yellow "[TASK] Installation Spotify et Spicetify (si disponible)"
+
+  # Install Spotify client (flatpak preferred)
+  if command -v flatpak >/dev/null 2>&1; then
+    install_flatpak com.spotify.Client || true
+  else
+    if [[ "$PKG_MANAGER" == "pacman" ]]; then
+      install_packages spotify || install_aur_pkg spotify || true
+    elif [[ "$PKG_MANAGER" == "apt" ]]; then
+      # Add Spotify repo example (non exhaustive); user may prefer manual method
+      run_cmd "Installer Spotify via apt (méthode générique)" bash -c 'echo "Installer spotify manuellement sur Debian/Ubuntu (repo officiel)"; exit 0' || true
+    fi
+  fi
+
+  # Spicetify (AUR or npm) - only if user wants it
+  if command -v spicetify >/dev/null 2>&1; then
+    run_cmd "Spicetify backup" spicetify backup || true
+    run_cmd "Spicetify apply" spicetify apply || true
+  else
+    # try to install via AUR on Arch
+    if [[ "$PKG_MANAGER" == "pacman" ]]; then
+      install_aur_pkg spicetify-cli || true
+    else
+      echo "[INFO] spicetify non present; ignorer" >&3
+    fi
+  fi
+}
+
+###############################################################################
+# SECTION D: Visual Studio Code + extensions (user session)
+###############################################################################
+install_vscode_extensions_user() {
+  echo
+  yellow "[TASK] Installer Visual Studio Code (si binaire 'code' présent) et extensions utiles"
+
+  if ! command -v code >/dev/null 2>&1 ; then
+    yellow "Binaire 'code' non trouvé : tenter installation via package manager (si souhaité)"
+    case "$PKG_MANAGER" in
+      pacman) install_packages code || install_aur_pkg visual-studio-code-bin || true ;;
+      apt) run_cmd_sudo "apt install -y code (s'il existe dans repo)" apt install -y code || true ;;
+      dnf) install_packages code || true ;;
+      *) echo "[INFO] Installez VSCode manuellement si nécessaire" >&3 ;;
+    esac
+  fi
+
+  if command -v code >/dev/null 2>&1 ; then
+    # Extensions list (exemples) - adapte à ta liste
+    local exts=(
+      ms-python.python
+      eamodio.gitlens
+      esbenp.prettier-vscode
+      ms-vscode.cpptools
+      ms-azuretools.vscode-docker
+      rust-lang.rust-analyzer
+      redhat.java
     )
-
-    for e in "${EXT[@]}"; do
-        if flatpak run com.visualstudio.code --install-extension "$e" --force >/dev/null 2>&1; then
-            ok "Extension installée: $e"
-        else
-            warn "Extension échouée: $e"
-        fi
+    for ext in "${exts[@]}"; do
+      run_cmd "Installer extension VSCode $ext" code --install-extension "$ext" --force || true
     done
-
-    SETTINGS_DIR="${HOME}/.var/app/com.visualstudio.code/config/Code/User"
-    mkdir -p "$SETTINGS_DIR"
-    cat > "${SETTINGS_DIR}/settings.json" <<'JSON'
-{
-  "workbench.colorTheme": "Dracula",
-  "workbench.iconTheme": "material-icon-theme",
-  "editor.fontFamily": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-  "editor.fontLigatures": true,
-  "editor.fontSize": 14,
-  "editor.minimap.enabled": true,
-  "editor.lineNumbers": "on",
-  "editor.cursorBlinking": "smooth",
-  "editor.formatOnSave": true,
-  "editor.tabSize": 2,
-  "editor.insertSpaces": true,
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 1000,
-  "terminal.integrated.fontSize": 13,
-  "explorer.confirmDelete": false,
-  "explorer.confirmDragAndDrop": false,
-  "window.titleBarStyle": "custom",
-  "window.zoomLevel": 0,
-  "telemetry.telemetryLevel": "off",
-  "update.mode": "default",
-  "extensions.autoUpdate": true,
-  "extensions.autoCheckUpdates": true,
-  "security.workspace.trust.enabled": false,
-  "git.confirmSync": false,
-  "git.autofetch": true,
-  "[python]": {
-    "editor.defaultFormatter": "ms-python.python",
-    "editor.tabSize": 4
-  },
-  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-  "[json]":       { "editor.defaultFormatter": "vscode.json-language-features" },
-  "[html]":       { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-  "[css]":        { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true,
-    "source.organizeImports": true
-  },
-  "typescript.updateImportsOnFileMove.enabled": "always",
-  "javascript.updateImportsOnFileMove.enabled": "always",
-  "workbench.startupEditor": "welcomePage",
-  "editor.suggestSelection": "first",
-  "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue"
-}
-JSON
-    ok "VS Code configuré."
+  else
+    red "[WARN] VSCode CLI (code) introuvable, extensions non installées"
+  fi
 }
 
+###############################################################################
+# SECTION E: Navigateurs (Brave, Chrome, DuckDuckGo Browser)
+###############################################################################
+install_browsers() {
+  echo
+  yellow "[TASK] Installation navigateurs (Brave / Google Chrome / DuckDuckGo Browser si possible)"
+
+  # Prefer flatpak for cross-distro
+  if command -v flatpak >/dev/null 2>&1; then
+    install_flatpak com.brave.Browser || true
+    install_flatpak com.google.Chrome || true
+    # DuckDuckGo browser might be available as flatpak 'com.duckduckgo.desktop'
+    install_flatpak com.duckduckgo.desktop || true
+    return 0
+  fi
+
+  # Fallback distro-specific
+  if [[ "$PKG_MANAGER" == "pacman" ]]; then
+    # Brave/Chrome exist in AUR for Arch
+    install_aur_pkg brave-bin || true
+    install_aur_pkg google-chrome || true
+    # DuckDuckGo browser not standard - skip or advise
+  elif [[ "$PKG_MANAGER" == "apt" ]]; then
+    # Use Google's repo / Brave's repo - here we avoid adding repos automatically; user may prefer manual
+    echo "[INFO] Pour Ubuntu/Debian, ajoutez les repos officiels de Brave/Chrome manuellement si souhaité" >&3
+  else
+    echo "[INFO] Installez Brave/Chrome via les paquets officiels de votre distro ou flatpak" >&3
+  fi
+}
+
+###############################################################################
+# SECTION F: Fixes et utilitaires (pulseaudio/pipewire, codecs, fonts)
+###############################################################################
+install_multimedia_and_fonts() {
+  echo
+  yellow "[TASK] Installer codecs, PipeWire et polices utiles"
+
+  case "$PKG_MANAGER" in
+    pacman)
+      install_packages pipewire pipewire-pulse pipewire-alsa pipewire-jack gst-libav gst-plugins-good gst-plugins-bad gst-plugins-ugly noto-fonts noto-fonts-emoji ttf-jetbrains-mono || true
+      ;;
+    apt)
+      install_packages pipewire libpipewire-0.3-0 pipewire-audio-client-libraries fonts-noto fonts-noto-color-emoji || true
+      ;;
+    dnf)
+      install_packages pipewire pipewire-alsa pipewire-jack freetype-freeworld google-noto-emoji-fonts || true
+      ;;
+    *)
+      echo "[INFO] Installez manuellement PipeWire/codecs/fonts si besoin" >&3
+      ;;
+  esac
+}
+
+###############################################################################
+# SECTION G: Misc user tweaks (spicetify themes backup, config restore)
+###############################################################################
+user_misc_tweaks() {
+  echo
+  yellow "[TASK] Tâches utilisateurs facultatives (spicetify backup, config copies...)"
+
+  # Create a ~/bin if not present and ensure it's in PATH
+  mkdir -p "$HOME/bin"
+  if ! echo "$PATH" | grep -q "$HOME/bin"; then
+    echo "export PATH=\"\$HOME/bin:\$PATH\"" >> "$HOME/.profile"
+  fi
+
+  # Ensure ~/.config exists
+  mkdir -p "$HOME/.config"
+
+  # Example: backup dotfiles directory if present
+  if [[ -d "$HOME/.config" ]]; then
+    run_cmd "Créer backup .config (si absent)" bash -c 'mkdir -p "$HOME/.config.backup" || true; cp -a --backup=numbered "$HOME/.config/." "$HOME/.config.backup/" || true'
+  fi
+}
+
+###############################################################################
+# SECTION H: Create/Deploy post-install helper (log-only errors)
+###############################################################################
+deploy_post_install_helper() {
+  echo
+  yellow "[TASK] Déployer helper post-install (log uniquement les erreurs) vers ~/post-install-helper.sh"
+
+  cat > "$HOME/post-install-helper.sh" <<'HELPER_EOF'
+#!/usr/bin/env bash
+# Helper abrégé pour tâches additionnelles à lancer en session utilisateur
+LOG="$HOME/post-install-errors.log"
+:>>"$LOG"
+# Redirect only stderr to log; stdout stays visible
+exec 3>&2
+exec 2>>"$LOG"
+echo "[HELPER] start $(date)"
+# Add any one-off commands here
+echo "[HELPER] done $(date)"
+exec 2>&3
+HELPER_EOF
+
+  chmod +x "$HOME/post-install-helper.sh"
+  run_cmd "Déposer ~/post-install-helper.sh" true || true
+}
+
+###############################################################################
+# SECTION I: Run Steps in order
+###############################################################################
 main() {
-    require_not_root
-    sudo_ok
-    ensure_flatpak
-    install_spotify || true
-    install_spicetify_cli || true
-    configure_spicetify_for_flatpak || true
-    install_steam || true
-    install_vscode_and_extensions || true
+  yellow "---- Début des tâches post-install ----"
 
-    echo ""
-    ok "FINI. Si Spotify vient d'être installé, lancez-le une première fois pour générer les prefs."
-    echo "  – Journal détaillé: $LOG"
+  # 0) mise à jour index
+  update_db
+
+  # 1) Steam debug
+  steam_debug
+
+  # 2) Android Studio
+  install_android_studio
+
+  # 3) Spotify & Spicetify
+  install_spotify_and_spicetify
+
+  # 4) Visual Studio Code extensions
+  install_vscode_extensions_user
+
+  # 5) Navigateurs
+  install_browsers
+
+  # 6) Multimedia & Fonts
+  install_multimedia_and_fonts
+
+  # 7) Misc user tweaks
+  user_misc_tweaks
+
+  # 8) Deploy helper
+  deploy_post_install_helper
+
+  yellow "---- Tâches post-install terminées ----"
+  echo
+  green "Résumé: si des erreurs ont eu lieu, elles sont consignées dans : $LOGFILE"
+  echo "Consultez-les avec : tail -n 200 $LOGFILE"
 }
 
 main "$@"
 
+# Restore stderr
+exec 2>&3
 
-
-apply_fixes() {
-  print_header "APPLY HOTFIXES (clavier FR, splashscreen, navigateurs, post-install)"
-  if [[ "${DRY_RUN:-false}" == true ]]; then
-      print_info "[DRY RUN] Hotfixes"
-      return 0
-  fi
-
-  /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
-set -e
-# Clavier FR (console + X11)
-mkdir -p /etc
-echo 'KEYMAP=fr' > /etc/vconsole.conf
-localectl set-keymap fr || true
-localectl set-x11-keymap fr || true
-mkdir -p /etc/X11/xorg.conf.d
-cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<CONF
-Section "InputClass"
-    Identifier "system-keyboard"
-    MatchIsKeyboard "on"
-    Option "XkbLayout" "fr"
-EndSection
-CONF
-
-# Splashscreen Fallout via zip fourni
-TMP=$(mktemp -d)
-curl -fsSL -o "$TMP/fallout-splashscreen4k.zip" "https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip" || true
-if [ -s "$TMP/fallout-splashscreen4k.zip" ]; then
-  mkdir -p /usr/share/plasma/look-and-feel
-  unzip -o "$TMP/fallout-splashscreen4k.zip" -d /usr/share/plasma/look-and-feel/ >/dev/null 2>&1 || true
-  # Enregistrement du ksplash
-  mkdir -p /etc/xdg
-  cat > /etc/xdg/ksplashrc <<KS
-[KSplash]
-Theme=fallout-splashscreen4k
-KS
-fi
-
-# Navigateurs via Flatpak (plus robuste pour Chrome/Brave/DDG)
-pacman -S --noconfirm --needed flatpak || true
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
-flatpak install -y flathub com.brave.Browser || true
-flatpak install -y flathub com.google.Chrome || true
-flatpak install -y flathub com.duckduckgo.Desktop || true
-
-# Script post-install complet
-USER_HOME="/home/$USERNAME"
-cat > "$USER_HOME/post-install.sh" <<'PSH'
-#!/bin/bash
-set -e
-echo "[INFO] Fix Steam multilib"
-if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-  echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf >/dev/null
-  sudo pacman -Sy
-fi
-sudo pacman -S --noconfirm steam lib32-gnutls || true
-
-echo "[INFO] Android Studio"
-if command -v flatpak >/dev/null 2>&1; then
-  flatpak install -y flathub com.google.AndroidStudio || true
-fi
-
-echo "[INFO] Spotify + Spicetify"
-if command -v flatpak >/dev/null 2>&1; then
-  flatpak install -y flathub com.spotify.Client || true
-fi
-if ! command -v spicetify >/dev/null 2>&1; then
-  echo "Spicetify non installé (AUR). Installez spicetify-cli si nécessaire."
-fi
-
-echo "[INFO] VS Code + extensions"
-if ! command -v code >/dev/null 2>&1; then
-  if command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --noconfirm code || true
-  fi
-fi
-if command -v code >/dev/null 2>&1; then
-  exts=(ms-python.python esbenp.prettier-vscode eamodio.gitlens         ms-vscode.cpptools rust-lang.rust-analyzer golang.go redhat.java         dbaeumer.vscode-eslint pkief.material-icon-theme dracula-theme.theme-dracula         ms-toolsai.jupyter ms-azuretools.vscode-docker bradlc.vscode-tailwindcss         mhutchie.git-graph donjayamanne.githistory yzhang.markdown-all-in-one         streetsidesoftware.code-spell-checker)
-  for e in "${exts[@]}"; do code --install-extension "$e" --force || true; done
-fi
-echo "[OK] Post-install terminé."
-PSH
-chmod +x "$USER_HOME/post-install.sh"
-chown $USERNAME:$USERNAME "$USER_HOME/post-install.sh"
-
-# Renommage post-setup
-if [ -f "$USER_HOME/post-install-setup.sh" ]; then
-  mv "$USER_HOME/post-install-setup.sh" "$USER_HOME/post-setup.sh"
-  chown $USERNAME:$USERNAME "$USER_HOME/post-setup.sh"
-  chmod +x "$USER_HOME/post-setup.sh"
-fi
-EOS
-
-  print_success "Hotfixes appliqués."
-}
-
-apply_fixes
+echo "[INFO] post-install finished at $(date '+%Y-%m-%d %H:%M:%S')"
