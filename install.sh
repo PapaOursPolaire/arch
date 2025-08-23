@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 470.2, correctif 2 de la version 470.2
-# Mise à jour : 23/08/2025 à 12:57
+# Version: 471.2, correctif 2 de la version 471.2
+# Mise à jour : 23/08/2025 à 13:16
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="470.2"
+readonly SCRIPT_VERSION="471.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 470.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 471.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2334,109 +2334,64 @@ EOF
 }
 
 configure_sddm() {
-    print_header "CONFIGURATION SDDM - THÈME (robuste)"
-
-    : "${SDDM_THEME_DIR:=/usr/share/sddm/themes/SDDM-Fallout-theme}"
-    : "${SDDM_GITHUB_REPO:=https://github.com/PapaOursPolaire/arch}"
-    : "${SDDM_GITHUB_BRANCH:=Projets}"
-    : "${SDDM_THEME_SUBPATH:=SDDM-Fallout-theme}"
-
-    TMP="$(mktemp -d -t sddmtheme.XXXX)" || { print_error "Impossible de créer tmpdir"; return 1; }
-    trap 'rm -rf "$TMP"' RETURN
-
-    # 1) Télécharge / extrait
-    if [[ -n "${SDDM_THEME_URL:-}" && "${SDDM_THEME_URL##*.}" == "zip" ]]; then
-        print_info "Téléchargement du zip depuis SDDM_THEME_URL..."
-        if ! curl -fL --retry 3 -o "$TMP/theme.zip" "$SDDM_THEME_URL"; then
-            print_warning "Échec téléchargement ZIP, tentative archive GitHub..."
-            rm -f "$TMP/theme.zip" || true
-        else
-            unzip -q "$TMP/theme.zip" -d "$TMP/unpack" || { print_error "Échec extraction zip"; return 1; }
-        fi
-    fi
-
-    if [[ ! -d "$TMP/unpack" ]]; then
-        print_info "Téléchargement de l'archive GitHub: $SDDM_GITHUB_REPO (branche $SDDM_GITHUB_BRANCH)"
-        if ! curl -fL --retry 3 -o "$TMP/repo.zip" "$SDDM_GITHUB_REPO/archive/refs/heads/$SDDM_GITHUB_BRANCH.zip"; then
-            print_error "Impossible de télécharger l'archive GitHub"
+    print_header "CONFIGURATION DE SDDM - THEME Fallout"
+    
+    local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
+    local repo_url="https://github.com/PapaOursPolaire/arch.git"
+    local branch="Projets"
+    local tmp_dir="/tmp/sddm_fallout"
+    
+    # Nettoyage de l'ancien thème
+    rm -rf "$theme_dir" "$tmp_dir"
+    mkdir -p "$theme_dir"
+    
+    # Vérification des dépendances nécessaires
+    if ! command -v git &>/dev/null; then
+        print_info "Installation de git..."
+        pacman -S --noconfirm --needed git || {
+            print_error "Impossible d’installer git"
             return 1
-        fi
-        unzip -q "$TMP/repo.zip" -d "$TMP/unpack" || { print_error "Impossible d'extraire l'archive GitHub"; return 1; }
+        }
     fi
-
-    # 2) Détermine le bon répertoire source (Main.qml ou theme.conf ou metadata.desktop)
-    mapfile -t candidates < <(find "$TMP/unpack" -type f \( -iname 'Main.qml' -o -iname 'metadata.desktop' -o -iname 'theme.conf' \) -printf '%h\n' | sort -u)
-    THEME_SRC_DIR=""
-    if (( ${#candidates[@]} )); then
-        for c in "${candidates[@]}"; do
-            if [[ "$c" == *"$SDDM_THEME_SUBPATH"* ]]; then
-                THEME_SRC_DIR="$c"
-                break
-            fi
-        done
-        if [[ -z "$THEME_SRC_DIR" ]]; then
-            THEME_SRC_DIR="${candidates[0]}"
-        fi
+    
+    # Récupération du thème
+    print_info "Téléchargement du thème depuis $repo_url ($branch)..."
+    if ! git clone --depth=1 --branch "$branch" "$repo_url" "$tmp_dir"; then
+        print_error "Échec du téléchargement du thème SDDM"
+        return 1
+    fi
+    
+    # Copie des fichiers du thème en vérifiant leur présence
+    if [[ -d "$tmp_dir/SDDM-Fallout-theme" ]]; then
+        cp -r "$tmp_dir/SDDM-Fallout-theme/"* "$theme_dir"/ 2>/dev/null || true
     else
-        # fallback: dir explicite
-        if [[ -d "$TMP/unpack/${SDDM_GITHUB_REPO##*/}-$SDDM_GITHUB_BRANCH/$SDDM_THEME_SUBPATH" ]]; then
-            THEME_SRC_DIR="$TMP/unpack/${SDDM_GITHUB_REPO##*/}-$SDDM_GITHUB_BRANCH/$SDDM_THEME_SUBPATH"
-        else
-            print_error "Impossible de localiser le dossier thème dans l'archive. Contenu extrait pour debug:"
-            ls -R "$TMP/unpack" || true
-            return 1
-        fi
+        print_error "Le dossier SDDM-Fallout-theme est introuvable dans le dépôt"
+        return 1
     fi
-
-    print_info "Source du thème trouvée: $THEME_SRC_DIR"
-
-    # 3) Installe proprement dans SDDM_THEME_DIR
-    print_info "Installation dans $SDDM_THEME_DIR"
-    rm -rf "$SDDM_THEME_DIR" 2>/dev/null || true
-    mkdir -p "$SDDM_THEME_DIR" || { print_error "Impossible de créer $SDDM_THEME_DIR"; return 1; }
-    cp -a "$THEME_SRC_DIR/." "$SDDM_THEME_DIR/" || { print_error "Échec copie thème"; return 1; }
-
-    # 4) Corrige les typos QML fréquentes (cause principale du message plugin cannot be loaded)
-    if [[ -f "$SDDM_THEME_DIR/Main.qml" ]]; then
-        print_info "Patch Main.qml: correction casse/typos import QtQuick.Controls si besoin"
-        # correction insensible à la casse pour 'QtQuick.Controls' variants
-        sed -i -E 's/[Qq]t[Qq]uick\.[Cc][Oo][Nn][Tt][Rr][Oo][Ll][Ss]/QtQuick.Controls/g' "$SDDM_THEME_DIR/Main.qml" 2>/dev/null || true
-        # ajouter import QtQuick.Controls 2.15 après first import QtQuick si absent
-        if ! grep -q 'import QtQuick.Controls' "$SDDM_THEME_DIR/Main.qml"; then
-            awk 'BEGIN{p=0} {print; if(p==0 && $0 ~ /^import QtQuick/) {print "import QtQuick.Controls 2.15"; p=1}}' "$SDDM_THEME_DIR/Main.qml" > "$TMP/Main.qml.patched" && mv "$TMP/Main.qml.patched" "$SDDM_THEME_DIR/Main.qml" || true
-        fi
-        # épure caractères invisibles
-        tr -cd '\11\12\15\40-\176' < "$SDDM_THEME_DIR/Main.qml" > "$TMP/Main.qml.clean" && mv "$TMP/Main.qml.clean" "$SDDM_THEME_DIR/Main.qml" || true
-    else
-        print_warning "Main.qml non trouvé: vérifie la composition du thème (SDDM peut utiliser un autre greeter QML)."
+    
+    # Vérification que le fichier Main.qml existe
+    if [[ ! -f "$theme_dir/Main.qml" ]]; then
+        print_error "Le thème est incomplet : Main.qml manquant"
+        return 1
     fi
-
-    # 5) Crée Xsetup si absent (évite "no such file or directory")
-    if [[ ! -f "/mnt/etc/sddm/Xsetup" && ! -f "/etc/sddm/Xsetup" ]]; then
-        print_info "Création de /etc/sddm/Xsetup (dans le chroot) - layout FR par défaut"
-        mkdir -p "/mnt/etc/sddm" || true
-        cat > "/mnt/etc/sddm/Xsetup" <<'XSETUP_EOF'
-#!/bin/sh
-# Xsetup exécuté avant le greeter SDDM
-setxkbmap fr || true
-# set minimal env for greeter
-export XDG_RUNTIME_DIR=/run/user/$(id -u 2>/dev/null || echo 0)
-XSETUP_EOF
-        chmod +x "/mnt/etc/sddm/Xsetup" || true
+    
+    # Création du fichier Xsetup si absent
+    if [[ ! -f /etc/sddm/Xsetup ]]; then
+        mkdir -p /etc/sddm
+        touch /etc/sddm/Xsetup
     fi
-
-    # 6) Défini le thème via /etc/sddm.conf.d
-    mkdir -p "/mnt/etc/sddm.conf.d"
-    cat > "/mnt/etc/sddm.conf.d/99-theme.conf" <<CONF_EOF
+    
+    chmod +x /etc/sddm/Xsetup
+    
+    # Application du thème dans sddm.conf
+    mkdir -p /etc/sddm.conf.d
+    cat > /etc/sddm.conf.d/theme.conf <<EOF
 [Theme]
-Current=$(basename "$SDDM_THEME_DIR")
-CONF_EOF
-
-    # 7) Droits
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R root:root '$SDDM_THEME_DIR' || true; chmod -R 755 '$SDDM_THEME_DIR' || true" || true
-
-    print_success "Installation/Configuration SDDM terminée (vérifier les logs SDDM si problème)"
-    return 0
+Current=SDDM-Fallout-theme
+CursorTheme=breeze_cursors
+EOF
+    
+    print_success "Thème SDDM Fallout installé et configuré avec succès"
 }
 
 configure_kde_lockscreen() {
@@ -3686,7 +3641,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v470.2
+# Configuration Bash - Arch Linux Fallout Edition v471.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4100,13 +4055,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V470.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V471.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V470.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V471.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4218,7 +4173,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V470.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V471.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
