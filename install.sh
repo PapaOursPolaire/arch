@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 480.4, correctif 4 de la version 480.4
-# Mise à jour : 23/08/2025 à 17:37
+# Version: 481.4, correctif 4 de la version 481.4
+# Mise à jour : 23/08/2025 à 18:01
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="480.4"
+readonly SCRIPT_VERSION="481.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 480.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 481.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2983,6 +2983,66 @@ install_spotify_spicetify() {
     print_success "Installation Spotify + Spicetify terminée (avec fallbacks)."
 }
 
+# Nettoyage sûr de /tmp avant installation des polices (pour éviter "No space left on device")
+clean_tmp() {
+    print_header "NETTOYAGE /tmp — Avant installation des polices"
+    local CLEAN_TMP_MINUTES="${CLEAN_TMP_MINUTES:-120}"  # fichiers inactifs plus vieux que X minutes seront supprimés
+    local LARGE_FILE_MB="${LARGE_FILE_MB:-100}"         # fichiers > X Mo seront supprimés
+    local DRY="${DRY_RUN:-false}"
+    local BEFORE_MB AFTER_MB
+
+    # Afficher état avant
+    BEFORE_MB=$(du -sm /tmp 2>/dev/null | awk '{print $1}' || echo 0)
+    print_info "Espace utilisé /tmp : ${BEFORE_MB} Mo (avant nettoyage)."
+    if [[ "$DRY" == "true" ]]; then
+        print_info "[DRY RUN] Simulation - aucun fichier ne sera supprimé."
+        return 0
+    fi
+
+    # Sécurité : ne pas supprimer si /tmp est un lien non standard
+    if [[ ! -d /tmp ]]; then
+        print_warning "/tmp introuvable ou non-répertoire — annulation du nettoyage."
+        return 0
+    fi
+
+    # On passe en mode tolérant sur les erreurs pendant les suppressions
+    set +e
+
+    # 1) Supprimer fichiers volumineux (> LARGE_FILE_MB) (fichiers réguliers)
+    print_info "Suppression des fichiers > ${LARGE_FILE_MB} Mo dans /tmp (pour libérer de l'espace)..."
+    find /tmp -type f -size +"${LARGE_FILE_MB}"M -print -exec rm -f {} \; 2>/dev/null || true
+
+    # 2) Supprimer les fichiers/dirs dans /tmp inactifs depuis CLEAN_TMP_MINUTES minutes
+    print_info "Suppression des entrées inactives depuis > ${CLEAN_TMP_MINUTES} minutes..."
+    # On limite la profondeur à 1 pour éviter de parcourir récursivement de très gros arbres
+    find /tmp -mindepth 1 -maxdepth 1 -mmin +"${CLEAN_TMP_MINUTES}" -print -exec rm -rf {} \; 2>/dev/null || true
+
+    # 3) Supprimer archives temporaires anciennes (sécurité supplémentaire)
+    print_info "Suppression des archives (.zip .tar.gz .tgz .tar.xz) âgées de > ${CLEAN_TMP_MINUTES} minutes..."
+    find /tmp -type f \( -iname '*.zip' -o -iname '*.tar.gz' -o -iname '*.tgz' -o -iname '*.tar.xz' -o -iname '*.tar' \) -mmin +"${CLEAN_TMP_MINUTES}" -print -exec rm -f {} \; 2>/dev/null || true
+
+    # 4) Supprimer core dumps (souvent énormes)
+    print_info "Suppression des core dumps éventuels..."
+    find /tmp -type f -iname 'core*' -size +1M -print -exec rm -f {} \; 2>/dev/null || true
+
+    # 5) Forcer sync et recalculer
+    sync 2>/dev/null || true
+
+    # Rétablir comportement normal d'erreur
+    set -e
+
+    AFTER_MB=$(du -sm /tmp 2>/dev/null | awk '{print $1}' || echo 0)
+    print_info "Espace utilisé /tmp : ${AFTER_MB} Mo (après nettoyage)."
+    local FREED=$(( BEFORE_MB - AFTER_MB ))
+    if (( FREED > 0 )); then
+        print_success "Nettoyage terminé — libéré ${FREED} Mo."
+    else
+        print_warning "Nettoyage terminé — aucune place significative libérée."
+    fi
+
+    return 0
+}
+
 install_wine_compatibility() {
     print_header "ETAPE 21/$TOTAL_STEPS: INSTALLATION COMPATIBILITE WINDOWS"
     CURRENT_STEP=21
@@ -3032,6 +3092,8 @@ EOF
 install_software_packages() {
     print_header "ETAPE 22/$TOTAL_STEPS: INSTALLATION LOGICIELS ESSENTIELS"
     CURRENT_STEP=22
+
+    clean_tmp
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation des logiciels"
@@ -3647,7 +3709,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v480.4
+# Configuration Bash - Arch Linux Fallout Edition v481.4
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4061,13 +4123,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V480.4 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V481.4 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V480.4 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V481.4 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4179,7 +4241,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V480.4 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V481.4 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
