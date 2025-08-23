@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 if ! command -v arch-chroot &>/dev/null; then
@@ -11,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 485.6, correctif 6 de la version 485.6
-# Mise à jour : 23/08/2025 à 20:10
+# Version: 485.7, correctif 6 de la version 485.7
+# Mise à jour : 23/08/2025 à 21:05
 
 # Erreurs  à corriger :
 
@@ -36,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="485.6"
+readonly SCRIPT_VERSION="485.7"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -522,6 +521,18 @@ install_required_commands() {
             print_error "Echec de l'installation des dépendances"
             return 1
         }
+    fi
+
+    # Assure unzip aussi dans le chroot cible (/mnt) si on a monté la cible
+    if [[ -d /mnt && -d /mnt/usr ]]; then
+        if ! /usr/bin/arch-chroot /mnt bash -lc "command -v unzip >/dev/null 2>&1"; then
+            print_info "unzip absent dans le chroot /mnt — tentative d'installation dans le chroot..."
+            /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip || {
+                print_warning "Impossible d'installer unzip dans le chroot (/mnt). Installez-le manuellement : /usr/bin/arch-chroot /mnt pacman -S unzip"
+            }
+        else
+            print_info "unzip déjà présent dans le chroot /mnt"
+        fi
     fi
 
     print_success "Toutes les commandes requises sont disponibles"
@@ -1058,7 +1069,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 485.6:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 485.7:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3646,7 +3657,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v485.6
+# Configuration Bash - Arch Linux Fallout Edition v485.7
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4060,13 +4071,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V485.6 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V485.7 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V485.6 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V485.7 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4178,7 +4189,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V485.6 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V485.7 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
