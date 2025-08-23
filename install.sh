@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 475.3, correctif 3 de la version 475.3
-# Mise à jour : 23/08/2025 à 16:18
+# Version: 477.3, correctif 3 de la version 477.3
+# Mise à jour : 23/08/2025 à 17:02
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="475.3"
+readonly SCRIPT_VERSION="477.3"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 475.3:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 477.3:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2334,60 +2334,251 @@ EOF
 }
 
 configure_sddm() {
-    print_header "CONFIGURATION DE SDDM - THEME (Fallout)"
+    print_header "CONFIGURATION SDDM – THÈME (Fallout)"
+    local THEME_NAME="SDDM-Fallout-theme"
+    local DEST_DIR="/mnt/usr/share/sddm/themes/$THEME_NAME"
+    local TMP_DIR=""
+    local ZIP_PATH=""
+    local INCLUDE_VIDEO="${SDDM_INCLUDE_VIDEO:-true}"   # true|false (par défaut true)
+    local BRANCH="${SDDM_GH_BRANCH:-Projets}"          # branche GH si fallback clone nécessaire
+    local GH_REPO="${SDDM_GH_REPO:-https://github.com/PapaOursPolaire/arch}"
 
-    local theme_url="https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip"
-    local theme_tmp="/tmp/sddm_theme"
-    local theme_dest="/mnt/usr/share/sddm/themes/SDDM-Fallout-theme"
-
-    # Nettoyage avant extraction
-    rm -rf "$theme_tmp" "$theme_dest"
-    mkdir -p "$theme_tmp" "$theme_dest"
-
-    print_info "Téléchargement du thème Fallout pour SDDM..."
-    if ! curl -L "$theme_url" -o "$theme_tmp/theme.zip"; then
-        print_error "Échec du téléchargement du thème SDDM"
-        return 1
-    fi
-
-    print_info "Extraction du thème..."
-    if ! unzip -q "$theme_tmp/theme.zip" -d "$theme_tmp"; then
-        print_error "Échec de l'extraction du thème"
-        return 1
-    fi
-
-    rm -f "$theme_tmp/theme.zip" || true
-
-    # Détection du vrai dossier du thème (évite les doublons dans l’archive GitHub)
-    local extracted_dir
-    extracted_dir=$(find "$theme_tmp" -type d -name "SDDM-Fallout-theme" | head -n 1)
-    if [[ -z "$extracted_dir" ]]; then
-        print_error "Impossible de localiser le dossier SDDM-Fallout-theme dans l’archive"
-        return 1
-    fi
-
-    # Copie uniquement les fichiers utiles
-    rsync -a --exclude='.git' --exclude='*.md' \
-            "$extracted_dir/" "$theme_dest/" || {
-        print_error "Échec de la copie des fichiers du thème"
+    # ------- helpers sûrs -------
+    _cleanup() {
+        [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]] && rm -rf "$TMP_DIR"
+        [[ -n "$ZIP_PATH" && -f "$ZIP_PATH" ]] && rm -f "$ZIP_PATH"
+    }
+    _fail() {
+        print_error "$1"
+        _cleanup
         return 1
     }
+    _ok() {
+        print_success "$1"
+    }
 
-    # Vérification espace disque
-    local free_space
-    free_space=$(df -Pm /mnt | awk 'NR==2 {print $4}')
-    if (( free_space < 200 )); then
-        print_warning "Espace disque faible : ${free_space}M restants après copie du thème"
+    trap _cleanup EXIT
+
+    # ------- vérifs rapides -------
+    if [[ -z "${USERNAME:-}" ]]; then
+        _fail "USERNAME n'est pas défini (nécessaire pour le préremplissage)."
+    fi
+    if ! command -v rsync >/dev/null 2>&1; then
+        print_info "Installation de rsync (hôte)…"
+        pacman -Sy --noconfirm --needed rsync || _fail "Impossible d’installer rsync."
+    fi
+    if ! command -v unzip >/dev/null 2>&1; then
+        print_info "Installation de unzip (hôte)…"
+        pacman -Sy --noconfirm --needed unzip || _fail "Impossible d’installer unzip."
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        print_info "Installation de git (hôte)…"
+        pacman -Sy --noconfirm --needed git || _fail "Impossible d’installer git."
     fi
 
-    # Configuration de SDDM
-    mkdir -p /mnt/etc/sddm.conf.d
-    cat > /mnt/etc/sddm.conf.d/theme.conf <<EOF
-[Theme]
-Current=SDDM-Fallout-theme
-EOF
+    # sddm côté système cible
+    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed sddm || _fail "Impossible d’installer sddm dans le chroot."
 
-    print_success "Thème Fallout installé et configuré pour SDDM"
+    # ------- préparer le tmp -------
+    TMP_DIR="$(mktemp -d -p /tmp sddmfallout.XXXXXX)" || _fail "mktemp a échoué."
+    print_info "Répertoire temporaire: $TMP_DIR"
+
+    # ------- récupérer le thème -------
+    # 1) Priorité au ZIP si SDDM_THEME_ARCHIVE_URL est défini
+    if [[ -n "${SDDM_THEME_ARCHIVE_URL:-}" ]]; then
+        ZIP_PATH="$TMP_DIR/theme.zip"
+        print_info "Téléchargement du thème (ZIP)…"
+        if ! curl -fL --retry 3 --retry-delay 2 -o "$ZIP_PATH" "$SDDM_THEME_ARCHIVE_URL"; then
+            print_warning "Téléchargement ZIP échoué, tentative via git clone du repo complet…"
+            ZIP_PATH=""
+        fi
+        if [[ -n "$ZIP_PATH" ]]; then
+            print_info "Extraction du thème…"
+            if ! unzip -q "$ZIP_PATH" -d "$TMP_DIR/unzip"; then
+                print_warning "Extraction ZIP échouée, tentative via git clone du repo complet…"
+                rm -f "$ZIP_PATH"; ZIP_PATH=""
+            fi
+        fi
+    fi
+
+    # 2) Fallback: git clone du repo, puis copie du dossier SDDM-Fallout-theme
+    if [[ -z "$ZIP_PATH" ]]; then
+        print_info "Clonage du dépôt $GH_REPO (branche: $BRANCH)…"
+        if ! git clone --depth=1 --branch "$BRANCH" "$GH_REPO" "$TMP_DIR/repo"; then
+            _fail "git clone a échoué ($GH_REPO)."
+        fi
+    fi
+
+    # ------- trouver le dossier du thème extrait -------
+    local SRC_DIR=""
+    if [[ -n "$ZIP_PATH" ]]; then
+        # Le ZIP peut créer un sous-dossier avec un nom variable → rechercher le dossier contenant Main.qml
+        SRC_DIR="$(find "$TMP_DIR/unzip" -type f -name 'Main.qml' -printf '%h\n' | head -n1)"
+    else
+        SRC_DIR="$(find "$TMP_DIR/repo" -type d -path "*/SDDM-Fallout-theme" -print -quit)"
+    fi
+    if [[ -z "$SRC_DIR" || ! -f "$SRC_DIR/Main.qml" ]]; then
+        _fail "Dossier de thème introuvable ou Main.qml absent."
+    fi
+    _ok "Sources du thème: $SRC_DIR"
+
+    # ------- vérifier les fichiers clés, y compris la vidéo -------
+    local HAVE_GIF="no"
+    local HAVE_MP4="no"
+    local HAVE_IMG="no"
+
+    [[ -f "$SRC_DIR/background.gif" ]] && HAVE_GIF="yes"
+    [[ -f "$SRC_DIR/background.mp4" ]] && HAVE_MP4="yes"
+    if ls "$SRC_DIR"/background*.jpg "$SRC_DIR"/background*.png >/dev/null 2>&1; then
+        HAVE_IMG="yes"
+    fi
+
+    if [[ "$INCLUDE_VIDEO" == "true" && "$HAVE_MP4" != "yes" ]]; then
+        print_warning "Vidéo absente dans la source, elle ne sera pas copiée."
+        INCLUDE_VIDEO="false"
+    fi
+
+    # ------- évaluer l’espace requis / disponible -------
+    # Calcul brut: du -sm du dossier source. Si on doit exclure la vidéo, on recalcule une estimation sans MP4.
+    local SRC_SIZE_MB
+    SRC_SIZE_MB="$(du -sm "$SRC_DIR" | awk '{print $1}')" || SRC_SIZE_MB=0
+
+    local MP4_SIZE_MB=0
+    if [[ "$HAVE_MP4" == "yes" ]]; then
+        MP4_SIZE_MB="$(du -sm "$SRC_DIR/background.mp4" | awk '{print $1}')" || MP4_SIZE_MB=0
+    fi
+    local EST_NO_MP4_MB=$(( SRC_SIZE_MB - MP4_SIZE_MB ))
+    (( EST_NO_MP4_MB < 0 )) && EST_NO_MP4_MB=0
+
+    # Espace libre sur /mnt (en Mo)
+    local FREE_MNT_MB
+    FREE_MNT_MB="$(df -Pm /mnt | awk 'NR==2{print $4}')" || FREE_MNT_MB=0
+
+    print_info "Taille thème (approx): ${SRC_SIZE_MB} Mo (vidéo: ${MP4_SIZE_MB} Mo) | Libre /mnt: ${FREE_MNT_MB} Mo"
+
+    if (( FREE_MNT_MB < SRC_SIZE_MB + 100 )); then
+        if [[ "$INCLUDE_VIDEO" == "true" && (( FREE_MNT_MB >= EST_NO_MP4_MB + 100 )) ]]; then
+            print_warning "Espace insuffisant pour la vidéo → copie sans la vidéo."
+            INCLUDE_VIDEO="false"
+        else
+            _fail "Espace insuffisant sur /mnt (libre: ${FREE_MNT_MB} Mo, requis ~${SRC_SIZE_MB} Mo)."
+        fi
+    fi
+
+    # ------- créer destination & copier proprement -------
+    print_info "Préparation de $DEST_DIR…"
+    mkdir -p "/mnt/usr/share/sddm/themes" || _fail "mkdir destination"
+    # Si un ancien thème existe, on le remplace proprement
+    if [[ -d "$DEST_DIR" ]]; then
+        print_info "Un thème existant a été détecté → sauvegarde et remplacement…"
+        rm -rf "${DEST_DIR}.bak" 2>/dev/null || true
+        mv "$DEST_DIR" "${DEST_DIR}.bak" || _fail "Impossible de déplacer l'ancien thème."
+    fi
+    mkdir -p "$DEST_DIR" || _fail "Impossible de créer $DEST_DIR."
+
+    # Lister les motifs à inclure / exclure
+    local RSYNC_FILTER="$TMP_DIR/rsync.filter"
+    {
+        echo "+ Main.qml"
+        echo "+ metadata.desktop"
+        echo "+ *.qml"
+        echo "+ *.js"
+        echo "+ *.conf"
+        echo "+ *.ttf"
+        echo "+ *.otf"
+        echo "+ background.gif"
+        echo "+ background*.jpg"
+        echo "+ background*.png"
+        # vidéo: incluse seulement si autorisée
+        if [[ "$INCLUDE_VIDEO" == "true" ]]; then
+            echo "+ background.mp4"
+        else
+            echo "- background.mp4"
+        fi
+        echo "+ */"
+        echo "- *"
+    } > "$RSYNC_FILTER"
+
+    print_info "Copie des fichiers du thème (rsync)…"
+    if ! rsync -a --delete --prune-empty-dirs --filter="merge $RSYNC_FILTER" "$SRC_DIR"/ "$DEST_DIR"/; then
+        _fail "rsync a échoué."
+    fi
+
+    # ------- permissions et propriétaire -------
+    /usr/bin/arch-chroot /mnt /bin/bash -c "
+        set -e
+        chown -R root:root '/usr/share/sddm/themes/$THEME_NAME'
+        find '/usr/share/sddm/themes/$THEME_NAME' -type d -exec chmod 755 {} +
+        find '/usr/share/sddm/themes/$THEME_NAME' -type f -exec chmod 644 {} +
+    " || _fail "Permissions du thème."
+
+    # ------- Xsetup (clavier fr au greeter, écran) -------
+    print_info "Configuration de /etc/sddm/Xsetup…"
+    /usr/bin/arch-chroot /mnt /bin/bash <<'EOS'
+set -e
+mkdir -p /etc/sddm
+cat > /etc/sddm/Xsetup << 'XEOF'
+#!/bin/sh
+# Clavier FR au greeter
+if command -v setxkbmap >/dev/null 2>&1; then
+    setxkbmap fr 2>/dev/null || true
+fi
+# Fix HiDPI (optionnel, décommente si besoin)
+# xrandr --dpi 120 2>/dev/null || true
+XEOF
+chmod +x /etc/sddm/Xsetup
+EOS
+    _ok "Xsetup OK"
+
+    # ------- sddm.conf et conf.d -------
+    print_info "Activation du thème et préremplissage utilisateur…"
+    /usr/bin/arch-chroot /mnt /bin/bash -c "
+set -e
+mkdir -p /etc/sddm.conf.d
+# Thème
+cat > /etc/sddm.conf.d/10-theme.conf <<CONF
+[Theme]
+Current=$THEME_NAME
+CONF
+
+# Utilisateur: mémoriser le dernier utilisateur (prérempli au greeter)
+cat > /etc/sddm.conf.d/10-users.conf <<CONF
+[Users]
+RememberLastUser=true
+RememberLastSession=true
+MinimumUid=1000
+CONF
+
+# État persisté (affichage du dernier user dans le champ)
+mkdir -p /var/lib/sddm
+# NOTE: SDDM l'écrase automatiquement ; on le pose une première fois pour préremplir
+cat > /var/lib/sddm/state.conf <<CONF
+[Last]
+User=$USERNAME
+CONF
+" || _fail "Configuration sddm.conf"
+
+    # ------- service sddm -------
+    print_info "Activation du service sddm…"
+    /usr/bin/arch-chroot /mnt systemctl enable sddm.service >/dev/null 2>&1 || _fail "systemctl enable sddm"
+
+    # ------- vérifications finales -------
+    if [[ ! -f "$DEST_DIR/Main.qml" ]]; then
+        _fail "Main.qml absent dans $DEST_DIR (copie incomplète)."
+    fi
+    if [[ "$INCLUDE_VIDEO" == "true" && ! -f "$DEST_DIR/background.mp4" ]]; then
+        _fail "La vidéo devait être incluse mais est absente."
+    fi
+    if [[ "$HAVE_GIF" == "yes" && ! -f "$DEST_DIR/background.gif" ]]; then
+        print_warning "GIF attendu mais manquant dans la destination."
+    fi
+
+    # ------- nettoyage -------
+    _cleanup
+    trap - EXIT
+
+    _ok "Thème SDDM installé dans $DEST_DIR (vidéo: $INCLUDE_VIDEO)"
+    print_info "Le champ utilisateur sera prérempli (dernier utilisateur: $USERNAME)."
 }
 
 configure_kde_lockscreen() {
@@ -3524,7 +3715,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v475.3
+# Configuration Bash - Arch Linux Fallout Edition v477.3
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -3938,13 +4129,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V475.3 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V477.3 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V475.3 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V477.3 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4056,7 +4247,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V475.3 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V477.3 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
