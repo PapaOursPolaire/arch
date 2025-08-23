@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 464.2, correctif 2 de la version 464.2
-# Mise à jour : 23/08/2025 à 12:27
+# Version: 465.2, correctif 2 de la version 465.2
+# Mise à jour : 23/08/2025 à 12:32
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="464.2"
+readonly SCRIPT_VERSION="465.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1056,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 464.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 465.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1191,72 +1191,87 @@ check_requirements() {
 }
 
 test_environment() {
-    print_header "ETAPE 2/$TOTAL_STEPS: TEST DE L'ENVIRONNEMENT"
-    CURRENT_STEP=2
+    print_header "ETAPE 2/$TOTAL_STEPS: VERIFICATION DE L'ENVIRONNEMENT"
+    CURRENT_STEP=1
 
-    # Liste des paquets requis
-    local packages=(
-        git
-        curl
-        wget
-        tar
-        unzip
-        base-devel
-        pacman-contrib
-        sed
-        grep
-        bash
-    )
+    # Vérifie root
+    if [[ $EUID -ne 0 ]]; then
+        print_error "Ce script doit être exécuté en tant que root !"
+        return 1
+    fi
 
-    print_info "Vérification et installation des dépendances..."
+    # Vérifie UEFI
+    if [[ ! -d /sys/firmware/efi ]]; then
+        print_error "Ce script nécessite un système UEFI !"
+        return 1
+    fi
 
-    # Mise à jour de pacman avant toute installation
+    # Vérifie la connexion Internet
+    print_info "Vérification de la connexion Internet..."
+    local test_hosts=("archlinux.org" "github.com" "8.8.8.8" "1.1.1.1")
+    local connected=false
+    for host in "${test_hosts[@]}"; do
+        if ping -c 1 -W 3 "$host" &>/dev/null; then
+            print_success "Connexion Internet active (test: $host)"
+            connected=true
+            break
+        fi
+    done
+    if [[ "$connected" != true ]]; then
+        print_error "Aucune connexion Internet détectée !"
+        return 1
+    fi
+
+    # Active user namespaces si nécessaire
+    if sysctl -n kernel.unprivileged_userns_clone 2>/dev/null | grep -q '^0$'; then
+        print_info "Activation de kernel.unprivileged_userns_clone=1"
+        sysctl -w kernel.unprivileged_userns_clone=1 || true
+        echo "kernel.unprivileged_userns_clone=1" > /etc/sysctl.d/00-local-userns.conf
+    fi
+
+    # Synchronise l’horloge
+    timedatectl set-ntp true || true
+    sleep 2
+
+    # Mise à jour pacman
+    print_info "Mise à jour des bases de données pacman..."
     if ! pacman -Sy --noconfirm; then
-        print_warning "Échec lors de pacman -Sy, tentative de correction..."
+        print_warning "Erreur lors de la mise à jour, tentative de correction..."
         pacman -Scc --noconfirm || true
         rm -rf /var/lib/pacman/sync/* || true
         pacman -Sy --noconfirm || {
-            print_error "Impossible de synchroniser pacman, abandon."
+            print_error "Impossible de mettre à jour pacman"
             return 1
         }
     fi
 
-    # Installation sécurisée des dépendances
-    for pkg in "${packages[@]}"; do
-        if ! pacman -Qi "$pkg" &>/dev/null; then
-            print_info "Installation de $pkg..."
-            if ! pacman -S --noconfirm --needed "$pkg"; then
-                print_warning "Erreur lors de l'installation de $pkg, nouvelle tentative..."
-                if ! pacman -S --noconfirm --needed "$pkg"; then
-                    print_error "Impossible d’installer $pkg. Vérifie ta connexion ou tes dépôts."
-                    return 1
-                fi
-            fi
-        else
-            print_success "$pkg déjà installé"
-        fi
-    done
-
-    # Vérifie que git fonctionne (essai clone)
-    if ! git --version &>/dev/null; then
-        print_error "Git ne fonctionne pas correctement, vérifie ton installation"
-        return 1
+    # Vérification/installation de unzip (live)
+    print_info "Vérification de 'unzip' (live)..."
+    if ! command -v unzip >/dev/null 2>&1; then
+        pacman -S --noconfirm --needed unzip \
+        || { print_warning "Tentative avec pacman -Sy..."; \
+                pacman -Sy --noconfirm && pacman -S --noconfirm --needed unzip \
+                || { print_error "Impossible d’installer unzip (live)"; return 1; }; }
     fi
+    print_success "'unzip' disponible dans le live"
 
-    # Vérifie que curl fonctionne
-    if ! curl -Is https://archlinux.org | head -n 1 | grep -q "200"; then
-        print_warning "curl semble avoir un problème avec HTTPS. Vérifie ton certificat ou proxy"
-    else
-        print_success "curl fonctionne"
+    # Vérification/installation de unzip (chroot)
+    print_info "Vérification de 'unzip' (chroot)..."
+    if ! /usr/bin/arch-chroot /mnt bash -lc 'command -v unzip >/dev/null 2>&1'; then
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip \
+        || { print_warning "Tentative avec pacman -Sy dans le chroot..."; \
+                /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm && \
+                /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip \
+                || { print_error "Impossible d’installer unzip (chroot)"; return 1; }; }
     fi
+    print_success "'unzip' disponible dans le chroot"
 
-    # Vérifie que unzip fonctionne
-    if ! unzip -hh &>/dev/null; then
-        print_error "unzip est installé mais semble défectueux"
-        return 1
-    fi
+    # Nettoyage cache pacman pour économiser l’espace disque
+    paccache -rk 1 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt paccache -rk 1 2>/dev/null || true
 
-    print_success "Environnement vérifié et toutes les dépendances sont prêtes"
+    print_success "Environnement vérifié"
+    return 0
 }
 
 # Fonctions de gestion des disques et partitions
@@ -3658,7 +3673,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v464.2
+# Configuration Bash - Arch Linux Fallout Edition v465.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4072,13 +4087,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V464.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V465.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V464.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V465.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4190,7 +4205,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V464.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V465.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
