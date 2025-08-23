@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 474.2, correctif 2 de la version 474.2
-# Mise à jour : 23/08/2025 à 14:53
+# Version: 474.3, correctif 3 de la version 474.3
+# Mise à jour : 23/08/2025 à 14:54
 
 # Erreurs  à corriger :
 
@@ -34,10 +34,8 @@ fi
 # Configuration globale
 set -euo pipefail
 
-exec 2>>/mnt/var/log/install-errors.log
-
 # Configuration
-readonly SCRIPT_VERSION="474.2"
+readonly SCRIPT_VERSION="474.3"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1058,7 +1056,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 474.2:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 474.3:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3642,7 +3640,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v474.2
+# Configuration Bash - Arch Linux Fallout Edition v474.3
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4056,13 +4054,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V474.2 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V474.3 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V474.2 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V474.3 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4174,7 +4172,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V474.2 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V474.3 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
