@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 487.7, correctif 6 de la version 487.7
-# Mise à jour : 23/08/2025 à 21:48
+# Version: 488.7, correctif 7 de la version 488.7
+# Mise à jour : 23/08/2025 à 22:36
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="487.7"
+readonly SCRIPT_VERSION="488.7"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1069,7 +1069,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 487.7:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 488.7:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2431,12 +2431,13 @@ configure_kde_lockscreen() {
     # variables temporaires locales
     local tmp_dir archive_zip theme_root avail_kb needed_kb
 
-    # Vérifier unzip dans le chroot et l'installer si possible
+        # --- Vérifier/installer unzip sur L'HOTE (important : pas seulement dans le chroot)
     if ! command -v unzip >/dev/null 2>&1; then
-        print_info "unzip introuvable — tentative d'installation dans le chroot"
-        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip || {
-            print_warning "Impossible d'installer unzip automatiquement. Installez-le manuellement."
-        }
+        print_warning "unzip introuvable sur l'hôte — tentative d'installation locale..."
+        if ! pacman -Sy --noconfirm --needed unzip; then
+            print_error "Impossible d'installer unzip sur l'hôte. Installez-le puis relancez le script (pacman -S unzip)."
+            return 1
+        fi
     fi
 
     # Create tmp dir on the host (not inside /mnt root)
@@ -2444,40 +2445,50 @@ configure_kde_lockscreen() {
         print_error "Impossible de créer un répertoire temporaire"
         return 1
     }
-    # Ensure cleanup even on error
-    trap '[[ -n "${tmp_dir:-}" ]] && rm -rf "${tmp_dir}"' RETURN EXIT
+    # Ensure cleanup even on error - safely (n'utilise pas l'expansion anticipée)
+    trap '[[ -n "${tmp_dir:-}" && -d "${tmp_dir}" ]] && rm -rf "${tmp_dir}"' EXIT
 
     archive_zip="$tmp_dir/splash.zip"
 
     print_info "Téléchargement du splash depuis : $KDESPLASH_URL"
     if ! curl -L --fail --retry 3 -o "$archive_zip" "$KDESPLASH_URL"; then
-        print_error "Échec du téléchargement du splash"
+        print_error "Échec du téléchargement du splash (curl a échoué)."
         return 1
     fi
 
     # Vérifier la place disponible sur la partition de DEST_DIR (en KB)
     avail_kb=$(df --output=avail -k "$(dirname "$DEST_DIR")" 2>/dev/null | tail -n1 | tr -d ' ')
-    # estimation conservatrice : 200 MB (200*1024 KB) minimum requis (ajuste si nécessaire)
     needed_kb=$((200 * 1024))
     if [[ -z "$avail_kb" ]] || (( avail_kb < needed_kb )); then
-        print_warning "Espace faible sur la partition cible (${avail_kb:-0} KB). Tentative d'extraction en temporaire."
-        # still continue but warn; extraction could fail
+        print_warning "Espace faible sur la partition cible (${avail_kb:-0} KB). Extraction en temporaire (peut échouer si espace insuffisant)."
     fi
 
-    # Extraction (silencieuse) dans tmp_dir
-    print_info "Extraction du zip..."
-    if ! unzip -q "$archive_zip" -d "$tmp_dir"; then
-        print_error "Échec de l'extraction (archive corrompue ou unzip absent)."
+    # Extraction (afficher erreurs pour debug) — n'utilise pas -q pour voir les messages d'erreur
+    print_info "Extraction du zip dans $tmp_dir (logs visibles en cas d'erreur)..."
+    if ! unzip -o "$archive_zip" -d "$tmp_dir" 2> "$tmp_dir/unzip.err"; then
+        print_error "Échec de l'extraction (archive corrompue ou unzip absent). Voir $tmp_dir/unzip.err pour détails :"
+        sed -n '1,200p' "$tmp_dir/unzip.err" || true
         return 1
     fi
 
-    # Trouver le dossier racine réel qui contient 'contents' ou metadata.desktop
+    # Détection plus robuste du dossier racine du thème :
+    # 1) si un dossier portant le nom attendu existe, on le prend
     theme_root=$(find "$tmp_dir" -maxdepth 3 -type d -name 'fallout-splashscreen4k*' -print -quit || true)
+    # 2) sinon, chercher le premier répertoire parent contenant metadata.desktop (méthode fiable)
     if [[ -z "$theme_root" ]]; then
-        # fallback : first directory that contains metadata.desktop or Splash.qml
-        theme_root=$(find "$tmp_dir" -mindepth 1 -maxdepth 4 -type d \( -exec test -e "{}/metadata.desktop" \; -o -exec test -e "{}/contents/Splash.qml" \; \) -print -quit 2>/dev/null || true)
+        metadata_file=$(find "$tmp_dir" -type f -iname 'metadata.desktop' -print -quit || true)
+        if [[ -n "$metadata_file" ]]; then
+            theme_root=$(dirname "$metadata_file")
+        fi
     fi
-    # if still empty, set to tmp_dir
+    # 3) encore si vide, chercher un fichier typique du splash (Splash.qml ou contents/Splash.qml)
+    if [[ -z "$theme_root" ]]; then
+        splash_file=$(find "$tmp_dir" -type f -iname 'Splash.qml' -o -iname 'Splash.qml' -print -quit 2>/dev/null || true)
+        if [[ -n "$splash_file" ]]; then
+            theme_root=$(dirname "$splash_file")
+        fi
+    fi
+    # 4) fallback final : tmp_dir (on copy tout si on n'a rien d'autre)
     theme_root="${theme_root:-$tmp_dir}"
 
     print_info "Contenu trouvé dans: $theme_root"
@@ -3658,7 +3669,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v487.7
+# Configuration Bash - Arch Linux Fallout Edition v488.7
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4072,13 +4083,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V487.7 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V488.7 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V487.7 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V488.7 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4190,7 +4201,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V487.7 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V488.7 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
