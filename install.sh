@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 482.5, correctif 5 de la version 482.5
-# Mise à jour : 23/08/2025 à 19:05
+# Version: 485.5, correctif 5 de la version 485.5
+# Mise à jour : 23/08/2025 à 20:05
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="482.5"
+readonly SCRIPT_VERSION="485.5"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -139,6 +139,7 @@ main() {
     # Phase 5: Bootloader et thèmes
     configure_grub
     install_fallout_theme
+    configure_kde_lockscreen
     
     # Phase 6: Audio et multimédia
     install_audio_system
@@ -1056,7 +1057,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 482.5:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 485.5:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2334,183 +2335,78 @@ EOF
 }
 
 configure_sddm() {
-    print_header "CONFIGURATION SDDM – THÈME (Fallout)"
+    print_header "CONFIGURATION DU DISPLAY MANAGER (SDDM OU GDM)"
 
-    # Paramètres / defaults
-    local THEME_NAME="SDDM-Fallout-theme"
-    local DEST_DIR="/mnt/usr/share/sddm/themes/${THEME_NAME}"
-    local TMP_DIR=""
-    local ZIP_PATH=""
-    local INCLUDE_VIDEO="${SDDM_INCLUDE_VIDEO:-true}"   # true|false (par défaut true)
-    local BRANCH="${SDDM_GH_BRANCH:-Projets}"           # branche GH si fallback clone nécessaire
-    local GH_REPO="${SDDM_GH_REPO:-https://github.com/PapaOursPolaire/arch}"
+    local repo_zip="/root/Projets.zip"
+    local extract_dir="/root/arch-Projets"
+    local theme_dir="/usr/share/sddm/themes/SDDM-Fallout-theme"
 
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation configure_sddm"
+    # 1) Si GNOME → GDM
+    if /usr/bin/arch-chroot /mnt pacman -Qi gdm &>/dev/null && \
+        /usr/bin/arch-chroot /mnt pacman -Qi gnome-shell &>/dev/null; then
+        print_info "GNOME détecté → configuration de GDM"
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed gdm || {
+            print_error "Impossible d’installer GDM"
+            return 1
+        }
+        /usr/bin/arch-chroot /mnt systemctl enable gdm.service
+        print_success "GDM activé (SDDM ignoré)."
         return 0
     fi
 
-    # Créer un dossier temporaire et s'assurer qu'il est supprimé à la sortie de la fonction
-    TMP_DIR="$(mktemp -d 2>/dev/null || printf '/tmp/sddm_tmp_%s' "$$")"
-    trap 'rm -rf "$TMP_DIR" 2>/dev/null || true' RETURN
+    # 2) Installer SDDM et unzip
+    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed sddm unzip curl || {
+        print_error "Impossible d’installer SDDM ou ses dépendances"
+        return 1
+    }
 
-    # --- Nettoyage initial des .zip "orphelins" dans /tmp :
-    # On supprime les archives dont le dossier extrait existe déjà dans les thèmes SDDM.
-    if command -v unzip &>/dev/null; then
-        for z in /tmp/*.zip; do
-            [[ -f "$z" ]] || continue
-            # Récupérer le "top-level dir" dans l'archive (silencieux si échec)
-            local top
-            top="$(unzip -l "$z" 2>/dev/null | awk 'NR>3 && NF{print $4; exit}' || true)"
-            top="${top%%/*}"   # garder la première composante
-            if [[ -n "$top" ]]; then
-                if [[ -d "/mnt/usr/share/sddm/themes/$top" || -d "/usr/share/sddm/themes/$top" ]]; then
-                    print_info "Suppression archive orpheline: $z (dossier $top déjà présent)"
-                    rm -f "$z" || true
-                fi
-            fi
-        done
-    fi
-
-    # --- Obtenir l'archive / sources du thème ---
-    # 1) Si SDDM_THEME_URL est défini, tenter de le télécharger
-    if [[ -n "${SDDM_THEME_URL:-}" ]]; then
-        ZIP_PATH="$TMP_DIR/theme.zip"
-        if command -v wget &>/dev/null; then
-            print_info "Téléchargement du thème SDDM via wget..."
-            wget -q -O "$ZIP_PATH" "$SDDM_THEME_URL" || { print_warning "wget a échoué pour $SDDM_THEME_URL"; ZIP_PATH=""; }
-        elif command -v curl &>/dev/null; then
-            print_info "Téléchargement du thème SDDM via curl..."
-            curl -sSL -o "$ZIP_PATH" "$SDDM_THEME_URL" || { print_warning "curl a échoué pour $SDDM_THEME_URL"; ZIP_PATH=""; }
-        else
-            print_warning "wget/curl introuvable: impossible de télécharger le zip."
-            ZIP_PATH=""
-        fi
-    fi
-
-    # 2) Si pas d'archive, tenter git clone fallback (branche BRANCH)
-    local SRC_DIR=""
-    if [[ -n "$ZIP_PATH" && -f "$ZIP_PATH" ]]; then
-        print_info "Extraction de l'archive dans $TMP_DIR..."
-        mkdir -p "$TMP_DIR/extract"
-        if command -v unzip &>/dev/null; then
-            unzip -q "$ZIP_PATH" -d "$TMP_DIR/extract" || { print_warning "unzip a échoué sur $ZIP_PATH"; }
-        else
-            print_warning "unzip introuvable: extraction impossible."
-        fi
-        # trouver le dossier contenant Main.qml + metadata.desktop
-        SRC_DIR="$(find "$TMP_DIR/extract" -type f -name 'Main.qml' -exec dirname {} \; 2>/dev/null | head -n1 || true)"
-        if [[ -z "$SRC_DIR" ]]; then
-            SRC_DIR="$(find "$TMP_DIR/extract" -type f -name 'metadata.desktop' -exec dirname {} \; 2>/dev/null | head -n1 || true)"
-        fi
-    fi
-
-    if [[ -z "$SRC_DIR" ]]; then
-        # Try git clone into tmp
-        if command -v git &>/dev/null; then
-            print_info "Téléchargement via git (fallback) : $GH_REPO#$BRANCH"
-            git -c advice.detachedHead=false clone --depth 1 --branch "$BRANCH" "$GH_REPO" "$TMP_DIR/git" >/dev/null 2>&1 || {
-                print_warning "git clone a échoué (fallback)."
-            }
-            # Rechercher un dossier de thème dans le repo cloné
-            SRC_DIR="$(find "$TMP_DIR/git" -type f -name 'Main.qml' -exec dirname {} \; 2>/dev/null | head -n1 || true)"
-            if [[ -z "$SRC_DIR" ]]; then
-                SRC_DIR="$(find "$TMP_DIR/git" -type f -name 'metadata.desktop' -exec dirname {} \; 2>/dev/null | head -n1 || true)"
-            fi
-        else
-            print_warning "git introuvable: fallback git impossible."
-        fi
-    fi
-
-    # Si toujours rien, essayer une extraction simple du zip (cas où le zip contient directement le dossier attendu)
-    if [[ -z "$SRC_DIR" && -n "$ZIP_PATH" && -f "$ZIP_PATH" && -x "$(command -v unzip)" ]]; then
-        mkdir -p "$TMP_DIR/extract2"
-        unzip -q "$ZIP_PATH" -d "$TMP_DIR/extract2" || true
-        SRC_DIR="$(find "$TMP_DIR/extract2" -type f -name 'Main.qml' -exec dirname {} \; 2>/dev/null | head -n1 || true)"
-    fi
-
-    if [[ -z "$SRC_DIR" ]]; then
-        print_error "Impossible de localiser le dossier du thème SDDM (Main.qml non trouvé). Abandon."
+    # 3) Télécharger l’archive auto de GitHub
+    print_info "Téléchargement du dépôt GitHub (branche Projets)..."
+    if ! /usr/bin/arch-chroot /mnt curl -fL \
+        "https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip" \
+        -o "$repo_zip"; then
+        print_error "Échec du téléchargement de l’archive GitHub"
         return 1
     fi
 
-    # Détecter présence vidéo
-    local HAVE_MP4="no"
-    if [[ -f "$SRC_DIR/background.mp4" ]]; then
-        HAVE_MP4="yes"
-    fi
-
-    # Calculer tailles (approx) et vérifier place sur /mnt
-    local SRC_SIZE_MB=0 MP4_SIZE_MB=0 EST_NO_MP4_MB=0 FREE_MNT_MB=0
-    SRC_SIZE_MB="$(du -sm "$SRC_DIR" 2>/dev/null | awk '{print $1}' || echo 0)"
-    if [[ "$HAVE_MP4" == "yes" ]]; then
-        MP4_SIZE_MB="$(du -sm "$SRC_DIR/background.mp4" 2>/dev/null | awk '{print $1}' || echo 0)"
-    fi
-    EST_NO_MP4_MB=$(( SRC_SIZE_MB - MP4_SIZE_MB ))
-    (( EST_NO_MP4_MB < 0 )) && EST_NO_MP4_MB=0
-    FREE_MNT_MB="$(df -Pm /mnt 2>/dev/null | awk 'NR==2{print $4}' || echo 0)"
-
-    print_info "Taille thème: ${SRC_SIZE_MB} Mo (vidéo: ${MP4_SIZE_MB} Mo) | Libre /mnt: ${FREE_MNT_MB} Mo"
-
-    if (( FREE_MNT_MB < SRC_SIZE_MB + 100 )); then
-        if [[ "${INCLUDE_VIDEO:-false}" == "true" ]] && (( ${FREE_MNT_MB:-0} >= ${EST_NO_MP4_MB:-0} + 100 )); then
-            print_warning "Espace insuffisant pour la vidéo → on copie sans la vidéo"
-            INCLUDE_VIDEO="false"
-        else
-            print_error "Espace insuffisant sur /mnt (libre: ${FREE_MNT_MB} Mo, requis ~${SRC_SIZE_MB} Mo)."
-            return 1
-        fi
-    fi
-
-    # Préparer destination
-    mkdir -p "/mnt/usr/share/sddm/themes" || { print_error "Impossible de créer /mnt/usr/share/sddm/themes"; return 1; }
-    if [[ -d "$DEST_DIR" ]]; then
-        print_info "Thème existant détecté → sauvegarde et remplacement..."
-        rm -rf "${DEST_DIR}.bak" 2>/dev/null || true
-        mv "$DEST_DIR" "${DEST_DIR}.bak" || { print_error "Impossible de sauvegarder ancien thème"; return 1; }
-    fi
-    mkdir -p "$DEST_DIR" || { print_error "Impossible de créer $DEST_DIR"; return 1; }
-
-    # Préparer rsync filter dans TMP_DIR (TMP_DIR est bien initialisé ici)
-    local RSYNC_FILTER="${TMP_DIR}/rsync.filter"
-    {
-        echo "+ Main.qml"
-        echo "+ metadata.desktop"
-        echo "+ *.qml"
-        echo "+ *.js"
-        echo "+ *.conf"
-        echo "+ *.ttf"
-        echo "+ *.otf"
-        echo "+ background.gif"
-        echo "+ background*.jpg"
-        echo "+ background*.png"
-        if [[ "$INCLUDE_VIDEO" == "true" ]]; then
-            echo "+ background.mp4"
-        else
-            echo "- background.mp4"
-        fi
-        echo "+ */"
-        echo "- *"
-    } > "$RSYNC_FILTER"
-
-    # Copier avec rsync
-    print_info "Copie du thème vers $DEST_DIR (rsync)..."
-    if ! rsync -a --delete --prune-empty-dirs --filter="merge $RSYNC_FILTER" "$SRC_DIR"/ "$DEST_DIR"/; then
-        print_error "rsync a échoué lors de la copie du thème"
+    # 4) Extraction
+    /usr/bin/arch-chroot /mnt rm -rf "$extract_dir" "$theme_dir"
+    if ! /usr/bin/arch-chroot /mnt unzip -o "$repo_zip" -d /root/; then
+        print_error "Échec extraction de l’archive GitHub"
         return 1
     fi
 
-    # Permissions
-    print_info "Correction des permissions..."
-    chown -R root:root "$DEST_DIR" || true
-    chmod -R u+rwX,go+rX,go-w "$DEST_DIR" || true
+    # 5) Déplacement du thème
+    if /usr/bin/arch-chroot /mnt test -d "$extract_dir/SDDM-Fallout-theme"; then
+        /usr/bin/arch-chroot /mnt mv "$extract_dir/SDDM-Fallout-theme" "$theme_dir"
+    else
+        print_error "Le dossier SDDM-Fallout-theme n’a pas été trouvé dans l’archive"
+        return 1
+    fi
 
-    # Si on est dans un chroot /mnt, on peut aussi s'assurer que le thème est lisible après reboot
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "ldconfig || true" 2>/dev/null || true
+    # 6) Vérification du contenu
+    if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/Main.qml"; then
+        print_error "Main.qml introuvable — thème incomplet"
+        return 1
+    fi
+    if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/background.mp4"; then
+        print_warning "Attention : la vidéo background.mp4 est manquante"
+    fi
 
-    print_success "Thème SDDM déployé dans $DEST_DIR (INCLUDE_VIDEO=${INCLUDE_VIDEO})"
+    # 7) Configurer SDDM
+    print_info "Écriture de /etc/sddm.conf..."
+    /usr/bin/arch-chroot /mnt bash -c "cat > /etc/sddm.conf <<EOF
+[Theme]
+Current=SDDM-Fallout-theme
 
-    return 0
+[General]
+DisplayServer=wayland
+EOF"
+
+    # 8) Activer SDDM
+    /usr/bin/arch-chroot /mnt systemctl enable sddm.service
+
+    print_success "SDDM configuré avec succès avec le thème Fallout"
 }
 
 configure_kde_lockscreen() {
@@ -3589,7 +3485,6 @@ EOF
 }
 
 # Fastfetch s'exécute automatiquement
-# ----- Remplacer / coller cette fonction dans install2.sh -----
 install_fastfetch() {
     print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
 
@@ -3599,22 +3494,53 @@ install_fastfetch() {
     fi
 
     if [[ "${DRY_RUN:-false}" == "true" ]]; then
-        print_info "[DRY RUN] Simulation fastfetch"
+        print_info "[DRY RUN] install_fastfetch pour ${USERNAME}"
         return 0
     fi
 
-    # installer fastfetch si absent
-    if ! /usr/bin/arch-chroot /mnt /usr/bin/env bash -c 'command -v fastfetch >/dev/null 2>&1'; then
-        print_info "Installation de fastfetch dans le chroot..."
-        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch || print_warning "Impossible d'installer fastfetch via pacman"
+    local USER_HOME="/home/${USERNAME}"
+    local CHROOT_USER_HOME="/mnt${USER_HOME}"
+    local CONFIG_DIR="${CHROOT_USER_HOME}/.config/fastfetch"
+    local PROFILE_FILE="${CHROOT_USER_HOME}/.bash_profile"
+    local INVOKE_MARKER="# fastfetch autostart entry - added by alpha.sh"
+    local FASTFETCH_BIN="/usr/bin/fastfetch"
+    local installed_in_chroot=false
+
+    # 1) Vérifier si fastfetch est disponible dans le chroot
+    if /usr/bin/arch-chroot /mnt /usr/bin/env bash -lc 'command -v fastfetch >/dev/null 2>&1'; then
+        print_info "fastfetch déjà installé dans le chroot."
+        installed_in_chroot=true
+    else
+        print_info "Tentative d'installation de fastfetch dans le chroot via pacman..."
+        if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch >/dev/null 2>&1; then
+            print_success "fastfetch installé via pacman dans le chroot."
+            installed_in_chroot=true
+        else
+            print_warning "pacman n'a pas réussi à installer fastfetch dans le chroot."
+            # tenter AUR helper si présent
+            if /usr/bin/arch-chroot /mnt command -v paru >/dev/null 2>&1; then
+                print_info "Tentative d'installation via paru (AUR) dans le chroot..."
+                /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm fastfetch >/dev/null 2>&1 && installed_in_chroot=true || print_warning "paru a échoué."
+            elif /usr/bin/arch-chroot /mnt command -v yay >/dev/null 2>&1; then
+                print_info "Tentative d'installation via yay (AUR) dans le chroot..."
+                /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" yay -S --noconfirm fastfetch >/dev/null 2>&1 && installed_in_chroot=true || print_warning "yay a échoué."
+            else
+                print_warning "Aucun AUR helper détecté dans le chroot. Si fastfetch n'est pas installé, installe-le manuellement ou ajoute un AUR helper."
+            fi
+        fi
     fi
 
-    # config utilisateur
-    USER_HOME="/home/$USERNAME"
-    CFG_DIR="/mnt$USER_HOME/.config/fastfetch"
-    mkdir -p "$CFG_DIR" || true
+    if [[ "$installed_in_chroot" != true ]]; then
+        print_warning "fastfetch non installé automatiquement dans le chroot. La configuration utilisateur sera écrite, mais l'exécutable manquera."
+    fi
 
-    cat > "$CFG_DIR/config.jsonc" <<'FFCFG'
+    # 2) Créer configuration utilisateur (idempotent)
+    mkdir -p "$CONFIG_DIR" || {
+        print_error "Impossible de créer $CONFIG_DIR"
+        return 1
+    }
+
+    cat > "${CONFIG_DIR}/config.jsonc" <<'FFCFG'
 {
   "display": {
     "separator": " : ",
@@ -3622,9 +3548,10 @@ install_fastfetch() {
     "showColors": true
   },
   "modules": [
-    { "type": "title", "key": "Powered by PapaOursPolaire - available on GitHub" },
+    { "type": "title", "key": "Arch - Powered by alpha.sh" },
     { "type": "ascii", "logo": "arch" },
     { "type": "os" },
+    { "type": "host" },
     { "type": "kernel" },
     { "type": "uptime" },
     { "type": "shell" },
@@ -3635,43 +3562,41 @@ install_fastfetch() {
     { "type": "gpu" },
     { "type": "memory" },
     { "type": "disk" },
-    { "type": "packages" },
-    { "type": "localip" }
+    { "type": "packages" }
   ]
 }
 FFCFG
 
-    # droits
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R $USERNAME:$USERNAME '/home/$USERNAME/.config/fastfetch' || true" || true
+    # 3) Fixer droits à l'utilisateur dans le chroot
+    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R ${USERNAME}:${USERNAME} '/home/${USERNAME}/.config/fastfetch' >/dev/null 2>&1 || true"
 
-    # Ajouter le lancement automatique dans les fichiers rc (dans le chroot)
-    for rc in "/mnt/home/$USERNAME/.bashrc" "/mnt/home/$USERNAME/.zshrc" "/mnt/etc/skel/.bashrc" "/mnt/etc/skel/.zshrc"; do
-        touch "$rc" || true
-        sed -i '/# --- FASTFETCH AUTO (added by installer) ---/,+10d' "$rc" 2>/dev/null || true
-        cat >> "$rc" <<'BASHRC_EOF'
-# --- FASTFETCH AUTO (added by installer) ---
-if [[ -z "${FASTFETCH_SHOWN:-}" && "$-" == *i* ]]; then
-  export FASTFETCH_SHOWN=1
-  if command -v fastfetch >/dev/null 2>&1; then
-    if [[ -f "$HOME/.config/fastfetch/config.jsonc" ]]; then
-      echo
-      fastfetch --config "$HOME/.config/fastfetch/config.jsonc" 2>/dev/null || fastfetch
-      echo
-    else
-      echo
-      fastfetch 2>/dev/null || true
-      echo
-    fi
+    print_success "Configuration fastfetch écrite pour ${USERNAME}"
+
+    # 4) Ajouter invocation idempotente dans .bash_profile pour afficher fastfetch à la connexion
+    #    - On ajoute un bloc protégé par un marqueur pour éviter duplications
+    if ! grep -qF "$INVOKE_MARKER" "$PROFILE_FILE" 2>/dev/null; then
+        cat >> "$PROFILE_FILE" <<'BASHFF'
+
+# fastfetch autostart (affiche infos système dans les shells de connexion)
+# Ne s'exécute que dans un shell interactif et si fastfetch est disponible.
+$INVOKE_MARKER
+if [ -t 1 ] && command -v fastfetch >/dev/null 2>&1; then
+  # Eviter que fastfetch pollue les sessions graphiques non-terminales
+  if [ -z "$DISPLAY" ] || [[ "$TERM" =~ ^xterm|^rxvt|^screen|^tmux|^linux|^vt ]]; then
+    fastfetch --config ~/.config/fastfetch/config.jsonc || true
   fi
 fi
-# --- END FASTFETCH AUTO ---
-BASHRC_EOF
-    done
+BASHFF
+        # corriger propriétaire
+        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.bash_profile' >/dev/null 2>&1 || true"
+        print_success "Entrée fastfetch ajoutée dans $PROFILE_FILE"
+    else
+        print_info "Entrée fastfetch déjà présente dans $PROFILE_FILE — rien à faire."
+    fi
 
-    # corriger propriétaires
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R $USERNAME:$USERNAME /home/$USERNAME/.config /home/$USERNAME/.bashrc /home/$USERNAME/.zshrc || true" || true
+    # 5) Optionnel : si utilisateur KDE/XDG, indiquer comment autostart graphique (ne pas forcer terminal)
+    print_info "Si tu veux un autostart graphique (terminal qui lance fastfetch), crée un .desktop dans ~/.config/autostart qui lance ton terminal avec 'fastfetch' à l'ouverture."
 
-    print_success "Fastfetch configuré pour l'utilisateur $USERNAME"
     return 0
 }
 
@@ -3720,7 +3645,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v482.5
+# Configuration Bash - Arch Linux Fallout Edition v485.5
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4134,13 +4059,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V482.5 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V485.5 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V482.5 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V485.5 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4252,7 +4177,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V482.5 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V485.5 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
