@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 489.7, correctif 7 de la version 489.7
-# Mise à jour : 23/08/2025 à 23:17
+# Version: 490.7, correctif 7 de la version 490.7
+# Mise à jour : 23/08/2025 à 23:22
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="489.7"
+readonly SCRIPT_VERSION="490.7"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1069,7 +1069,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 489.7:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 490.7:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2422,112 +2422,92 @@ EOF"
 }
 
 configure_kde_lockscreen() {
-    # CONFIGURATION KDE SPLASH (look-and-feel) - version robuste
-    print_header "CONFIGURATION KDE SPLASH (look-and-feel)"
+    # CONFIGURATION KDE LOCKSCREEN - version robuste et idempotente
+    print_header "CONFIGURATION KDE LOCKSCREEN (look-and-feel)"
     CURRENT_STEP=$((CURRENT_STEP+1))
 
-    # variables locales
-    local kde_splash_url="${KDESPLASH_URL:-}"
+    # variables locales / safe defaults
+    local kde_splash_url="${KDESPLASH_URL:-}"                # utilise la variable globale si définie
     local DEST_DIR="${LOCKSCREEN_THEME_DIR:-/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
-    local tmp_dir="" archive_zip="" theme_root="" avail_kb="" needed_kb=0
-    local in_chroot=false
-    local rsync_filter_file=""
-    local INCLUDE_VIDEO="${INCLUDE_VIDEO:-true}"
+    local tmp_dir="" archive_zip="" theme_root="" filetype="" extractor="" rsync_filter=""
+    local in_chroot=false INCLUDE_VIDEO="${INCLUDE_VIDEO:-true}"
+    local avail_kb needed_kb low_space=false
 
-    # DRY RUN handling
+    # respect DRY_RUN
     if [[ "${DRY_RUN:-false}" == "true" ]]; then
-        print_info "[DRY RUN] configure_kde_lockscreen (kde_splash_url=${kde_splash_url:-<non défini>}, dest=${DEST_DIR})"
+        print_info "[DRY RUN] configure_kde_lockscreen (url=${kde_splash_url:-<non défini>}, dest=${DEST_DIR})"
         return 0
     fi
 
-    # detecter chroot cible (/mnt) -> opérer sur /mnt quand pertinent
+    # detecter chroot cible (si on exécute depuis live et la cible est montée sous /mnt)
     if [[ -d /mnt && -d /mnt/usr ]]; then
         in_chroot=true
     fi
 
-    # vérifier dépendances minimales sur l'hôte (curl pour download)
-    if ! command -v curl >/dev/null 2>&1; then
-        print_warning "curl introuvable sur l'hôte — tentative d'installation rapide..."
+    # Pré-checks : curl obligatoire pour télécharger
+    if ! command -v curl &>/dev/null; then
+        print_warning "curl introuvable sur l'hôte — tentative d'installation via pacman..."
         if command -v pacman &>/dev/null; then
-            pacman -Sy --noconfirm --needed curl >/dev/null 2>&1 || print_warning "Impossible d'installer curl automatiquement. Vérifie la connexion réseau."
+            pacman -Sy --noconfirm --needed curl >/dev/null 2>&1 || {
+                print_error "Impossible d'installer curl automatiquement. Installe curl et relance."
+                return 1
+            }
         else
             print_error "curl absent et pacman introuvable — impossible de télécharger le splash."
             return 1
         fi
     fi
 
-    # construire tmp_dir sécurisé
+    # creer tmp_dir sécurisé
     tmp_dir="$(mktemp -d /tmp/kde_splash.XXXX)" || {
         print_error "Impossible de créer un répertoire temporaire."
         return 1
     }
-    # Cleanup sécurisé (ne pas référencer directement la var sans expansion sûre)
+    # nettoyage sûr (ne dépend pas de set -u)
     trap '[[ -n "${tmp_dir:-}" && -d "${tmp_dir}" ]] && rm -rf "${tmp_dir}"' RETURN EXIT
 
-    # choix du nom local de l'archive (basé sur l'URL si présente)
+    # construire un nom local clair basé sur l'URL distante (fallback)
     if [[ -n "$kde_splash_url" ]]; then
         local url_no_q="${kde_splash_url%%\?*}"
-        local remote_name
-        remote_name="$(basename "$url_no_q")"
+        local remote_name="$(basename "$url_no_q")"
         archive_zip="$tmp_dir/${remote_name:-fallout-splashscreen.zip}"
     else
         archive_zip="$tmp_dir/fallout-splashscreen.zip"
     fi
 
-    # Téléchargement — si URL non fournie, essayer de cloner via git si variable GH_REPO existe
+    # Téléchargement
     if [[ -z "$kde_splash_url" ]]; then
-        print_warning "Aucune URL fournie (KDESPLASH_URL vide). Tentative fallback via Git (si GH_REPO défini) ou recherche locale."
-        if command -v git >/dev/null 2>&1 && [[ -n "${GH_REPO:-}" ]]; then
-            print_info "Git clone de ${GH_REPO}..."
-            if ! git -c advice.detachedHead=false clone --depth 1 "${GH_REPO}" "$tmp_dir/git" >/dev/null 2>&1; then
-                print_warning "git clone a échoué."
-            else
-                # packer ensuite en zip pour uniformité
-                (cd "$tmp_dir/git" && zip -r "$archive_zip" . >/dev/null 2>&1) || true
-            fi
-        else
-            print_error "Aucun moyen de récupérer le thème (ni URL KDESPLASH_URL, ni GH_REPO/clonable)."
-            return 1
-        fi
-    else
-        print_info "Téléchargement du splash depuis : $kde_splash_url"
-        # curl avec sortie d'erreur capturée
-        if ! curl -L --fail --retry 3 -o "$archive_zip" "$kde_splash_url" 2> "$tmp_dir/curl.err"; then
-            print_error "Échec du téléchargement. Voir $tmp_dir/curl.err"
-            sed -n '1,200p' "$tmp_dir/curl.err" || true
-            return 1
-        fi
-    fi
-
-    # Vérifier que le fichier téléchargé est bien une archive ZIP (ou autre archive exploitable)
-    if ! file "$archive_zip" >/dev/null 2>&1; then
-        print_error "Le fichier attendu ($archive_zip) n'existe pas après le téléchargement."
+        print_error "KDESPLASH_URL non défini — impossible de télécharger le splash."
         return 1
     fi
-    local filetype
-    filetype="$(file -b --mime-type "$archive_zip" 2>/dev/null || true)"
-    print_info "Type du fichier téléchargé: ${filetype:-inconnu}"
-    if [[ "$filetype" != "application/zip" && "$filetype" != "application/x-zip" && "$filetype" != "application/octet-stream" && "$filetype" != "application/x-compressed" ]]; then
-        # si c'est HTML, afficher un extrait
-        if file "$archive_zip" | grep -qi 'html'; then
-            print_error "Le téléchargement a retourné du HTML (page d'erreur) au lieu d'une archive ZIP."
-            sed -n '1,200p' "$archive_zip" || true
-            return 1
-        fi
-        # autoriser d'autres types si on peut extraire avec bsdtar/7z
-        print_warning "Le fichier n'est pas identifié comme zip standard (${filetype}). Tentative d'extraction fallback sera effectuée."
+
+    print_info "Téléchargement du splash depuis : $kde_splash_url"
+    if ! curl -L --fail --retry 3 -o "$archive_zip" "$kde_splash_url" 2> "$tmp_dir/curl.err"; then
+        print_error "Échec du téléchargement (curl). Voir $tmp_dir/curl.err"
+        sed -n '1,200p' "$tmp_dir/curl.err" || true
+        return 1
     fi
 
-    # Vérifier/exiger unzip (sur l'hôte) ou fallbacks disponibles
-    local extractor=""
-    if command -v unzip >/dev/null 2>&1; then
+    # vérifier le type du fichier téléchargé
+    filetype="$(file -b --mime-type "$archive_zip" 2>/dev/null || true)"
+    print_info "Type mime du fichier téléchargé : ${filetype:-inconnu}"
+    # si HTML -> erreur probable (page d'erreur), afficher un aperçu
+    if file "$archive_zip" | grep -qi html; then
+        print_error "Le téléchargement a renvoyé du HTML (page d'erreur) au lieu d'une archive."
+        sed -n '1,200p' "$archive_zip" || true
+        return 1
+    fi
+
+    # choisir extracteur disponible (priorité unzip -> bsdtar -> 7z)
+    if command -v unzip &>/dev/null; then
         extractor="unzip"
-    elif command -v bsdtar >/dev/null 2>&1; then
+    elif command -v bsdtar &>/dev/null; then
         extractor="bsdtar"
-    elif command -v 7z >/dev/null 2>&1; then
+    elif command -v 7z &>/dev/null; then
         extractor="7z"
     else
-        print_warning "Aucun extracteur (unzip/bsdtar/7z) trouvé sur l'hôte. Tentative d'installation via pacman..."
+        # tenter installation rapide sur hôte (pacman) si possible
+        print_warning "Aucun extracteur trouvé (unzip/bsdtar/7z) — tentative d'installation via pacman..."
         if command -v pacman &>/dev/null; then
             pacman -Sy --noconfirm --needed unzip >/dev/null 2>&1 && extractor="unzip"
             if [[ -z "$extractor" && command -v bsdtar &>/dev/null ]]; then extractor="bsdtar"; fi
@@ -2541,8 +2521,8 @@ configure_kde_lockscreen() {
     fi
     print_info "Extracteur sélectionné : $extractor"
 
-    # Extraction (avec logs d'erreur)
-    print_info "Extraction de l'archive dans $tmp_dir (utilise $extractor)..."
+    # Extraction avec logs d'erreur
+    print_info "Extraction de l'archive ($archive_zip) dans $tmp_dir..."
     if [[ "$extractor" == "unzip" ]]; then
         if ! unzip -o "$archive_zip" -d "$tmp_dir" 2> "$tmp_dir/unzip.err"; then
             print_error "unzip a échoué. Voir $tmp_dir/unzip.err"
@@ -2564,43 +2544,57 @@ configure_kde_lockscreen() {
         fi
     fi
 
-    # Détection robuste du dossier racine du thème (chercher Main.qml / metadata.desktop / Splash.qml partout)
+    # Détection robuste du dossier racine du thème : rechercher Main.qml / metadata.desktop / Splash.qml
     theme_root="$(find "$tmp_dir" -type f \( -iname 'Main.qml' -o -iname 'metadata.desktop' -o -iname 'Splash.qml' \) -printf '%h\n' | head -n1 || true)"
     if [[ -z "$theme_root" ]]; then
-        # fallback : chercher un dossier non vide à profondeur 2..5 (cas archives repo-name/<theme>/...)
+        # fallback : chercher un premier dossier non vide à profondeur 2..5 (ex: repo-root/<theme>/...)
         theme_root="$(find "$tmp_dir" -mindepth 2 -maxdepth 5 -type d -not -empty -print -quit || true)"
     fi
-    # fallback final : tout le tmp dir (copie tout)
     theme_root="${theme_root:-$tmp_dir}"
-
     print_info "Dossier thème détecté : $theme_root"
 
-    # Calcul espace disponible (sur la partition cible)
+    # Calculer l'espace disponible sur la partition cible (en KB) de façon sûre
     if $in_chroot; then
-        # vérifier espace sur /mnt + destination
         avail_kb="$(df --output=avail -k "/mnt$(dirname "$DEST_DIR")" 2>/dev/null | tail -n1 || true)"
     else
         avail_kb="$(df --output=avail -k "$(dirname "$DEST_DIR")" 2>/dev/null | tail -n1 || true)"
     fi
-    needed_kb=$((200 * 1024)) # estimation 200MB
-    print_info "Espace disponible (KB): ${avail_kb:-inconnu} ; besoin estimé: ${needed_kb} KB"
+    # nettoyer espaces
+    avail_kb="$(echo "${avail_kb:-}" | tr -d '[:space:]')"
+    needed_kb=$((200 * 1024))  # ~200MB estimés
 
-    # Destination effective (si chroot, on copie dans /mnt)
+    # vérification sûre numérique
+    if [[ -z "$avail_kb" || ! "$avail_kb" =~ ^[0-9]+$ ]]; then
+        low_space=true
+    else
+        if (( avail_kb < needed_kb )); then
+            low_space=true
+        fi
+    fi
+    if $low_space; then
+        print_warning "Espace faible sur la partition cible (${avail_kb:-0} KB). Extraction dans tmp et copy pourra échouer si trop peu d'espace."
+    else
+        print_info "Espace disponible (KB): $avail_kb"
+    fi
+
+    # Destination effective : si chroot, copier sous /mnt
     local effective_dest="$DEST_DIR"
     if $in_chroot; then effective_dest="/mnt${DEST_DIR}"; fi
 
     # Sauvegarde de l'existant (idempotent)
     if [[ -d "$effective_dest" ]]; then
-        print_info "Sauvegarde du thème existant ($effective_dest)"
-        mv "$effective_dest" "${effective_dest}.bak.$(date +%s)" || print_warning "Impossible de sauvegarder l'ancien thème (permissions?)"
+        print_info "Sauvegarde du thème existant : ${effective_dest} -> ${effective_dest}.bak.$(date +%s)"
+        mv "$effective_dest" "${effective_dest}.bak.$(date +%s)" || print_warning "Impossible de renommer l'ancien dossier (permissions?)"
     fi
-    mkdir -p "$effective_dest" || {
-        print_error "Impossible de créer $effective_dest"
-        return 1
-    }
 
-    # Préparer filtre rsync (exclure background.mp4 si INCLUDE_VIDEO=false)
-    rsync_filter_file="$tmp_dir/rsync.filter"
+    # Créer destination
+    if ! mkdir -p "$effective_dest" 2>/dev/null; then
+        print_error "Impossible de créer $effective_dest (permissions?)"
+        return 1
+    fi
+
+    # Préparer filtre rsync (garder éléments utiles; option pour exclure background.mp4)
+    rsync_filter="$tmp_dir/rsync.filter"
     {
         echo "+ */"
         echo "+ *.qml"
@@ -2618,40 +2612,41 @@ configure_kde_lockscreen() {
             echo "- background.mp4"
         fi
         echo "- *"
-    } > "$rsync_filter_file"
+    } > "$rsync_filter"
 
-    # Copier le thème (rsync si dispo, sinon cp -a)
-    if command -v rsync >/dev/null 2>&1; then
-        print_info "Copie du thème ($theme_root) -> $effective_dest (rsync)"
-        if ! rsync -a --delete --prune-empty-dirs --filter="merge $rsync_filter_file" "$theme_root"/ "$effective_dest"/ 2> "$tmp_dir/rsync.err"; then
+    # Copier : rsync si dispo sinon cp -a
+    if command -v rsync &>/dev/null; then
+        print_info "Copie du thème via rsync: $theme_root -> $effective_dest"
+        if ! rsync -a --delete --prune-empty-dirs --filter="merge $rsync_filter" "$theme_root"/ "$effective_dest"/ 2> "$tmp_dir/rsync.err"; then
             print_error "rsync a échoué. Voir $tmp_dir/rsync.err"
             sed -n '1,200p' "$tmp_dir/rsync.err" || true
             return 1
         fi
     else
-        print_warning "rsync non trouvé — utilisation de cp -a (moins robuste)"
+        print_warning "rsync non disponible — utilisation de cp -a"
         if ! cp -a "$theme_root"/. "$effective_dest"/ 2> "$tmp_dir/cp.err"; then
             print_error "cp a échoué. Voir $tmp_dir/cp.err"
             sed -n '1,200p' "$tmp_dir/cp.err" || true
             return 1
         fi
         if [[ "$INCLUDE_VIDEO" != "true" ]]; then
-            rm -f "$effective_dest"/background.mp4 || true
+            rm -f "${effective_dest}/background.mp4" || true
         fi
     fi
 
-    # Permissions / ownership : appliquer dans la cible (si chroot, faire chown dans chroot)
+    # Fixer permissions / ownership (dans chroot ou sur l'hôte)
     print_info "Fixation des permissions sur $effective_dest"
     if $in_chroot; then
-        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R root:root '$DEST_DIR' && chmod -R u+rwX,go+rX,go-w '$DEST_DIR'" >/dev/null 2>&1 || print_warning "Impossible de fixer totalement les permissions dans le chroot"
+        # exécuter chown/chmod dans le chroot pour affecter correctement les chemins
+        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R root:root '$DEST_DIR' && chmod -R u+rwX,go+rX,go-w '$DEST_DIR'" >/dev/null 2>&1 || print_warning "Impossible d'appliquer complètement les droits dans le chroot"
     else
         chown -R root:root "$effective_dest" || true
         chmod -R u+rwX,go+rX,go-w "$effective_dest" || true
     fi
 
-    print_success "KDE look-and-feel installé dans $effective_dest"
+    print_success "KDE look-and-feel déployé avec succès dans $effective_dest"
 
-    # Nettoyage (trap gère déjà)
+    # trap assure le cleanup
     return 0
 }
 
@@ -3793,7 +3788,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v489.7
+# Configuration Bash - Arch Linux Fallout Edition v490.7
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4207,13 +4202,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V489.7 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V490.7 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V489.7 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V490.7 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4325,7 +4320,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V489.7 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V490.7 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
