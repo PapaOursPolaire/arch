@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 485.7, correctif 6 de la version 485.7
-# Mise à jour : 23/08/2025 à 21:05
+# Version: 486.7, correctif 6 de la version 486.7
+# Mise à jour : 23/08/2025 à 21:31
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="485.7"
+readonly SCRIPT_VERSION="486.7"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1069,7 +1069,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 485.7:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 486.7:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2425,9 +2425,10 @@ configure_kde_lockscreen() {
     print_header "CONFIGURATION KDE SPLASH (look-and-feel)"
     CURRENT_STEP=$((CURRENT_STEP+1))
 
-    # Variables (adapter si besoin)
-    readonly KDESPLASH_URL="${KDESPLASH_URL:-https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip}"
-    readonly DEST_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
+    # Destination : préférer la constante globale si définie, sinon fallback
+    local DEST_DIR="${LOCKSCREEN_THEME_DIR:-/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
+
+    # variables temporaires locales
     local tmp_dir archive_zip theme_root avail_kb needed_kb
 
     # Vérifier unzip dans le chroot et l'installer si possible
@@ -3657,7 +3658,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v485.7
+# Configuration Bash - Arch Linux Fallout Edition v486.7
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4071,13 +4072,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V485.7 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V486.7 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V485.7 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V486.7 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4189,7 +4190,7 @@ POST_EOF
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V485.7 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V486.7 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
