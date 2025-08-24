@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 491.7, correctif 7 de la version 491.7
-# Mise à jour : 23/08/2025 à 23:26
+# Version: 497.7, correctif 7 de la version 497.7
+# Mise à jour : 24/08/2025 à 12:08
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="491.7"
+readonly SCRIPT_VERSION="497.7"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1069,7 +1069,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 491.7:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 497.7:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2422,200 +2422,154 @@ EOF"
 }
 
 configure_kde_lockscreen() {
-    # CONFIGURATION KDE SPLASH (look-and-feel) - version robuste et idempotente
+    # CONFIGURATION KDE LOCKSCREEN (KSplash QML)
     print_header "CONFIGURATION KDE SPLASH (look-and-feel)"
-    CURRENT_STEP=$((CURRENT_STEP + 1))
+    CURRENT_STEP=$((CURRENT_STEP+1))
 
-    # --- variables locales (n'écrase rien de readonly global) ---
-    local kdesplash_url="${KDESPLASH_URL:-https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip}"
-    local dest_dir="${DEST_DIR:-/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
-    local include_video="${INCLUDE_VIDEO:-false}"    # "true" ou "false"
-    local tmp_dir archive_zip theme_root extractor rsync_filter df_target effective_dest avail_kb needed_kb low_space
+    # --- Respect des variables globales existantes, sans redéclaration readonly ---
+    local kde_splash_url="${KDESPLASH_URL:-}"
+    local dest_pkg_dir="${LOCKSCREEN_THEME_DIR:-/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
 
-    # Détecter si on est dans le mode 'in_chroot' (ne pas exécuter la valeur comme une commande)
-    local in_chroot_flag="false"
-    if [[ "${in_chroot:-false}" == "true" ]]; then in_chroot_flag="true"; fi
+    # Détection : on déploie dans le système live ou dans le chroot /mnt ?
+    local in_chroot=false
+    if [[ -d /mnt && -d /mnt/usr ]]; then
+        in_chroot=true
+    fi
+    local effective_dest
+    if $in_chroot; then
+        effective_dest="/mnt${dest_pkg_dir}"
+    else
+        effective_dest="${dest_pkg_dir}"
+    fi
 
-    # --- Préparer tmp et cleanup ---
-    tmp_dir="$(mktemp -d /tmp/kde_splash.XXXX)" || {
-        print_error "Impossible de créer un répertoire temporaire."
+    # Mode simulation
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        print_info "[DRY RUN] configure_kde_lockscreen url=${kde_splash_url:-<non défini>} dest=${effective_dest}"
+        return 0
+    fi
+
+    # Vérifs outils (on extrait côté hôte)
+    if ! command -v curl >/dev/null 2>&1; then
+        print_error "curl est requis pour télécharger l'archive du splash."
         return 1
-    }
-    trap 'rm -rf -- "$tmp_dir"' EXIT
-
-    archive_zip="$tmp_dir/splash.zip"
-
-    # --- Vérifier/install unzip dans chroot si possible (mais sans forcer readonly) ---
-    if ! command -v unzip >/dev/null 2>&1; then
-        print_info "unzip introuvable — tentative d'installation dans le chroot si possible"
-        if [[ "$in_chroot_flag" == "true" && -x /usr/bin/arch-chroot ]]; then
-            /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip || print_warning "Impossible d'installer unzip dans le chroot."
-        else
-            # tenter sur l'hôte
-            if command -v pacman >/dev/null 2>&1; then
-                pacman -S --noconfirm --needed unzip || print_warning "Impossible d'installer unzip sur l'hôte."
-            else
-                print_warning "unzip absent et installation automatique impossible."
-            fi
-        fi
+    fi
+    local have_bsdtar=false have_unzip=false
+    command -v bsdtar >/dev/null 2>&1 && have_bsdtar=true
+    command -v unzip  >/dev/null 2>&1 && have_unzip=true
+    if [[ "$have_bsdtar" == false && "$have_unzip" == false ]]; then
+        print_error "Ni bsdtar ni unzip disponibles pour extraire le .zip."
+        return 1
     fi
 
-    # --- Télécharger l'archive (curl -> wget fallback) ---
-    print_info "Téléchargement du splash depuis : $kdesplash_url"
-    if command -v curl >/dev/null 2>&1; then
-        if ! curl -fL --retry 3 -o "$archive_zip" "$kdesplash_url"; then
-            print_warning "curl a échoué pour le téléchargement."
-        fi
+    # Espace de travail temporaire (nettoyé à la fin de la fonction)
+    local tmp_dir archive_zip theme_root=""
+    tmp_dir="$(mktemp -d -t kdesplash.XXXXXXXX)" || { print_error "mktemp a échoué"; return 1; }
+    archive_zip="${tmp_dir}/splash.zip"
+    trap 'rm -rf "$tmp_dir" 2>/dev/null || true' RETURN
+
+    # Téléchargement
+    if [[ -z "${kde_splash_url}" ]]; then
+        print_error "KDESPLASH_URL est vide: impossible de télécharger le thème."
+        return 1
     fi
-    if [[ ! -s "$archive_zip" && -x "$(command -v wget 2>/dev/null)" ]]; then
-        if ! wget -q -O "$archive_zip" "$kdesplash_url"; then
-            print_warning "wget a échoué pour le téléchargement."
-        fi
+    print_info "Téléchargement du splash depuis: ${kde_splash_url}"
+    if ! curl -fL --retry 3 --connect-timeout 20 -o "$archive_zip" "$kde_splash_url"; then
+        print_error "Échec du téléchargement du splash."
+        return 1
     fi
     if [[ ! -s "$archive_zip" ]]; then
-        print_error "Échec du téléchargement du splash (ni curl ni wget n'ont réussi)."
+        print_error "L’archive téléchargée est vide."
         return 1
     fi
 
-    # --- Détecter extracteur disponible ---
-    if command -v unzip >/dev/null 2>&1; then
-        extractor="unzip"
-    elif command -v bsdtar >/dev/null 2>&1; then
-        extractor="bsdtar"
-    elif command -v 7z >/dev/null 2>&1; then
-        extractor="7z"
-    else
-        print_error "Aucun outil d'extraction trouvé (unzip / bsdtar / 7z)."
-        return 1
-    fi
-    print_info "Extracteur sélectionné: $extractor"
-
-    # --- Extraction dans tmp_dir (avec logs d'erreurs) ---
-    print_info "Extraction du zip dans $tmp_dir"
-    if [[ "$extractor" == "unzip" ]]; then
-        if ! unzip -o "$archive_zip" -d "$tmp_dir" 2>"$tmp_dir/unzip.err"; then
-            print_error "unzip a échoué. Voir $tmp_dir/unzip.err"
-            sed -n '1,200p' "$tmp_dir/unzip.err" || true
-            return 1
-        fi
-    elif [[ "$extractor" == "bsdtar" ]]; then
-        if ! bsdtar -xf "$archive_zip" -C "$tmp_dir" 2>"$tmp_dir/bsdtar.err"; then
-            print_error "bsdtar a échoué. Voir $tmp_dir/bsdtar.err"
-            sed -n '1,200p' "$tmp_dir/bsdtar.err" || true
+    # Extraction
+    print_info "Extraction de l'archive..."
+    if $have_bsdtar; then
+        if ! bsdtar -C "$tmp_dir" -xf "$archive_zip"; then
+            print_error "Échec d’extraction (bsdtar)."
             return 1
         fi
     else
-        if ! 7z x "$archive_zip" -o"$tmp_dir" >/dev/null 2>"$tmp_dir/7z.err"; then
-            print_error "7z a échoué. Voir $tmp_dir/7z.err"
-            sed -n '1,200p' "$tmp_dir/7z.err" || true
+        if ! unzip -qq -o "$archive_zip" -d "$tmp_dir"; then
+            print_error "Échec d’extraction (unzip)."
             return 1
         fi
     fi
 
-    # --- Détection du dossier racine du thème (Main.qml, metadata.desktop, Splash.qml...) ---
-    theme_root="$(find "$tmp_dir" -type f \( -iname 'Main.qml' -o -iname 'metadata.desktop' -o -iname 'Splash.qml' \) -printf '%h\n' | head -n1 || true)"
+    # Détection robuste de la racine du thème (gère le double sous-dossier)
+    # On cherche un dossier contenant metadata.desktop + contents/Splash.qml (ou contents/splash/Splash.qml)
+    while IFS= read -r dir; do
+        if [[ -f "$dir/metadata.desktop" ]] && { [[ -f "$dir/contents/Splash.qml" ]] || [[ -f "$dir/contents/splash/Splash.qml" ]]; }; then
+            theme_root="$dir"
+            break
+        fi
+    done < <(find "$tmp_dir" -maxdepth 5 -type d -print)
+
+    # Heuristique supplémentaire : cas "fallout-splashscreen4k/fallout-splashscreen4k"
     if [[ -z "$theme_root" ]]; then
-        theme_root="$(find "$tmp_dir" -mindepth 2 -maxdepth 5 -type d -not -empty -print -quit || true)"
-    fi
-    theme_root="${theme_root:-$tmp_dir}"
-    print_info "Dossier thème détecté : $theme_root"
-
-    # --- Calcul de l'espace disponible (KB) de façon sûre ---
-    # On regarde la partition cible; si on doit copier en chroot, vérifier /mnt + chemin
-    if [[ "$in_chroot_flag" == "true" ]]; then
-        df_target="/mnt$(dirname "$dest_dir")"
-    else
-        df_target="$(dirname "$dest_dir")"
-    fi
-    avail_kb="$(df --output=avail -k "$df_target" 2>/dev/null | tail -n1 || true)"
-    avail_kb="${avail_kb//[[:space:]]/}"    # supprimer espaces
-    needed_kb=$((200 * 1024))                # ~200MB
-
-    low_space="false"
-    if [[ -z "$avail_kb" || ! "$avail_kb" =~ ^[0-9]+$ ]]; then
-        low_space="true"
-    else
-        if (( avail_kb < needed_kb )); then
-            low_space="true"
-        fi
+        for dir in "$tmp_dir"/*/fallout-splashscreen4k "$tmp_dir"/* "$tmp_dir"/*/*; do
+            [[ -d "$dir" ]] || continue
+            if [[ -f "$dir/metadata.desktop" && -d "$dir/contents" ]]; then
+                theme_root="$dir"
+                break
+            fi
+        done
     fi
 
-    if [[ "$low_space" == "true" ]]; then
-        print_warning "Espace faible sur la partition cible (${avail_kb:-0} KB). Extraction dans tmp puis copie (pourra échouer si vraiment trop peu d'espace)."
-    else
-        print_info "Espace disponible (KB): $avail_kb"
-    fi
-
-    # --- Destination effective (si chroot, on copie sous /mnt) ---
-    if [[ "$in_chroot_flag" == "true" ]]; then
-        effective_dest="/mnt${dest_dir}"
-    else
-        effective_dest="$dest_dir"
-    fi
-
-    # --- Sauvegarde idempotente de l'existant ---
-    if [[ -d "$effective_dest" ]]; then
-        print_info "Sauvegarde du thème existant : $effective_dest -> ${effective_dest}.bak.$(date +%s)"
-        mv -- "$effective_dest" "${effective_dest}.bak.$(date +%s)" 2>/dev/null || print_warning "Impossible de renommer l'ancien dossier (permissions?)."
-    fi
-
-    # --- Création de la destination ---
-    if ! mkdir -p -- "$effective_dest" 2>/dev/null; then
-        print_error "Impossible de créer $effective_dest (permissions?)."
+    if [[ -z "$theme_root" ]]; then
+        print_error "Impossible de localiser la racine du thème (metadata.desktop + contents/Splash.qml)."
         return 1
     fi
+    print_info "Racine du thème détectée : $theme_root"
 
-    # --- Préparer filtre rsync simple (exclure la vidéo si demandé) ---
-    rsync_filter="$tmp_dir/rsync.filter"
-    {
-        echo "+ */"
-        echo "+ *.qml"
-        echo "+ Main.qml"
-        echo "+ metadata.desktop"
-        echo "+ contents/**"
-        echo "+ fonts/**"
-        echo "+ *.png"
-        echo "+ *.jpg"
-        echo "+ *.gif"
-        echo "+ *.svg"
-        if [[ "$include_video" == "true" ]]; then
-            echo "+ background.mp4"
-        else
-            echo "- background.mp4"
-        fi
-        echo "- *"
-    } > "$rsync_filter"
+    # Préparation destination
+    local dest_parent
+    dest_parent="$(dirname "$effective_dest")"
+    mkdir -p "$dest_parent" || { print_error "Impossible de créer $dest_parent"; return 1; }
 
-    # --- Copier le thème : rsync si dispo sinon cp -a ---
+    if [[ -d "$effective_dest" ]]; then
+        local backup="${effective_dest}.bak.$(date +%s)"
+        print_info "Sauvegarde de l'ancien thème -> $backup"
+        rm -rf "$backup" 2>/dev/null || true
+        mv "$effective_dest" "$backup" || print_warning "Sauvegarde impossible (permissions ?), on écrasera directement."
+    fi
+    mkdir -p "$effective_dest" || { print_error "Impossible de créer $effective_dest"; return 1; }
+
+    # Copie (rsync si dispo sinon cp -a)
     if command -v rsync >/dev/null 2>&1; then
-        print_info "Copie via rsync : $theme_root -> $effective_dest"
-        if ! rsync -a --delete --prune-empty-dirs --filter="merge $rsync_filter" "$theme_root"/ "$effective_dest"/ 2> "$tmp_dir/rsync.err"; then
-            print_error "rsync a échoué lors de la copie. Voir $tmp_dir/rsync.err"
-            sed -n '1,200p' "$tmp_dir/rsync.err" || true
+        print_info "Copie du thème (rsync)…"
+        if ! rsync -a --delete "$theme_root"/ "$effective_dest"/; then
+            print_error "Échec de la copie avec rsync."
             return 1
         fi
     else
-        print_warning "rsync non disponible — fallback sur cp -a"
-        if ! cp -a -- "$theme_root"/. "$effective_dest"/ 2> "$tmp_dir/cp.err"; then
-            print_error "cp a échoué lors de la copie. Voir $tmp_dir/cp.err"
-            sed -n '1,200p' "$tmp_dir/cp.err" || true
+        print_info "Copie du thème (cp -a)…"
+        if ! cp -a "$theme_root"/. "$effective_dest"/; then
+            print_error "Échec de la copie avec cp."
             return 1
-        fi
-        if [[ "$include_video" != "true" ]]; then
-            rm -f -- "${effective_dest}/background.mp4" || true
         fi
     fi
 
-    # --- Permissions ---
-    chown -R root:root -- "$effective_dest" 2>/dev/null || true
-    chmod -R u+rwX,go+rX,go-w -- "$effective_dest" 2>/dev/null || true
+    # Normalisation : si Splash.qml est à la racine et pas sous contents/, on corrige
+    if [[ -f "$effective_dest/Splash.qml" && ! -f "$effective_dest/contents/Splash.qml" ]]; then
+        mkdir -p "$effective_dest/contents"
+        mv -f "$effective_dest/Splash.qml" "$effective_dest/contents/Splash.qml" 2>/dev/null || true
+    fi
 
-    # --- Nettoyage explicite (trap fera aussi le ménage) ---
-    rm -f -- "$archive_zip" 2>/dev/null || true
-    rm -rf -- "$tmp_dir" 2>/dev/null || true
-    trap - EXIT
+    # Permissions
+    chown -R root:root "$effective_dest" || true
+    chmod -R u+rwX,go+rX,go-w "$effective_dest" || true
 
-    print_success "Splashscreen KDE (look-and-feel) installé dans $dest_dir"
+    # Définir KSplash par défaut (système) : /etc/xdg/ksplashrc
+    print_info "Définition du splash par défaut via /etc/xdg/ksplashrc"
+    if $in_chroot; then
+        /usr/bin/arch-chroot /mnt /bin/bash -lc "mkdir -p /etc/xdg && printf '%s\n' '[KSplash]' 'Theme=org.kde.falloutlock' 'Engine=KSplashQML' > /etc/xdg/ksplashrc"
+    else
+        mkdir -p /etc/xdg
+        printf '%s\n' '[KSplash]' 'Theme=org.kde.falloutlock' 'Engine=KSplashQML' > /etc/xdg/ksplashrc
+    fi
+
+    print_success "Splashscreen KDE déployé dans ${effective_dest}"
     return 0
 }
 
@@ -3596,729 +3550,8 @@ EOF
     print_success "Thèmes et icônes installés et configurés"
 }
 
-# Fastfetch s'exécute automatiquement
-install_fastfetch() {
-    print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
-
-    if [[ -z "${USERNAME:-}" ]]; then
-        print_error "USERNAME non défini. Abandon."
-        return 1
-    fi
-
-    if [[ "${DRY_RUN:-false}" == "true" ]]; then
-        print_info "[DRY RUN] install_fastfetch pour ${USERNAME}"
-        return 0
-    fi
-
-    local USER_HOME="/home/${USERNAME}"
-    local CHROOT_USER_HOME="/mnt${USER_HOME}"
-    local CONFIG_DIR="${CHROOT_USER_HOME}/.config/fastfetch"
-    local PROFILE_FILE="${CHROOT_USER_HOME}/.bash_profile"
-    local INVOKE_MARKER="# fastfetch autostart entry - added by alpha.sh"
-    local FASTFETCH_BIN="/usr/bin/fastfetch"
-    local installed_in_chroot=false
-
-    # 1) Vérifier si fastfetch est disponible dans le chroot
-    if /usr/bin/arch-chroot /mnt /usr/bin/env bash -lc 'command -v fastfetch >/dev/null 2>&1'; then
-        print_info "fastfetch déjà installé dans le chroot."
-        installed_in_chroot=true
-    else
-        print_info "Tentative d'installation de fastfetch dans le chroot via pacman..."
-        if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch >/dev/null 2>&1; then
-            print_success "fastfetch installé via pacman dans le chroot."
-            installed_in_chroot=true
-        else
-            print_warning "pacman n'a pas réussi à installer fastfetch dans le chroot."
-            # tenter AUR helper si présent
-            if /usr/bin/arch-chroot /mnt command -v paru >/dev/null 2>&1; then
-                print_info "Tentative d'installation via paru (AUR) dans le chroot..."
-                /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm fastfetch >/dev/null 2>&1 && installed_in_chroot=true || print_warning "paru a échoué."
-            elif /usr/bin/arch-chroot /mnt command -v yay >/dev/null 2>&1; then
-                print_info "Tentative d'installation via yay (AUR) dans le chroot..."
-                /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" yay -S --noconfirm fastfetch >/dev/null 2>&1 && installed_in_chroot=true || print_warning "yay a échoué."
-            else
-                print_warning "Aucun AUR helper détecté dans le chroot. Si fastfetch n'est pas installé, installe-le manuellement ou ajoute un AUR helper."
-            fi
-        fi
-    fi
-
-    if [[ "$installed_in_chroot" != true ]]; then
-        print_warning "fastfetch non installé automatiquement dans le chroot. La configuration utilisateur sera écrite, mais l'exécutable manquera."
-    fi
-
-    # 2) Créer configuration utilisateur (idempotent)
-    mkdir -p "$CONFIG_DIR" || {
-        print_error "Impossible de créer $CONFIG_DIR"
-        return 1
-    }
-
-    cat > "${CONFIG_DIR}/config.jsonc" <<'FFCFG'
-{
-  "display": {
-    "separator": " : ",
-    "keyWidth": 18,
-    "showColors": true
-  },
-  "modules": [
-    { "type": "title", "key": "Arch - Powered by alpha.sh" },
-    { "type": "ascii", "logo": "arch" },
-    { "type": "os" },
-    { "type": "host" },
-    { "type": "kernel" },
-    { "type": "uptime" },
-    { "type": "shell" },
-    { "type": "de" },
-    { "type": "wm" },
-    { "type": "terminal" },
-    { "type": "cpu" },
-    { "type": "gpu" },
-    { "type": "memory" },
-    { "type": "disk" },
-    { "type": "packages" }
-  ]
-}
-FFCFG
-
-    # 3) Fixer droits à l'utilisateur dans le chroot
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R ${USERNAME}:${USERNAME} '/home/${USERNAME}/.config/fastfetch' >/dev/null 2>&1 || true"
-
-    print_success "Configuration fastfetch écrite pour ${USERNAME}"
-
-    # 4) Ajouter invocation idempotente dans .bash_profile pour afficher fastfetch à la connexion
-    #    - On ajoute un bloc protégé par un marqueur pour éviter duplications
-    if ! grep -qF "$INVOKE_MARKER" "$PROFILE_FILE" 2>/dev/null; then
-        cat >> "$PROFILE_FILE" <<'BASHFF'
-
-# fastfetch autostart (affiche infos système dans les shells de connexion)
-# Ne s'exécute que dans un shell interactif et si fastfetch est disponible.
-$INVOKE_MARKER
-if [ -t 1 ] && command -v fastfetch >/dev/null 2>&1; then
-  # Eviter que fastfetch pollue les sessions graphiques non-terminales
-  if [ -z "$DISPLAY" ] || [[ "$TERM" =~ ^xterm|^rxvt|^screen|^tmux|^linux|^vt ]]; then
-    fastfetch --config ~/.config/fastfetch/config.jsonc || true
-  fi
-fi
-BASHFF
-        # corriger propriétaire
-        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.bash_profile' >/dev/null 2>&1 || true"
-        print_success "Entrée fastfetch ajoutée dans $PROFILE_FILE"
-    else
-        print_info "Entrée fastfetch déjà présente dans $PROFILE_FILE — rien à faire."
-    fi
-
-    # 5) Optionnel : si utilisateur KDE/XDG, indiquer comment autostart graphique (ne pas forcer terminal)
-    print_info "Si tu veux un autostart graphique (terminal qui lance fastfetch), crée un .desktop dans ~/.config/autostart qui lance ton terminal avec 'fastfetch' à l'ouverture."
-
-    return 0
-}
-
-# Fonctions pour la configuration finale du système
-final_configuration() {
-    print_header "ETAPE 25/$TOTAL_STEPS: CONFIGURATION FINALE"
-    CURRENT_STEP=25
-    
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation de la configuration finale"
-        return 0
-    fi
-    
-    print_info "Configuration finale avec TOUTES LES CORRECTIONS appliquées..."
-    
-    # Services système optimisés
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Certaines configurations ont échoué"
-set -e
-
-# Services essentiels
-systemctl enable NetworkManager
-systemctl enable systemd-timesyncd
-systemctl enable fstrim.timer
-
-# Services audio PipeWire
-systemctl --global enable pipewire.service
-systemctl --global enable pipewire-pulse.service
-systemctl --global enable wireplumber.service
-
-# Optimisations système avancées
-echo "vm.swappiness=10" > /etc/sysctl.d/99-swappiness.conf
-echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.d/99-swappiness.conf
-echo "net.core.default_qdisc=fq" > /etc/sysctl.d/99-network.conf
-echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-network.conf
-
-# Limites utilisateur
-echo "$USERNAME soft nofile 65536" >> /etc/security/limits.conf
-echo "$USERNAME hard nofile 65536" >> /etc/security/limits.conf
-echo "$USERNAME soft memlock unlimited" >> /etc/security/limits.conf
-echo "$USERNAME hard memlock unlimited" >> /etc/security/limits.conf
-EOF
-    
-    # Configuration utilisateur
-    /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Configuration utilisateur partielle"
-# Configuration .bashrc COMPLÈTE et CORRIGÉE
-cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
-#!/bin/bash
-# ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v491.7
-# Toutes les corrections appliquées
-# ===============================================================================
-
-# Si non interactif, arrêter ici
-[[ \$- != *i* ]] && return
-
-# Configuration historique
-export HISTSIZE=10000
-export HISTFILESIZE=20000
-export HISTCONTROL=ignoreboth:erasedups
-shopt -s histappend
-shopt -s checkwinsize
-
-# Variables d'environnement
-export EDITOR=nano
-export VISUAL=nano
-export BROWSER=firefox
-export JAVA_HOME=/usr/lib/jvm/default
-export PATH=\$PATH:\$HOME/.local/bin
-
-# Alias système
-alias ll='ls -alF --color=auto'
-alias la='ls -A --color=auto'
-alias l='ls -CF --color=auto'
-alias ls='ls --color=auto'
-alias grep='grep --color=auto'
-alias mkdir='mkdir -pv'
-alias cp='cp -i'
-alias mv='mv -i'
-alias rm='rm -i'
-alias df='df -h'
-alias du='du -h'
-alias free='free -h'
-alias ps='ps auxf'
-
-# Alias Git
-alias gs='git status'
-alias ga='git add'
-alias gc='git commit'
-alias gp='git push'
-alias gl='git log --oneline --graph'
-alias gd='git diff'
-alias gb='git branch'
-alias gco='git checkout'
-
-# Alias développement
-alias python='python3'
-alias pip='pip3'
-alias serve='python -m http.server 8000'
-alias myip='curl -s ifconfig.me'
-alias weather='curl wttr.in'
-
-# Alias système Arch
-alias pacup='sudo pacman -Syu'
-alias pacin='sudo pacman -S'
-alias pacfind='pacman -Ss'
-alias pacrem='sudo pacman -Rns'
-alias pacclean='sudo pacman -Sc'
-alias aurinstall='paru -S'
-alias aursearch='paru -Ss'
-
-# Alias audio
-alias cava='cava'
-alias audio-restart='systemctl --user restart pipewire pipewire-pulse wireplumber'
-alias audio-status='systemctl --user status pipewire pipewire-pulse wireplumber'
-
-# Alias Docker
-alias docker-clean='docker system prune -af'
-alias docker-stop-all='docker stop \$(docker ps -q) 2>/dev/null || true'
-alias docker-logs='docker logs'
-
-# FONCTIONS UTILES
-extract() {
-    if [ -f \$1 ] ; then
-        case \$1 in
-            *.tar.bz2)   tar xjf \$1     ;;
-            *.tar.gz)    tar xzf \$1     ;;
-            *.bz2)       bunzip2 \$1     ;;
-            *.rar)       unrar x \$1     ;;
-            *.gz)        gunzip \$1      ;;
-            *.tar)       tar xf \$1      ;;
-            *.tbz2)      tar xjf \$1     ;;
-            *.tgz)       tar xzf \$1     ;;
-            *.zip)       unzip \$1       ;;
-            *.Z)         uncompress \$1  ;;
-            *.7z)        7z x \$1        ;;
-            *)           echo "Extension non supportée: '\$1'" ;;
-        esac
-    else
-        echo "Fichier non trouvé: '\$1'"
-    fi
-}
-
-# Fonction mise à jour système complète
-full-update() {
-    echo " Mise à jour système complète..."
-    sudo pacman -Syu
-    if command -v paru >/dev/null; then
-        echo " Mise à jour AUR..."
-        paru -Syu
-    fi
-    if command -v flatpak >/dev/null; then
-        echo " Mise à jour Flatpak..."
-        flatpak update
-    fi
-    echo " Mise à jour terminée!"
-}
-
-# Fonction informations système
-sysinfo() {
-    echo "=== INFORMATIONS SYSTÈME ==="
-    echo "OS: \$(cat /etc/os-release | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '\"')"
-    echo "Kernel: \$(uname -r)"
-    echo "Uptime: \$(uptime -p)"
-    echo "CPU: \$(lscpu | grep 'Model name' | cut -d':' -f2 | xargs)"
-    echo "RAM: \$(free -h | awk '/^Mem:/ {print \$3 "/" \$2}')"
-    echo "Disque: \$(df -h / | awk 'NR==2{print \$3 "/" \$2 " (" \$5 " utilisé)"}')"
-    echo "Paquets: \$(pacman -Q | wc -l) installés"
-    echo "================================"
-}
-
-# Prompt personnalisé
-if [ "\$EUID" -eq 0 ]; then
-    PS1='\[\033[01;31m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# '
-else
-    PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
-fi
-
-# Fastfetch automatique GARANTI
-if [[ -z "\$FASTFETCH_SHOWN" && "\$TERM" != "linux" ]]; then
-    export FASTFETCH_SHOWN=1
-    
-    if command -v fastfetch >/dev/null 2>&1; then
-        echo ""
-        if [[ -f /home/$USERNAME/.config/fastfetch/config.jsonc ]]; then
-            fastfetch --config /home/$USERNAME/.config/fastfetch/config.jsonc 2>/dev/null || fastfetch 2>/dev/null
-        else
-            fastfetch 2>/dev/null
-        fi
-        echo ""
-    else
-        echo ""
-        echo -e "\033[1;32m  ARCH LINUX \033[0m"
-        echo -e "\033[1;36mUtilisateur:\033[0m \$(whoami)@\$(hostname)"
-        echo -e "\033[1;36mUptime:\033[0m \$(uptime -p)"
-        echo -e "\033[1;33m Powered by PapaOursPolaire, available on GitHub \033[0m"
-        echo ""
-        echo -e "\033[0;35mCommandes utiles: sysinfo, full-update, cava, audio-restart\033[0m"
-        echo ""
-    fi
-fi
-
-# Message de bienvenue au premier login
-if [[ ! -f /home/$USERNAME/.welcome_shown ]]; then
-    echo ""
-    echo -e "\033[1;32m BIENVENUE SUR ARCH LINUX FALLOUT EDITION! \033[0m"
-    echo -e "\033[1;36mToutes les corrections ont été appliquées:\033[0m"
-    echo -e "\033[0;32m•  Thèmes installés et configurés\033[0m"
-    echo -e "\033[0;32m•  Fastfetch configuré pour lancement automatique\033[0m"
-    echo -e "\033[0;32m•  Visual Studio Code installé\033[0m"
-    echo -e "\033[0;32m•  Menu GRUB visible (timeout 10s)\033[0m"
-    echo -e "\033[0;32m•  Plymouth avec PipBoy, fond GitHub sur bureau\033[0m"
-    echo -e "\033[0;32m•  Tous les logiciels installés et vérifiés\033[0m"
-    echo -e "\033[0;32m•  Support m/g minuscules pour partitions\033[0m"
-    echo ""
-    echo -e "\033[1;33mCommandes utiles:\033[0m"
-    echo -e "\033[0;36m• full-update\033[0m     - Mise à jour complète système"
-    echo -e "\033[0;36m• sysinfo\033[0m         - Informations système détaillées"  
-    echo -e "\033[0;36m• cava\033[0m            - Visualiseur audio"
-    echo -e "\033[0;36m• audio-restart\033[0m   - Redémarrer système audio"
-    echo ""
-    echo -e "\033[1;35mBon voyage dans le Wasteland! \033[0m"
-    echo ""
-    
-    touch /home/$USERNAME/.welcome_shown
-fi
-BASHRC_EOF
-
-# Configuration VIM améliorée
-cat > /home/$USERNAME/.vimrc <<'VIM_EOF'
-" Configuration Vim - Arch Linux Fallout Edition
-set number
-set relativenumber
-set expandtab
-set tabstop=4
-set shiftwidth=4
-set autoindent
-set smartindent
-set hlsearch
-set incsearch
-set ignorecase
-set smartcase
-set wildmenu
-set wildmode=list:longest
-set laststatus=2
-set ruler
-set showcmd
-set showmatch
-set cursorline
-set mouse=a
-syntax on
-
-" Thème sombre
-set background=dark
-colorscheme desert
-
-" Mappings utiles
-nnoremap <C-n> :set invnumber<CR>
-nnoremap <C-h> :noh<CR>
-nnoremap <F2> :w<CR>
-nnoremap <F3> :q<CR>
-
-" Configuration pour les développeurs
-set autowrite
-set encoding=utf-8
-set fileencoding=utf-8
-VIM_EOF
-
-# Configuration Git complète
-sudo -u $USERNAME git config --global user.name "$USERNAME"
-sudo -u $USERNAME git config --global user.email "$USERNAME@$HOSTNAME.local"
-sudo -u $USERNAME git config --global init.defaultBranch main
-sudo -u $USERNAME git config --global core.editor nano
-sudo -u $USERNAME git config --global pull.rebase false
-sudo -u $USERNAME git config --global credential.helper store
-
-# Création répertoires utilisateur
-mkdir -p /home/$USERNAME/{Projets,Scripts,Téléchargements/{Logiciels,Musique,Vidéos},Documents/{Dev,Personnel,Notes},Images/{Screenshots,Wallpapers}}
-
-# CORRECTION: Permissions complètes
-chown -R $USERNAME:$USERNAME /home/$USERNAME/
-chmod 755 /home/$USERNAME
-chmod -R 755 /home/$USERNAME/{Projets,Scripts,Documents,Images}
-chmod -R 775 /home/$USERNAME/Téléchargements
-EOF
-    
-    print_info "Vérification finale de TOUTES les corrections..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-echo ""
-echo "VÉRIFICATION FINALE DES CORRECTIONS"
-echo ""
-
-# 1. Vérification thèmes
-echo "1.  THÈMES ET ICÔNES:"
-theme_ok=0
-[[ -d /usr/share/icons/Papirus ]] && echo "    Papirus icons" && ((theme_ok++))
-[[ -d /usr/share/themes/Arc ]] && echo "    Arc theme" && ((theme_ok++))
-[[ -f /usr/share/icons/Tela-blue/index.theme ]] && echo "    Tela icons" && ((theme_ok++))
-echo "Thèmes installés: $theme_ok/3"
-
-# 2. Vérification Fastfetch
-echo ""
-echo "2.  FASTFETCH:"
-if command -v fastfetch >/dev/null 2>&1; then
-    echo "    Fastfetch installé"
-    [[ -f /home/$USERNAME/.config/fastfetch/config.jsonc ]] && echo "    Configuration personnalisée"
-    grep -q "fastfetch" /home/$USERNAME/.bashrc && echo "    Lancement automatique configuré"
-else
-    echo "    Fastfetch non trouvé"
-fi
-
-# 3. Vérification VSCode
-echo ""
-echo "3.  VISUAL STUDIO CODE:"
-vscode_ok=false
-if command -v code >/dev/null 2>&1; then
-    echo "   VSCode (officiel) installé"
-    vscode_ok=true
-elif command -v code-oss >/dev/null 2>&1; then
-    echo "    VSCode (OSS) installé"
-    vscode_ok=true
-elif [[ -x /opt/visual-studio-code/code ]]; then
-    echo "    VSCode (manuel) installé"
-    vscode_ok=true
-else
-    echo "    VSCode non trouvé"
-fi
-
-[[ "$vscode_ok" == true ]] && [[ -f /home/$USERNAME/.config/Code/User/settings.json ]] && echo "    Configuration VSCode présente"
-
-# 4. Vérification GRUB
-echo ""
-echo "4.  GRUB:"
-[[ -f /boot/grub/grub.cfg ]] && echo "    GRUB configuré"
-[[ -f /boot/grub/themes/fallout/theme.txt ]] && echo "    Thème Fallout installé"
-grep -q "GRUB_TIMEOUT=10" /etc/default/grub && echo "    Menu visible (10s timeout)"
-
-# 5. Vérification Plymouth
-echo ""
-echo "5.  PLYMOUTH:"
-[[ -f /usr/share/plymouth/themes/fallout-pipboy/fallout-pipboy.plymouth ]] && echo "    Thème Plymouth PipBoy"
-plymouth-set-default-theme --list 2>/dev/null | grep -q fallout-pipboy && echo "    Thème activé"
-
-# 6. Vérification logiciels
-echo ""
-echo "6.  LOGICIELS ESSENTIELS:"
-software_count=0
-critical_software=("firefox" "vlc" "gimp" "git" "docker" "steam")
-
-for app in "${critical_software[@]}"; do
-    if command -v "$app" >/dev/null 2>&1; then
-        echo "    $app"
-        ((software_count++))
-    else
-        echo " $app MANQUANT"
-    fi
-done
-
-echo "    Logiciels critiques: $software_count/${#critical_software[@]}"
-
-# 7. Total paquets
-echo ""
-echo "7.  STATISTIQUES :"
-total_packages=$(pacman -Q | wc -l)
-echo "    Total paquets installés: $total_packages"
-
-# 8. Services
-echo ""
-echo "8.  SERVICES :"
-systemctl is-enabled NetworkManager >/dev/null && echo "    NetworkManager activé"
-systemctl --global is-enabled pipewire >/dev/null 2>&1 && echo "    PipeWire activé"
-
-echo ""
-echo "RÉSUMÉ FINAL"
-if [[ $theme_ok -ge 2 && "$vscode_ok" == true && $software_count -ge 4 ]]; then
-    echo " TOUTES LES CORRECTIONS APPLIQUÉES AVEC SUCCÈS!"
-    echo " Système prêt pour utilisation"
-else
-    echo "  Certaines corrections peuvent nécessiter une intervention manuelle car flemme de créer un script de correction"
-fi
-echo "=================================================="
-EOF
-    
-    print_success "Configuration finale terminée avec TOUTES LES CORRECTIONS"
-}
-
-finish_installation() {
-    print_header "INSTALLATION ARCH LINUX FALLOUT EDITION COMPLETE TERMINEE!"
-    
-    if [[ "$DRY_RUN" == true ]]; then
-        print_success " SIMULATION TERMINEE - Aucune modification réelle effectuée"
-        echo ""
-        echo -e "${YELLOW}Pour une installation réelle, relancez sans --dry-run${NC}"
-        return 0
-    fi
-    
-    print_success "L'installation complète d'Arch Linux Fallout Edition est maintenant terminée!"
-    echo ""
-    echo -e "${GREEN} RESUME COMPLET DE L'INSTALLATION:${NC}"
-    echo -e "${CYAN}• Disque :${NC} $DISK"
-    echo -e "${CYAN}• Partitions :${NC}"
-    echo -e "  - EFI: $EFI_PART ($PARTITION_EFI_SIZE)"
-    echo -e "  - Root: $ROOT_PART ($PARTITION_ROOT_SIZE)"
-    [[ -n "$HOME_PART" ]] && echo -e "  - Home: $HOME_PART ($PARTITION_HOME_SIZE)"
-    [[ -n "$SWAP_PART" ]] && echo -e "  - Swap: $SWAP_PART ($PARTITION_SWAP_SIZE)"
-    echo -e "${CYAN}• Hostname :${NC} $HOSTNAME"
-    echo -e "${CYAN}• Utilisateur :${NC} $USERNAME"
-    echo -e "${CYAN}• Environnement :${NC} $DE_CHOICE"
-    [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "${CYAN}• Partitionnement :${NC} Personnalisé"
-    echo ""
-    
-    echo -e "${YELLOW}FONCTIONNALITES COMPLETES INSTALLEES:${NC}"
-    echo ""
-    echo -e "${GREEN}SYSTEME DE BASE :${NC}"
-    echo -e "• Configuration française complète (locale, clavier, fuseau horaire)"
-    echo -e "• Optimisations système et réseau (BBR, swappiness, limites)"
-    [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "• Configuration personnalisée des partitions"
-    [[ "$USE_SEPARATE_HOME" == true ]] && echo -e "• Partition /home séparée activée"
-    echo ""
-    echo -e "${GREEN}INTERFACE ET THEMES :${NC}"
-    echo -e "• Thème GRUB Fallout avec fallback intégré"
-    echo -e "• Son de boot Fallout (MP3 ou bip système)"
-    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Splashscreen Plymouth avec animation PipBoy Fallout"
-    [[ "$DE_CHOICE" == "kde" ]] && echo -e "• Configuration SDDM avec fond d'écran Fallout"
-    echo -e "• Thèmes d'icônes (Tela, Papirus) et thèmes Sweet/Arc"
-    echo -e "• Thèmes GRUB additionnels (BSOL, Minegrub, etc.)"
-    echo ""
-    echo -e "${GREEN}SYSTEME AUDIO PROFESSIONNEL :${NC}"
-    echo -e "• PipeWire + WirePlumber (audio basse latence)"
-    echo -e "• CAVA (visualiseur audio terminal configuré)"
-    echo -e "• PavuControl (contrôle audio graphique)"
-    echo -e "• Correction bug conflict PipeWire-Jack appliquée"
-    echo ""
-    echo -e "${GREEN}DEVELOPPEMENT COMPLET :${NC}"
-    echo -e "• Langages: Python, Node.js, Java OpenJDK, Go, Rust, C/C++"
-    echo -e "• Outils: Git, Docker, cmake, make, gcc, clang"
-    echo -e "• IDEs: Visual Studio Code avec extensions (Copilot, Python, C++, Java, Tailwind)"
-    echo -e "• Android Studio (développement mobile)"
-    echo -e "• Terminal amélioré avec Fastfetch et aliases utiles"
-    echo ""
-    echo -e "${GREEN}NAVIGATION WEB COMPLETE :${NC}"
-    echo -e "• Firefox (configuré pour Netflix/Disney+ DRM)"
-    echo -e "• Google Chrome, Chromium, Brave Browser"
-    echo -e "• DuckDuckGo Browser (si disponible)"
-    echo ""
-    echo -e "${GREEN}MULTIMEDIA ET DIVERTISSEMENT :${NC}"
-    echo -e "• Spotify + Spicetify (thème Dribbblish Nord-Dark)"
-    echo -e "• VLC, MPV, OBS Studio, Audacity"
-    echo -e "• GIMP, Inkscape (design et image)"
-    echo ""
-    echo -e "${GREEN}GAMING ET COMPATIBILITE :${NC}"
-    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Steam avec Proton configuré"
-    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Lutris, GameMode"
-    echo -e "• Wine + Winetricks (compatibilité Windows complète)"
-    echo -e "• Wine-mono, Wine-gecko pour applications .NET"
-    echo ""
-    echo -e "${GREEN}  UTILITAIRES ET OUTILS :${NC}"
-    echo -e "• AUR Helper Paru pré-configuré"
-    echo -e "• Flatpak avec Flathub activé"
-    echo -e "• TimeShift (sauvegardes), GParted, KeePassXC"
-    echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
-    echo -e "• Configuration Bash complète avec aliases et fonctions"
-    echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V491.7 :${NC}"
-    echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
-    echo -e "• Miroirs optimisés avec Reflector avancé"
-    echo -e "• Téléchargements parallèles maximisés"
-    echo -e "• Configuration réseau BBR pour performances maximales"
-    echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V491.7 :${NC}"
-    echo -e "• Configuration personnalisée des tailles de partitions"
-    echo -e "• Partition /home séparée optionnelle avec interface O/N"
-    echo -e "• Mot de passe minimum réduit à 6 caractères"
-    echo -e "• Correction définitive du bug conflict PipeWire-Jack"
-    echo -e "• Validation automatique des tailles de partitions"
-    echo ""
-    
-    echo -e "${BLUE} INSTRUCTIONS POST-INSTALLATION :${NC}"
-    echo -e "1. ${WHITE}Retirez le support d'installation${NC}"
-    echo -e "2. ${WHITE}Redémarrez le système${NC}"
-    echo -e "3. ${WHITE}Connectez-vous avec:${NC} ${CYAN}$USERNAME${NC}"
-    echo -e "4. ${WHITE}Première mise à jour:${NC} ${CYAN}sudo pacman -Syu${NC}"
-    echo -e "5. ${WHITE}Test audio:${NC} ${CYAN}cava${NC} (visualiseur) ou ${CYAN}pavucontrol${NC}"
-    echo -e "6. ${WHITE}Installation AUR:${NC} ${CYAN}paru -S <paquet>${NC}"
-    echo -e "7. ${WHITE}Changement thème GRUB:${NC} modifier ${CYAN}/etc/default/grub${NC}"
-    echo -e "8. ${WHITE}Configuration Spicetify:${NC} ${CYAN}spicetify apply${NC}"
-    echo ""
-    
-    echo -e "${PURPLE} COMMANDES UTILES POST-INSTALLATION :${NC}"
-    echo -e "• ${WHITE}fastfetch${NC} - Informations système avec logo Arch"
-    echo -e "• ${WHITE}cava${NC} - Visualiseur audio en temps réel"
-    echo -e "• ${WHITE}audio-restart${NC} - Redémarrer le système audio"
-    echo -e "• ${WHITE}docker-clean${NC} - Nettoyer Docker"
-    echo -e "• ${WHITE}extract <fichier>${NC} - Extraire n'importe quelle archive"
-    echo -e "• ${WHITE}serve${NC} - Serveur web local Python (port 8000)"
-    echo -e "• ${WHITE}spicetify apply${NC} - Appliquer thèmes Spotify"
-    echo -e "• ${WHITE}systemctl --user status pipewire${NC} - Etat du système audio"
-    echo ""
-    
-    # Sauvegarde du log
-    if [[ -f "$LOG_FILE" ]]; then
-        cp "$LOG_FILE" "/mnt/home/$USERNAME/installation-fallout.log" 2>/dev/null || true
-        print_info "📋 Log d'installation sauvegardé: /home/$USERNAME/installation-fallout.log"
-    fi
-
-    # Création d'un script post-installation
-    cat > /mnt/home/$USERNAME/post-setup.sh <<'POST_EOF'
-#!/bin/bash
-# Script de configuration post-installation Arch Linux
-
-echo "Configuration post-installation Arch Linux"
-echo ""
-
-# Test du système audio
-echo " Test du système audio..."
-systemctl --user restart pipewire pipewire-pulse wireplumber
-sleep 3
-if systemctl --user is-active --quiet pipewire; then
-    echo " PipeWire actif"
-else
-    echo " Problème avec PipeWire"
-fi
-
-# Test Fastfetch
-echo ""
-echo "  Test Fastfetch..."
-fastfetch
-
-# Informations utiles
-echo ""
-echo " Votre système Arch Linux Fallout Edition est prêt!"
-echo ""
-echo "Commandes utiles:"
-echo "• cava                    - Visualiseur audio"
-echo "• spicetify apply        - Appliquer thèmes Spotify"
-echo "• paru -S <package>      - Installer depuis AUR"
-echo "• sudo pacman -Syu       - Mise à jour système"
-echo ""
-echo "Fichiers de configuration:"
-echo "• ~/.bashrc              - Configuration terminal"
-echo "• ~/.config/fastfetch/   - Configuration Fastfetch"
-echo "• ~/.config/cava/        - Configuration visualiseur audio"
-echo ""
-echo " Bon voyage dans le Wasteland!"
-POST_EOF
-    
-    chmod +x "/mnt/home/$USERNAME/post-setup.sh"
-    # Changer propriétaire dans le système installé (résolution des uid/gid côté chroot)
-    # Changer propriétaire dans le système installé (résolution des uid/gid côté chroot)
-    /usr/bin/arch-chroot /mnt /usr/bin/bash -c 'id -u "$USERNAME" >/dev/null 2>&1 && chown "$USERNAME:$USERNAME" "/home/$USERNAME/post-setup.sh"' 2>/dev/null || true
-    
-    if confirm_action "Voulez-vous redémarrer maintenant ?" "O"; then
-        print_info "Redémarrage dans 5 secondes..."
-        
-        print_info "Démontage des partitions..."
-        sync
-        
-        # Démontage propre
-        [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
-        umount -R /mnt 2>/dev/null || print_warning "Démontage partiel"
-        
-        echo ""
-        for i in {5..1}; do
-            echo -ne "\r${YELLOW} Redémarrage dans $i secondes... (Ctrl+C pour annuler)${NC}"
-            sleep 1
-        done
-        echo ""
-        echo ""
-        print_success " Redémarrage en cours... Bienvenue dans Arch Linux !"
-        
-        reboot
-    else
-        print_info "Installation terminée. Redémarrez manuellement quand vous le souhaitez."
-        echo -e "${YELLOW} N'oubliez pas de retirer la clé USB bootable !${NC}"
-        
-        # Démontage manuel
-        sync
-        [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
-        umount -R /mnt 2>/dev/null || true
-        
-        echo ""
-        echo -e "${GREEN} Installation complète V491.7 ! Votre système Arch Linux est prêt.${NC}"
-        echo ""
-        echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
-        echo -e "• ${WHITE}~/post-setup.sh${NC} - Script de vérification post-installation"
-        echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
-        echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
-        echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 317.2)${NC}"
-    fi
-}
-
-# Point d'entrée sécurisé
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # S'assure que paru est présent avant toute install AUR Gaming
-    if ! chroot_cmd_exists paru; then
-        print_info "Paru non disponible — (ré)installation automatique…"
-        ensure_paru_in_chroot || print_warning "Impossible de (ré)installer un helper AUR — les paquets AUR Gaming seront ignorés"
-    fi
-
-    exec > >(tee -a "$LOG_FILE")
-    exec 2> >(tee -a "$LOG_FILE" >&2)
-    
-    main "$@"
-    
-    # Exit explicite
-    exit 0
-fi
-
-cat > post-install.sh << 'EOF'
-    #!/usr/bin/env bash
+cat > /mnt/home/$USERNAME/post-install.sh <<'POST_EOF'
+#!/usr/bin/env bash
 # post-install.sh
 # Post-install tasks complets pour usage en session utilisateur.
 # - Journalise UNIQUEMENT stderr dans ~/post-install-errors.log
@@ -4347,9 +3580,9 @@ exec 2>>"$LOGFILE"
 echo "[INFO] post-install started at $(date '+%Y-%m-%d %H:%M:%S')"
 
 # Helper pour afficher en vert (succès), jaune (info), rouge (erreur)
-green() { printf "\033[1;32m%s\033[0m\n" "$1"; }
-yellow() { printf "\033[1;33m%s\033[0m\n" "$1"; }
-red() { printf "\033[1;31m%s\033[0m\n" ; printf "%s\n" "$1" >&3 ; }
+green()  { printf "\033[1;32m%s\033[0m\n" "$1" >&3; }
+yellow() { printf "\033[1;33m%s\033[0m\n" "$1" >&3; }
+red()    { printf "\033[1;31m%s\033[0m\n" "$1" >&3; }
 
 # Helper : exécuter une commande, afficher résultat et logger erreur si échoue
 run_cmd() {
@@ -4418,7 +3651,7 @@ echo "[INFO] Détection: PKG_MANAGER=$PKG_MANAGER, DISTRO=$DISTRO"
 update_db() {
   case "$PKG_MANAGER" in
     pacman) run_cmd_sudo "pacman -Syu (update)" pacman -Syu --noconfirm ;;
-    apt) run_cmd_sudo "apt update" apt update -y ;;
+    apt) run_cmd_sudo "apt update" apt update ;;
     dnf) run_cmd_sudo "dnf check-update" dnf check-update || true ;;
     zypper) run_cmd_sudo "zypper refresh" zypper refresh ;;
     apk) run_cmd_sudo "apk update" apk update ;;
@@ -4755,4 +3988,658 @@ main "$@"
 exec 2>&3
 
 echo "[INFO] post-install finished at $(date '+%Y-%m-%d %H:%M:%S')"
+POST_EOF
+chmod +x /mnt/home/$USERNAME/post-install.sh
+chown $USERNAME:$USERNAME /mnt/home/$USERNAME/post-install.sh
+
+
+# Fastfetch s'exécute automatiquement
+install_fastfetch() {
+    print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
+
+    if [[ -z "${USERNAME:-}" ]]; then
+        print_error "USERNAME non défini. Abandon."
+        return 1
+    fi
+
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        print_info "[DRY RUN] install_fastfetch pour ${USERNAME}"
+        return 0
+    fi
+
+    local USER_HOME="/home/${USERNAME}"
+    local CHROOT_USER_HOME="/mnt${USER_HOME}"
+    local CONFIG_DIR="${CHROOT_USER_HOME}/.config/fastfetch"
+    local PROFILE_FILE="${CHROOT_USER_HOME}/.bash_profile"
+    local INVOKE_MARKER="# fastfetch autostart entry - added by alpha.sh"
+    local FASTFETCH_BIN="/usr/bin/fastfetch"
+    local installed_in_chroot=false
+
+    # 1) Vérifier si fastfetch est disponible dans le chroot
+    if /usr/bin/arch-chroot /mnt /usr/bin/env bash -lc 'command -v fastfetch >/dev/null 2>&1'; then
+        print_info "fastfetch déjà installé dans le chroot."
+        installed_in_chroot=true
+    else
+        print_info "Tentative d'installation de fastfetch dans le chroot via pacman..."
+        if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch >/dev/null 2>&1; then
+            print_success "fastfetch installé via pacman dans le chroot."
+            installed_in_chroot=true
+        else
+            print_warning "pacman n'a pas réussi à installer fastfetch dans le chroot."
+            # tenter AUR helper si présent
+            if /usr/bin/arch-chroot /mnt command -v paru >/dev/null 2>&1; then
+                print_info "Tentative d'installation via paru (AUR) dans le chroot..."
+                /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm fastfetch >/dev/null 2>&1 && installed_in_chroot=true || print_warning "paru a échoué."
+            elif /usr/bin/arch-chroot /mnt command -v yay >/dev/null 2>&1; then
+                print_info "Tentative d'installation via yay (AUR) dans le chroot..."
+                /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" yay -S --noconfirm fastfetch >/dev/null 2>&1 && installed_in_chroot=true || print_warning "yay a échoué."
+            else
+                print_warning "Aucun AUR helper détecté dans le chroot. Si fastfetch n'est pas installé, installe-le manuellement ou ajoute un AUR helper."
+            fi
+        fi
+    fi
+
+    if [[ "$installed_in_chroot" != true ]]; then
+        print_warning "fastfetch non installé automatiquement dans le chroot. La configuration utilisateur sera écrite, mais l'exécutable manquera."
+    fi
+
+    # 2) Créer configuration utilisateur (idempotent)
+    mkdir -p "$CONFIG_DIR" || {
+        print_error "Impossible de créer $CONFIG_DIR"
+        return 1
+    }
+
+    cat > "${CONFIG_DIR}/config.jsonc" <<'FFCFG'
+{
+  "display": {
+    "separator": " : ",
+    "keyWidth": 18,
+    "showColors": true
+  },
+  "modules": [
+    { "type": "title", "key": "Arch - Powered by alpha.sh" },
+    { "type": "ascii", "logo": "arch" },
+    { "type": "os" },
+    { "type": "host" },
+    { "type": "kernel" },
+    { "type": "uptime" },
+    { "type": "shell" },
+    { "type": "de" },
+    { "type": "wm" },
+    { "type": "terminal" },
+    { "type": "cpu" },
+    { "type": "gpu" },
+    { "type": "memory" },
+    { "type": "disk" },
+    { "type": "packages" }
+  ]
+}
+FFCFG
+
+    # 3) Fixer droits à l'utilisateur dans le chroot
+    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R ${USERNAME}:${USERNAME} '/home/${USERNAME}/.config/fastfetch' >/dev/null 2>&1 || true"
+
+    print_success "Configuration fastfetch écrite pour ${USERNAME}"
+
+    # 4) Ajouter invocation idempotente dans .bash_profile pour afficher fastfetch à la connexion
+    #    - On ajoute un bloc protégé par un marqueur pour éviter duplications
+    if ! grep -qF "$INVOKE_MARKER" "$PROFILE_FILE" 2>/dev/null; then
+        cat >> "$PROFILE_FILE" <<'BASHFF'
+
+# fastfetch autostart (affiche infos système dans les shells de connexion)
+# Ne s'exécute que dans un shell interactif et si fastfetch est disponible.
+$INVOKE_MARKER
+if [ -t 1 ] && command -v fastfetch >/dev/null 2>&1; then
+  # Eviter que fastfetch pollue les sessions graphiques non-terminales
+  if [ -z "$DISPLAY" ] || [[ "$TERM" =~ ^xterm|^rxvt|^screen|^tmux|^linux|^vt ]]; then
+    fastfetch --config ~/.config/fastfetch/config.jsonc || true
+  fi
+fi
+BASHFF
+        # corriger propriétaire
+        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.bash_profile' >/dev/null 2>&1 || true"
+        print_success "Entrée fastfetch ajoutée dans $PROFILE_FILE"
+    else
+        print_info "Entrée fastfetch déjà présente dans $PROFILE_FILE — rien à faire."
+    fi
+
+    # 5) Optionnel : si utilisateur KDE/XDG, indiquer comment autostart graphique (ne pas forcer terminal)
+    print_info "Si tu veux un autostart graphique (terminal qui lance fastfetch), crée un .desktop dans ~/.config/autostart qui lance ton terminal avec 'fastfetch' à l'ouverture."
+
+    return 0
+}
+
+# Fonctions pour la configuration finale du système
+final_configuration() {
+    print_header "ETAPE 25/$TOTAL_STEPS: CONFIGURATION FINALE"
+    CURRENT_STEP=25
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        print_info "[DRY RUN] Simulation de la configuration finale"
+        return 0
+    fi
+    
+    print_info "Configuration finale avec TOUTES LES CORRECTIONS appliquées..."
+    
+    # Services système optimisés
+    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Certaines configurations ont échoué"
+set -e
+
+# Services essentiels
+systemctl enable NetworkManager
+systemctl enable systemd-timesyncd
+systemctl enable fstrim.timer
+
+# Services audio PipeWire
+systemctl --global enable pipewire.service
+systemctl --global enable pipewire-pulse.service
+systemctl --global enable wireplumber.service
+
+# Optimisations système avancées
+echo "vm.swappiness=10" > /etc/sysctl.d/99-swappiness.conf
+echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.d/99-swappiness.conf
+echo "net.core.default_qdisc=fq" > /etc/sysctl.d/99-network.conf
+echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-network.conf
+
+# Limites utilisateur
+echo "$USERNAME soft nofile 65536" >> /etc/security/limits.conf
+echo "$USERNAME hard nofile 65536" >> /etc/security/limits.conf
+echo "$USERNAME soft memlock unlimited" >> /etc/security/limits.conf
+echo "$USERNAME hard memlock unlimited" >> /etc/security/limits.conf
 EOF
+    
+    # Configuration utilisateur
+    /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Configuration utilisateur partielle"
+# Configuration .bashrc COMPLÈTE et CORRIGÉE
+cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
+#!/bin/bash
+# ===============================================================================
+# Configuration Bash - Arch Linux Fallout Edition v497.7
+# Toutes les corrections appliquées
+# ===============================================================================
+
+# Si non interactif, arrêter ici
+[[ \$- != *i* ]] && return
+
+# Configuration historique
+export HISTSIZE=10000
+export HISTFILESIZE=20000
+export HISTCONTROL=ignoreboth:erasedups
+shopt -s histappend
+shopt -s checkwinsize
+
+# Variables d'environnement
+export EDITOR=nano
+export VISUAL=nano
+export BROWSER=firefox
+export JAVA_HOME=/usr/lib/jvm/default
+export PATH=\$PATH:\$HOME/.local/bin
+
+# Alias système
+alias ll='ls -alF --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias mkdir='mkdir -pv'
+alias cp='cp -i'
+alias mv='mv -i'
+alias rm='rm -i'
+alias df='df -h'
+alias du='du -h'
+alias free='free -h'
+alias ps='ps auxf'
+
+# Alias Git
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline --graph'
+alias gd='git diff'
+alias gb='git branch'
+alias gco='git checkout'
+
+# Alias développement
+alias python='python3'
+alias pip='pip3'
+alias serve='python -m http.server 8000'
+alias myip='curl -s ifconfig.me'
+alias weather='curl wttr.in'
+
+# Alias système Arch
+alias pacup='sudo pacman -Syu'
+alias pacin='sudo pacman -S'
+alias pacfind='pacman -Ss'
+alias pacrem='sudo pacman -Rns'
+alias pacclean='sudo pacman -Sc'
+alias aurinstall='paru -S'
+alias aursearch='paru -Ss'
+
+# Alias audio
+alias cava='cava'
+alias audio-restart='systemctl --user restart pipewire pipewire-pulse wireplumber'
+alias audio-status='systemctl --user status pipewire pipewire-pulse wireplumber'
+
+# Alias Docker
+alias docker-clean='docker system prune -af'
+alias docker-stop-all='docker stop \$(docker ps -q) 2>/dev/null || true'
+alias docker-logs='docker logs'
+
+# FONCTIONS UTILES
+extract() {
+    if [ -f \$1 ] ; then
+        case \$1 in
+            *.tar.bz2)   tar xjf \$1     ;;
+            *.tar.gz)    tar xzf \$1     ;;
+            *.bz2)       bunzip2 \$1     ;;
+            *.rar)       unrar x \$1     ;;
+            *.gz)        gunzip \$1      ;;
+            *.tar)       tar xf \$1      ;;
+            *.tbz2)      tar xjf \$1     ;;
+            *.tgz)       tar xzf \$1     ;;
+            *.zip)       unzip \$1       ;;
+            *.Z)         uncompress \$1  ;;
+            *.7z)        7z x \$1        ;;
+            *)           echo "Extension non supportée: '\$1'" ;;
+        esac
+    else
+        echo "Fichier non trouvé: '\$1'"
+    fi
+}
+
+# Fonction mise à jour système complète
+full-update() {
+    echo " Mise à jour système complète..."
+    sudo pacman -Syu
+    if command -v paru >/dev/null; then
+        echo " Mise à jour AUR..."
+        paru -Syu
+    fi
+    if command -v flatpak >/dev/null; then
+        echo " Mise à jour Flatpak..."
+        flatpak update
+    fi
+    echo " Mise à jour terminée!"
+}
+
+# Fonction informations système
+sysinfo() {
+    echo "=== INFORMATIONS SYSTÈME ==="
+    echo "OS: \$(cat /etc/os-release | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '\"')"
+    echo "Kernel: \$(uname -r)"
+    echo "Uptime: \$(uptime -p)"
+    echo "CPU: \$(lscpu | grep 'Model name' | cut -d':' -f2 | xargs)"
+    echo "RAM: \$(free -h | awk '/^Mem:/ {print \$3 "/" \$2}')"
+    echo "Disque: \$(df -h / | awk 'NR==2{print \$3 "/" \$2 " (" \$5 " utilisé)"}')"
+    echo "Paquets: \$(pacman -Q | wc -l) installés"
+    echo "================================"
+}
+
+# Prompt personnalisé
+if [ "\$EUID" -eq 0 ]; then
+    PS1='\[\033[01;31m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# '
+else
+    PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+fi
+
+# Fastfetch automatique GARANTI
+if [[ -z "\$FASTFETCH_SHOWN" && "\$TERM" != "linux" ]]; then
+    export FASTFETCH_SHOWN=1
+    
+    if command -v fastfetch >/dev/null 2>&1; then
+        echo ""
+        if [[ -f /home/$USERNAME/.config/fastfetch/config.jsonc ]]; then
+            fastfetch --config /home/$USERNAME/.config/fastfetch/config.jsonc 2>/dev/null || fastfetch 2>/dev/null
+        else
+            fastfetch 2>/dev/null
+        fi
+        echo ""
+    else
+        echo ""
+        echo -e "\033[1;32m  ARCH LINUX \033[0m"
+        echo -e "\033[1;36mUtilisateur:\033[0m \$(whoami)@\$(hostname)"
+        echo -e "\033[1;36mUptime:\033[0m \$(uptime -p)"
+        echo -e "\033[1;33m Powered by PapaOursPolaire, available on GitHub \033[0m"
+        echo ""
+        echo -e "\033[0;35mCommandes utiles: sysinfo, full-update, cava, audio-restart\033[0m"
+        echo ""
+    fi
+fi
+
+BASHRC_EOF
+
+# Configuration VIM améliorée
+cat > /home/$USERNAME/.vimrc <<'VIM_EOF'
+" Configuration Vim - Arch Linux Fallout Edition
+set number
+set relativenumber
+set expandtab
+set tabstop=4
+set shiftwidth=4
+set autoindent
+set smartindent
+set hlsearch
+set incsearch
+set ignorecase
+set smartcase
+set wildmenu
+set wildmode=list:longest
+set laststatus=2
+set ruler
+set showcmd
+set showmatch
+set cursorline
+set mouse=a
+syntax on
+
+" Thème sombre
+set background=dark
+colorscheme desert
+
+" Mappings utiles
+nnoremap <C-n> :set invnumber<CR>
+nnoremap <C-h> :noh<CR>
+nnoremap <F2> :w<CR>
+nnoremap <F3> :q<CR>
+
+" Configuration pour les développeurs
+set autowrite
+set encoding=utf-8
+set fileencoding=utf-8
+VIM_EOF
+
+# Configuration Git complète
+sudo -u $USERNAME git config --global user.name "$USERNAME"
+sudo -u $USERNAME git config --global user.email "$USERNAME@$HOSTNAME.local"
+sudo -u $USERNAME git config --global init.defaultBranch main
+sudo -u $USERNAME git config --global core.editor nano
+sudo -u $USERNAME git config --global pull.rebase false
+sudo -u $USERNAME git config --global credential.helper store
+
+# Création répertoires utilisateur
+mkdir -p /home/$USERNAME/{Projets,Scripts,Téléchargements/{Logiciels,Musique,Vidéos},Documents/{Dev,Personnel,Notes},Images/{Screenshots,Wallpapers}}
+
+# CORRECTION: Permissions complètes
+chown -R $USERNAME:$USERNAME /home/$USERNAME/
+chmod 755 /home/$USERNAME
+chmod -R 755 /home/$USERNAME/{Projets,Scripts,Documents,Images}
+chmod -R 775 /home/$USERNAME/Téléchargements
+EOF
+    
+    print_info "Vérification finale de TOUTES les corrections..."
+    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
+echo ""
+echo "VÉRIFICATION FINALE DES CORRECTIONS"
+echo ""
+
+# 1. Vérification thèmes
+echo "1.  THÈMES ET ICÔNES:"
+theme_ok=0
+[[ -d /usr/share/icons/Papirus ]] && echo "    Papirus icons" && ((theme_ok++))
+[[ -d /usr/share/themes/Arc ]] && echo "    Arc theme" && ((theme_ok++))
+[[ -f /usr/share/icons/Tela-blue/index.theme ]] && echo "    Tela icons" && ((theme_ok++))
+echo "Thèmes installés: $theme_ok/3"
+
+# 2. Vérification Fastfetch
+echo ""
+echo "2.  FASTFETCH:"
+if command -v fastfetch >/dev/null 2>&1; then
+    echo "    Fastfetch installé"
+    [[ -f /home/$USERNAME/.config/fastfetch/config.jsonc ]] && echo "    Configuration personnalisée"
+    grep -q "fastfetch" /home/$USERNAME/.bashrc && echo "    Lancement automatique configuré"
+else
+    echo "    Fastfetch non trouvé"
+fi
+
+# 3. Vérification VSCode
+echo ""
+echo "3.  VISUAL STUDIO CODE:"
+vscode_ok=false
+if command -v code >/dev/null 2>&1; then
+    echo "   VSCode (officiel) installé"
+    vscode_ok=true
+elif command -v code-oss >/dev/null 2>&1; then
+    echo "    VSCode (OSS) installé"
+    vscode_ok=true
+elif [[ -x /opt/visual-studio-code/code ]]; then
+    echo "    VSCode (manuel) installé"
+    vscode_ok=true
+else
+    echo "    VSCode non trouvé"
+fi
+
+[[ "$vscode_ok" == true ]] && [[ -f /home/$USERNAME/.config/Code/User/settings.json ]] && echo "    Configuration VSCode présente"
+
+# 4. Vérification GRUB
+echo ""
+echo "4.  GRUB:"
+[[ -f /boot/grub/grub.cfg ]] && echo "    GRUB configuré"
+[[ -f /boot/grub/themes/fallout/theme.txt ]] && echo "    Thème Fallout installé"
+grep -q "GRUB_TIMEOUT=10" /etc/default/grub && echo "    Menu visible (10s timeout)"
+
+# 5. Vérification Plymouth
+echo ""
+echo "5.  PLYMOUTH:"
+[[ -f /usr/share/plymouth/themes/fallout-pipboy/fallout-pipboy.plymouth ]] && echo "    Thème Plymouth PipBoy"
+plymouth-set-default-theme --list 2>/dev/null | grep -q fallout-pipboy && echo "    Thème activé"
+
+# 6. Vérification logiciels
+echo ""
+echo "6.  LOGICIELS ESSENTIELS:"
+software_count=0
+critical_software=("firefox" "vlc" "gimp" "git" "docker" "steam")
+
+for app in "${critical_software[@]}"; do
+    if command -v "$app" >/dev/null 2>&1; then
+        echo "    $app"
+        ((software_count++))
+    else
+        echo " $app MANQUANT"
+    fi
+done
+
+echo "    Logiciels critiques: $software_count/${#critical_software[@]}"
+
+# 7. Total paquets
+echo ""
+echo "7.  STATISTIQUES :"
+total_packages=$(pacman -Q | wc -l)
+echo "    Total paquets installés: $total_packages"
+
+# 8. Services
+echo ""
+echo "8.  SERVICES :"
+systemctl is-enabled NetworkManager >/dev/null && echo "    NetworkManager activé"
+systemctl --global is-enabled pipewire >/dev/null 2>&1 && echo "    PipeWire activé"
+
+echo ""
+echo "RÉSUMÉ FINAL"
+if [[ $theme_ok -ge 2 && "$vscode_ok" == true && $software_count -ge 4 ]]; then
+    echo " TOUTES LES CORRECTIONS APPLIQUÉES AVEC SUCCÈS!"
+    echo " Système prêt pour utilisation"
+else
+    echo "  Certaines corrections peuvent nécessiter une intervention manuelle car flemme de créer un script de correction"
+fi
+echo "=================================================="
+EOF
+    
+    print_success "Configuration finale terminée avec TOUTES LES CORRECTIONS"
+}
+
+finish_installation() {
+    print_header "INSTALLATION ARCH LINUX FALLOUT EDITION COMPLETE TERMINEE!"
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        print_success " SIMULATION TERMINEE - Aucune modification réelle effectuée"
+        echo ""
+        echo -e "${YELLOW}Pour une installation réelle, relancez sans --dry-run${NC}"
+        return 0
+    fi
+    
+    print_success "L'installation complète d'Arch Linux Fallout Edition est maintenant terminée!"
+    echo ""
+    echo -e "${GREEN} RESUME COMPLET DE L'INSTALLATION:${NC}"
+    echo -e "${CYAN}• Disque :${NC} $DISK"
+    echo -e "${CYAN}• Partitions :${NC}"
+    echo -e "  - EFI: $EFI_PART ($PARTITION_EFI_SIZE)"
+    echo -e "  - Root: $ROOT_PART ($PARTITION_ROOT_SIZE)"
+    [[ -n "$HOME_PART" ]] && echo -e "  - Home: $HOME_PART ($PARTITION_HOME_SIZE)"
+    [[ -n "$SWAP_PART" ]] && echo -e "  - Swap: $SWAP_PART ($PARTITION_SWAP_SIZE)"
+    echo -e "${CYAN}• Hostname :${NC} $HOSTNAME"
+    echo -e "${CYAN}• Utilisateur :${NC} $USERNAME"
+    echo -e "${CYAN}• Environnement :${NC} $DE_CHOICE"
+    [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "${CYAN}• Partitionnement :${NC} Personnalisé"
+    echo ""
+    
+    echo -e "${YELLOW}FONCTIONNALITES COMPLETES INSTALLEES:${NC}"
+    echo ""
+    echo -e "${GREEN}SYSTEME DE BASE :${NC}"
+    echo -e "• Configuration française complète (locale, clavier, fuseau horaire)"
+    echo -e "• Optimisations système et réseau (BBR, swappiness, limites)"
+    [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "• Configuration personnalisée des partitions"
+    [[ "$USE_SEPARATE_HOME" == true ]] && echo -e "• Partition /home séparée activée"
+    echo ""
+    echo -e "${GREEN}INTERFACE ET THEMES :${NC}"
+    echo -e "• Thème GRUB Fallout avec fallback intégré"
+    echo -e "• Son de boot Fallout (MP3 ou bip système)"
+    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Splashscreen Plymouth avec animation PipBoy Fallout"
+    [[ "$DE_CHOICE" == "kde" ]] && echo -e "• Configuration SDDM avec fond d'écran Fallout"
+    echo -e "• Thèmes d'icônes (Tela, Papirus) et thèmes Sweet/Arc"
+    echo -e "• Thèmes GRUB additionnels (BSOL, Minegrub, etc.)"
+    echo ""
+    echo -e "${GREEN}SYSTEME AUDIO PROFESSIONNEL :${NC}"
+    echo -e "• PipeWire + WirePlumber (audio basse latence)"
+    echo -e "• CAVA (visualiseur audio terminal configuré)"
+    echo -e "• PavuControl (contrôle audio graphique)"
+    echo -e "• Correction bug conflict PipeWire-Jack appliquée"
+    echo ""
+    echo -e "${GREEN}DEVELOPPEMENT COMPLET :${NC}"
+    echo -e "• Langages: Python, Node.js, Java OpenJDK, Go, Rust, C/C++"
+    echo -e "• Outils: Git, Docker, cmake, make, gcc, clang"
+    echo -e "• IDEs: Visual Studio Code avec extensions (Copilot, Python, C++, Java, Tailwind)"
+    echo -e "• Android Studio (développement mobile)"
+    echo -e "• Terminal amélioré avec Fastfetch et aliases utiles"
+    echo ""
+    echo -e "${GREEN}NAVIGATION WEB COMPLETE :${NC}"
+    echo -e "• Firefox (configuré pour Netflix/Disney+ DRM)"
+    echo -e "• Google Chrome, Chromium, Brave Browser"
+    echo -e "• DuckDuckGo Browser (si disponible)"
+    echo ""
+    echo -e "${GREEN}MULTIMEDIA ET DIVERTISSEMENT :${NC}"
+    echo -e "• Spotify + Spicetify (thème Dribbblish Nord-Dark)"
+    echo -e "• VLC, MPV, OBS Studio, Audacity"
+    echo -e "• GIMP, Inkscape (design et image)"
+    echo ""
+    echo -e "${GREEN}GAMING ET COMPATIBILITE :${NC}"
+    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Steam avec Proton configuré"
+    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Lutris, GameMode"
+    echo -e "• Wine + Winetricks (compatibilité Windows complète)"
+    echo -e "• Wine-mono, Wine-gecko pour applications .NET"
+    echo ""
+    echo -e "${GREEN}  UTILITAIRES ET OUTILS :${NC}"
+    echo -e "• AUR Helper Paru pré-configuré"
+    echo -e "• Flatpak avec Flathub activé"
+    echo -e "• TimeShift (sauvegardes), GParted, KeePassXC"
+    echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
+    echo -e "• Configuration Bash complète avec aliases et fonctions"
+    echo ""
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V497.7 :${NC}"
+    echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
+    echo -e "• Miroirs optimisés avec Reflector avancé"
+    echo -e "• Téléchargements parallèles maximisés"
+    echo -e "• Configuration réseau BBR pour performances maximales"
+    echo ""
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V497.7 :${NC}"
+    echo -e "• Configuration personnalisée des tailles de partitions"
+    echo -e "• Partition /home séparée optionnelle avec interface O/N"
+    echo -e "• Mot de passe minimum réduit à 6 caractères"
+    echo -e "• Correction définitive du bug conflict PipeWire-Jack"
+    echo -e "• Validation automatique des tailles de partitions"
+    echo ""
+    
+    echo -e "${BLUE} INSTRUCTIONS POST-INSTALLATION :${NC}"
+    echo -e "1. ${WHITE}Retirez le support d'installation${NC}"
+    echo -e "2. ${WHITE}Redémarrez le système${NC}"
+    echo -e "3. ${WHITE}Connectez-vous avec:${NC} ${CYAN}$USERNAME${NC}"
+    echo -e "4. ${WHITE}Première mise à jour:${NC} ${CYAN}sudo pacman -Syu${NC}"
+    echo -e "5. ${WHITE}Test audio:${NC} ${CYAN}cava${NC} (visualiseur) ou ${CYAN}pavucontrol${NC}"
+    echo -e "6. ${WHITE}Installation AUR:${NC} ${CYAN}paru -S <paquet>${NC}"
+    echo -e "7. ${WHITE}Changement thème GRUB:${NC} modifier ${CYAN}/etc/default/grub${NC}"
+    echo -e "8. ${WHITE}Configuration Spicetify:${NC} ${CYAN}spicetify apply${NC}"
+    echo ""
+    
+    echo -e "${PURPLE} COMMANDES UTILES POST-INSTALLATION :${NC}"
+    echo -e "• ${WHITE}fastfetch${NC} - Informations système avec logo Arch"
+    echo -e "• ${WHITE}cava${NC} - Visualiseur audio en temps réel"
+    echo -e "• ${WHITE}audio-restart${NC} - Redémarrer le système audio"
+    echo -e "• ${WHITE}docker-clean${NC} - Nettoyer Docker"
+    echo -e "• ${WHITE}extract <fichier>${NC} - Extraire n'importe quelle archive"
+    echo -e "• ${WHITE}serve${NC} - Serveur web local Python (port 8000)"
+    echo -e "• ${WHITE}spicetify apply${NC} - Appliquer thèmes Spotify"
+    echo -e "• ${WHITE}systemctl --user status pipewire${NC} - Etat du système audio"
+    echo ""
+    
+    # Sauvegarde du log
+    if [[ -f "$LOG_FILE" ]]; then
+        cp "$LOG_FILE" "/mnt/home/$USERNAME/installation-fallout.log" 2>/dev/null || true
+        print_info "📋 Log d'installation sauvegardé: /home/$USERNAME/installation-fallout.log"
+    fi
+    
+    if confirm_action "Voulez-vous redémarrer maintenant ?" "O"; then
+        print_info "Redémarrage dans 5 secondes..."
+        
+        print_info "Démontage des partitions..."
+        sync
+        
+        # Démontage propre
+        [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
+        umount -R /mnt 2>/dev/null || print_warning "Démontage partiel"
+        
+        echo ""
+        for i in {5..1}; do
+            echo -ne "\r${YELLOW} Redémarrage dans $i secondes... (Ctrl+C pour annuler)${NC}"
+            sleep 1
+        done
+        echo ""
+        echo ""
+        print_success " Redémarrage en cours... Bienvenue dans Arch Linux !"
+        
+        reboot
+    else
+        print_info "Installation terminée. Redémarrez manuellement quand vous le souhaitez."
+        echo -e "${YELLOW} N'oubliez pas de retirer la clé USB bootable !${NC}"
+        
+        # Démontage manuel
+        sync
+        [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
+        umount -R /mnt 2>/dev/null || true
+        
+        echo ""
+        echo -e "${GREEN} Installation complète V497.7 ! Votre système Arch Linux est prêt.${NC}"
+        echo ""
+        echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
+        echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
+        echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
+        echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
+        echo ""
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 497.7)${NC}"
+    fi
+}
+
+# Point d'entrée sécurisé
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # S'assure que paru est présent avant toute install AUR Gaming
+    if ! chroot_cmd_exists paru; then
+        print_info "Paru non disponible — (ré)installation automatique…"
+        ensure_paru_in_chroot || print_warning "Impossible de (ré)installer un helper AUR — les paquets AUR Gaming seront ignorés"
+    fi
+
+    exec > >(tee -a "$LOG_FILE")
+    exec 2> >(tee -a "$LOG_FILE" >&2)
+    
+    main "$@"
+    
+    # Exit explicite
+    exit 0
+fi
