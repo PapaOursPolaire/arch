@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# =============================================================================
-# Script de configuration Hyprland post-installation pour Arch Linux
+
+# Script de configuration Hyprland post-installation pour Arch Linux UNIQUEMENT 
 # Version améliorée avec détection et suppression des DE existants
 # Thème Arcane/Fallout avec transparence, blur et animations
 # Support automatique : Intel, AMD, NVIDIA
-# =============================================================================
+# Auteur : PapaOursPolaire - available on GitHub
+# Version : 24/08/2025 (j'ai oublié de compter)
 
 set +e
 
@@ -62,10 +63,7 @@ check_user() {
     fi
 }
 
-# =============================================================================
-# DÉTECTION ET SUPPRESSION DES ENVIRONNEMENTS DE BUREAU EXISTANTS
-# =============================================================================
-
+# Détection et suppression des environnements de bureau existants
 detect_current_desktop_environments() {
     print_header "Détection des environnements de bureau installés"
     
@@ -203,8 +201,8 @@ remove_desktop_environments() {
     # Nettoyage des configurations utilisateur
     print_message "Nettoyage des configurations utilisateur..."
     rm -rf ~/.config/gnome* ~/.config/kde* ~/.config/xfce* ~/.config/mate* \
-           ~/.config/cinnamon* ~/.config/lxde* ~/.config/lxqt* ~/.config/i3* \
-           ~/.config/sway* ~/.config/awesome* ~/.config/bspwm* 2>/dev/null || true
+            ~/.config/cinnamon* ~/.config/lxde* ~/.config/lxqt* ~/.config/i3* \
+            ~/.config/sway* ~/.config/awesome* ~/.config/bspwm* 2>/dev/null || true
     
     print_success "Environnements de bureau supprimés"
 }
@@ -221,10 +219,7 @@ enable_multilib() {
     fi
 }
 
-# =============================================================================
-# DÉTECTION AUTOMATIQUE DU GPU (VERSION CORRIGÉE)
-# =============================================================================
-
+# Déctection du GPU
 detect_gpu() {
     print_header "Détection automatique du GPU"
 
@@ -291,10 +286,7 @@ detect_gpu() {
     fi
 }
 
-# =============================================================================
-# INSTALLATION DES DRIVERS SPÉCIFIQUES (VERSION AMÉLIORÉE)
-# =============================================================================
-
+# Installation des drivers GPU
 remove_conflicting_drivers() {
     print_header "Suppression des drivers graphiques conflictuels"
     
@@ -517,10 +509,7 @@ install_yay() {
     fi
 }
 
-# =============================================================================
-# CONFIGURATION HYPRLAND ADAPTÉE AU GPU (VERSION CORRIGÉE)
-# =============================================================================
-
+# Génération de la configuration Hyprland optimisée selon le GPU
 get_gpu_optimized_config() {
     case $GPU_TYPE in
         "nvidia")
@@ -540,9 +529,9 @@ get_gpu_optimized_config() {
 
 get_nvidia_config() {
     cat << 'EOF'
-# =============================================================================
+
 # Configuration NVIDIA optimisée
-# =============================================================================
+
 
 # Variables d'environnement NVIDIA
 env = XCURSOR_SIZE,24
@@ -614,9 +603,9 @@ EOF
 
 get_amd_config() {
     cat << 'EOF'
-# =============================================================================
+
 # Configuration AMD optimisée
-# =============================================================================
+
 
 # Variables d'environnement AMD
 env = XCURSOR_SIZE,24
@@ -676,9 +665,9 @@ EOF
 
 get_intel_config() {
     cat << 'EOF'
-# =============================================================================
+
 # Configuration Intel optimisée
-# =============================================================================
+
 
 # Variables d'environnement Intel
 env = XCURSOR_SIZE,24
@@ -739,9 +728,9 @@ EOF
 
 get_generic_config() {
     cat << 'EOF'
-# =============================================================================
+
 # Configuration générique
-# =============================================================================
+
 
 # Variables d'environnement génériques
 env = XCURSOR_SIZE,24
@@ -870,10 +859,10 @@ configure_hyprland() {
     
     # Configuration de base
     cat > ~/.config/hypr/hyprland.conf << 'EOF'
-# =============================================================================
+
 # Configuration Hyprland - Thème Arcane/Fallout
 # Optimisée automatiquement selon le GPU détecté
-# =============================================================================
+
 
 # Moniteurs
 monitor = ,preferred,auto,1
@@ -1408,9 +1397,6 @@ configure_waybar() {
 EOF
 
     cat > ~/.config/waybar/style.css << 'EOF'
-/* =============================================================================
-   Waybar Style - Thème Arcane/Fallout Amélioré
-   ============================================================================= */
 
 * {
     border: none;
@@ -1664,9 +1650,9 @@ configure_hyprlock() {
     print_header "Configuration de Hyprlock"
     
     cat > ~/.config/hypr/hyprlock.conf << 'EOF'
-# =============================================================================
+
 # Configuration Hyprlock - Thème Fallout Terminal Amélioré
-# =============================================================================
+
 
 general {
     disable_loading_bar = true
@@ -1737,7 +1723,7 @@ label {
 # Header style Vault-Tec
 label {
     monitor =
-    text = <span font='Fira Code' weight='bold' size='x-large' foreground='#33ccff'>▓▓▓ VAULT-TEC SECURITY TERMINAL ▓▓▓</span>
+    text = <span font='Fira Code' weight='bold' size='x-large' foreground='#33ccff'>VAULT-TEC SECURITY TERMINAL</span>
     color = rgba(51, 204, 255, 0.9)
     font_size = 24
     font_family = Fira Code
@@ -1854,7 +1840,7 @@ label {
 # Decoration corner elements
 label {
     monitor =
-    text = ▓▓▓▓▓▓▓▓▓▓
+    text =
     color = rgba(51, 204, 255, 0.3)
     font_size = 20
     font_family = Fira Code
@@ -1865,7 +1851,7 @@ label {
 
 label {
     monitor =
-    text = ▓▓▓▓▓▓▓▓▓▓
+    text =
     color = rgba(51, 204, 255, 0.3)
     font_size = 20
     font_family = Fira Code
@@ -1876,7 +1862,7 @@ label {
 
 label {
     monitor =
-    text = ▓▓▓▓▓▓▓▓▓▓
+    text =
     color = rgba(51, 204, 255, 0.3)
     font_size = 20
     font_family = Fira Code
@@ -1887,7 +1873,7 @@ label {
 
 label {
     monitor =
-    text = ▓▓▓▓▓▓▓▓▓▓
+    text =
     color = rgba(51, 204, 255, 0.3)
     font_size = 20
     font_family = Fira Code
@@ -1905,9 +1891,9 @@ configure_hypridle() {
     print_header "Configuration de Hypridle"
     
     cat > ~/.config/hypr/hypridle.conf << 'EOF'
-# =============================================================================
+
 # Configuration Hypridle - Gestion intelligente de l'inactivité
-# =============================================================================
+
 
 general {
     lock_cmd = pidof hyprlock || hyprlock
@@ -1957,9 +1943,9 @@ configure_kitty() {
     print_header "Configuration de Kitty"
     
     cat > ~/.config/kitty/kitty.conf << 'EOF'
-# =============================================================================
+
 # Configuration Kitty - Thème Arcane/Fallout Premium
-# =============================================================================
+
 
 # Police et rendu
 font_family      Fira Code
@@ -2022,7 +2008,7 @@ enable_audio_bell no
 visual_bell_duration 0.0
 visual_bell_color none
 window_alert_on_bell yes
-bell_on_tab "🔔 "
+bell_on_tab "🔔"
 command_on_bell none
 bell_path none
 
@@ -2229,9 +2215,9 @@ configure_wofi() {
     mkdir -p ~/.config/wofi
     
     cat > ~/.config/wofi/config << 'EOF'
-# =============================================================================
+
 # Configuration Wofi - Menu d'applications style Fallout
-# =============================================================================
+
 
 width=700
 height=500
@@ -2261,9 +2247,6 @@ exec_search=false
 EOF
 
     cat > ~/.config/wofi/style.css << 'EOF'
-/* =============================================================================
-   Wofi Style - Thème Arcane/Fallout Terminal
-   ============================================================================= */
 
 * {
     all: unset;
@@ -2416,9 +2399,9 @@ configure_dunst() {
     print_header "Configuration de Dunst"
     
     cat > ~/.config/dunst/dunstrc << 'EOF'
-# =============================================================================
+
 # Configuration Dunst - Notifications Thème Arcane/Fallout
-# =============================================================================
+
 
 [global]
     ### Display ###
@@ -3003,37 +2986,37 @@ EOF
 SCREENSHOT_DIR="$HOME/Pictures/Screenshots"
 mkdir -p "$SCREENSHOT_DIR"
 
-OPTIONS="🖥️ Écran complet\n📱 Zone sélectionnée\n🪟 Fenêtre active\n⏰ Retardée (3s)\n📋 Vers presse-papier\n🎬 Enregistrement écran"
+OPTIONS="Écran complet\n Zone sélectionnée\n Fenêtre active\n Retardée (3s)\n Vers presse-papier\n Enregistrement écran"
 
-CHOICE=$(echo -e "$OPTIONS" | wofi --dmenu --prompt "📸 Capture d'écran" --width 300 --height 250)
+CHOICE=$(echo -e "$OPTIONS" | wofi --dmenu --prompt "Capture d'écran" --width 300 --height 250)
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 case "$CHOICE" in
-    "🖥️ Écran complet")
+    "Écran complet")
         grim "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
-        notify-send "📸 Capture d'écran" "Écran complet sauvegardé" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
+        notify-send "Capture d'écran" "Écran complet sauvegardé" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
         ;;
-    "📱 Zone sélectionnée")
+    "Zone sélectionnée")
         grim -g "$(slurp)" "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
-        notify-send "📸 Capture d'écran" "Zone sélectionnée sauvegardée" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
+        notify-send "Capture d'écran" "Zone sélectionnée sauvegardée" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
         ;;
-    "🪟 Fenêtre active")
+    "Fenêtre active")
         WINDOW=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
         grim -g "$WINDOW" "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
-        notify-send "📸 Capture d'écran" "Fenêtre active sauvegardée" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
+        notify-send "Capture d'écran" "Fenêtre active sauvegardée" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
         ;;
-    "⏰ Retardée (3s)")
-        notify-send "📸 Capture d'écran" "Capture dans 3 secondes..." -t 3000
+    "Retardée (3s)")
+        notify-send "Capture d'écran" "Capture dans 3 secondes..." -t 3000
         sleep 3
         grim "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
-        notify-send "📸 Capture d'écran" "Capture retardée sauvegardée" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
+        notify-send "Capture d'écran" "Capture retardée sauvegardée" -i "$SCREENSHOT_DIR/screenshot-$TIMESTAMP.png"
         ;;
-    "📋 Vers presse-papier")
+    "Vers presse-papier")
         grim -g "$(slurp)" - | wl-copy
-        notify-send "📸 Capture d'écran" "Copiée vers le presse-papier"
+        notify-send "Capture d'écran" "Copiée vers le presse-papier"
         ;;
-    "🎬 Enregistrement écran")
+    "Enregistrement écran")
         ~/.local/bin/screen-record
         ;;
 esac
@@ -3054,20 +3037,20 @@ if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     kill "$PID" 2>/dev/null
     rm -f "$PID_FILE"
-    notify-send "🎬 Enregistrement" "Enregistrement arrêté"
+    notify-send "Enregistrement" "Enregistrement arrêté"
 else
     # Démarrer l'enregistrement
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     OUTPUT_FILE="$RECORD_DIR/recording-$TIMESTAMP.mp4"
     
     # Choix de la zone
-    CHOICE=$(echo -e "🖥️ Écran complet\n📱 Zone sélectionnée" | wofi --dmenu --prompt "🎬 Enregistrer")
+    CHOICE=$(echo -e "Écran complet\nZone sélectionnée" | wofi --dmenu --prompt "Enregistrer")
     
     case "$CHOICE" in
-        "🖥️ Écran complet")
+        "Écran complet")
             wf-recorder -f "$OUTPUT_FILE" &
             ;;
-        "📱 Zone sélectionnée")
+        "Zone sélectionnée")
             wf-recorder -g "$(slurp)" -f "$OUTPUT_FILE" &
             ;;
         *)
@@ -3076,7 +3059,7 @@ else
     esac
     
     echo $! > "$PID_FILE"
-    notify-send "🎬 Enregistrement" "Enregistrement démarré\nCliquez sur l'icône pour arrêter"
+    notify-send "Enregistrement" "Enregistrement démarré\nCliquez sur l'icône pour arrêter"
 fi
 EOF
 
@@ -3085,27 +3068,27 @@ EOF
 #!/bin/bash
 # Menu de gestion de l'énergie
 
-OPTIONS="🔒 Verrouiller\n🚪 Déconnexion\n🔄 Redémarrer\n⏻ Éteindre\n💤 Suspension\n🛌 Hibernation"
+OPTIONS=" Verrouiller\n Déconnexion\n Redémarrer\n⏻ Éteindre\n Suspension\n Hibernation"
 
 CHOICE=$(echo -e "$OPTIONS" | wofi --dmenu --prompt "⚡ Gestion de l'énergie" --width 250 --height 300)
 
 case "$CHOICE" in
-    "🔒 Verrouiller")
+    " Verrouiller")
         hyprlock
         ;;
-    "🚪 Déconnexion")
+    " Déconnexion")
         hyprctl dispatch exit
         ;;
-    "🔄 Redémarrer")
+    " Redémarrer")
         systemctl reboot
         ;;
     "⏻ Éteindre")
         systemctl poweroff
         ;;
-    "💤 Suspension")
+    " Suspension")
         systemctl suspend
         ;;
-    "🛌 Hibernation")
+    " Hibernation")
         systemctl hibernate
         ;;
 esac
@@ -3145,47 +3128,42 @@ EOF
 #!/bin/bash
 while true; do
     clear
-    echo -e "\033[36m╔══════════════════════════════════════════╗\033[0m"
-    echo -e "\033[36m║\033[0m           \033[1;32mSYSTEM MONITOR\033[0m             \033[36m║\033[0m"
-    echo -e "\033[36m╠══════════════════════════════════════════╣\033[0m"
-    echo -e "\033[36m║\033[0m Date: \033[1;33m$(date)\033[0m"
-    echo -e "\033[36m║\033[0m"
     
     # CPU Usage
     CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}')
-    echo -e "\033[36m║\033[0m \033[1;31m🖥️  CPU:\033[0m ${CPU_USAGE}%"
+    echo -e "\033[36m║\033[0m \033[1;31m  CPU:\033[0m ${CPU_USAGE}%"
     
     # RAM Usage
     RAM_INFO=$(free -h | awk '/^Mem:/ {printf "%.1f/%.1f GB (%.0f%%)", $3, $2, ($3/$2)*100}')
-    echo -e "\033[36m║\033[0m \033[1;34m🧠 RAM:\033[0m $RAM_INFO"
+    echo -e "\033[36m║\033[0m \033[1;34m RAM:\033[0m $RAM_INFO"
     
     # GPU Info (NVIDIA)
     if command -v nvidia-smi &> /dev/null; then
         GPU_INFO=$(nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits | head -1)
         if [ ! -z "$GPU_INFO" ]; then
-            echo -e "\033[36m║\033[0m \033[1;32m🎮 GPU:\033[0m $GPU_INFO"
+            echo -e "\033[36m║\033[0m \033[1;32m GPU:\033[0m $GPU_INFO"
         fi
     fi
     
     # Temperature
     if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
         TEMP=$(awk '{printf "%.1f°C", $1/1000}' /sys/class/thermal/thermal_zone0/temp)
-        echo -e "\033[36m║\033[0m \033[1;35m🌡️  CPU Temp:\033[0m $TEMP"
+        echo -e "\033[36m║\033[0m \033[1;35m  CPU Temp:\033[0m $TEMP"
     fi
     
     # Disk Usage
     DISK_USAGE=$(df -h / | awk 'NR==2 {print $3"/"$2" ("$5")"}')
-    echo -e "\033[36m║\033[0m \033[1;36m💾 Disk (/):\033[0m $DISK_USAGE"
+    echo -e "\033[36m║\033[0m \033[1;36m Disk (/):\033[0m $DISK_USAGE"
     
     # Network
     NETWORK=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K\S+' | head -1)
     if [ ! -z "$NETWORK" ]; then
-        echo -e "\033[36m║\033[0m \033[1;33m🌐 IP:\033[0m $NETWORK"
+        echo -e "\033[36m║\033[0m \033[1;33m IP:\033[0m $NETWORK"
     fi
     
     # Uptime
     UPTIME=$(uptime -p | sed 's/up //')
-    echo -e "\033[36m║\033[0m \033[1;37m⏰ Uptime:\033[0m $UPTIME"
+    echo -e "\033[36m║\033[0m \033[1;37m Uptime:\033[0m $UPTIME"
     
     echo -e "\033[36m║\033[0m"
     echo -e "\033[36m╚══════════════════════════════════════════╝\033[0m"
@@ -3218,7 +3196,7 @@ case "$1" in
         ;;
     "menu")
         WORKSPACES=$(hyprctl workspaces -j | jq -r '.[] | "\(.id): \(.name)"' | sort -n)
-        CHOICE=$(echo "$WORKSPACES" | wofi --dmenu --prompt "💼 Workspaces")
+        CHOICE=$(echo "$WORKSPACES" | wofi --dmenu --prompt " Workspaces")
         if [ ! -z "$CHOICE" ]; then
             WS_ID=$(echo "$CHOICE" | cut -d: -f1)
             hyprctl dispatch workspace "$WS_ID"
@@ -3246,7 +3224,7 @@ get_mute_status() {
 CURRENT_VOL=$(get_volume)
 MUTE_ICON=$(get_mute_status)
 
-OPTIONS="$MUTE_ICON Volume: $CURRENT_VOL%\n🔇 Muet On/Off\n🎚️ Ouvrir Pavucontrol\n🎵 Redémarrer Audio\n🔊 Volume Max\n🔉 Volume 50%\n🔈 Volume 25%"
+OPTIONS="$MUTE_ICON Volume: $CURRENT_VOL%\n🔇 Muet On/Off\n Ouvrir Pavucontrol\n🎵 Redémarrer Audio\n🔊 Volume Max\n🔉 Volume 50%\n🔈 Volume 25%"
 
 CHOICE=$(echo -e "$OPTIONS" | wofi --dmenu --prompt "🎵 Audio Control" --width 300)
 
@@ -3257,7 +3235,7 @@ case "$CHOICE" in
     "🔇 Muet On/Off")
         wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
         ;;
-    "🎚️ Ouvrir Pavucontrol")
+    " Ouvrir Pavucontrol")
         pavucontrol &
         ;;
     "🎵 Redémarrer Audio")
@@ -3520,10 +3498,8 @@ configure_bashrc() {
     
     cat >> ~/.bashrc << 'EOF'
 
-# =============================================================================
-# Configuration Hyprland - Personnalisations Avancées
-# =============================================================================
 
+# Configuration Hyprland - Personnalisations Avancées
 # Fastfetch au démarrage du terminal (seulement en interactif)
 if command -v fastfetch &> /dev/null && [[ $- == *i* ]]; then
     fastfetch
@@ -3684,14 +3660,6 @@ sysinfo() {
     echo -e "\033[1;32mDisk:\033[0m $(df -h / | awk 'NR==2 {print $3"/"$2" ("$5")"}')"
 }
 
-# Message de bienvenue personnalisé
-if [[ $- == *i* ]]; then
-    echo -e "\033[1;36m╔════════════════════════════════════════╗\033[0m"
-    echo -e "\033[1;36m║\033[0m     \033[1;33mBienvenue dans Hyprland!\033[0m        \033[1;36m║\033[0m"
-    echo -e "\033[1;36m║\033[0m    \033[1;32mSession démarrée à $(date +%H:%M)\033[0m       \033[1;36m║\033[0m"
-    echo -e "\033[1;36m╚════════════════════════════════════════╝\033[0m"
-fi
-
 # Path local bin
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -3808,13 +3776,13 @@ finalize_setup() {
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════╝${NC}"
     
     echo ""
-    print_message "📋 ACTIONS REQUISES :"
+    print_message "ACTIONS REQUISES :"
     echo -e "  ${YELLOW}1.${NC} ${RED}REDÉMARRER MAINTENANT${NC} : ${CYAN}sudo reboot${NC}"
     echo -e "  ${YELLOW}2.${NC} Sélectionner 'Hyprland' dans SDDM"
     echo -e "  ${YELLOW}3.${NC} Ajouter vos vidéos dans ${CYAN}~/Videos/Wallpapers/${NC}"
     
     echo ""
-    print_message "⌨️  RACCOURCIS CLAVIER PRINCIPAUX :"
+    print_message "RACCOURCIS CLAVIER PRINCIPAUX :"
     echo -e "  ${CYAN}Super + Q${NC}       : Terminal (Kitty)"
     echo -e "  ${CYAN}Super + E${NC}       : Gestionnaire de fichiers"
     echo -e "  ${CYAN}Super + R${NC}       : Menu applications (Wofi)"
@@ -3825,7 +3793,7 @@ finalize_setup() {
     echo -e "  ${CYAN}Super + Shift + Q${NC}: Menu d'alimentation"
     
     echo ""
-    print_message "🔧 SCRIPTS UTILITAIRES DISPONIBLES :"
+    print_message "SCRIPTS UTILITAIRES DISPONIBLES :"
     echo -e "  ${CYAN}change-wallpaper${NC}   : Changer le fond d'écran vidéo"
     echo -e "  ${CYAN}screenshot-menu${NC}    : Menu capture d'écran avancé"
     echo -e "  ${CYAN}power-menu${NC}         : Menu de gestion de l'énergie"
@@ -3836,7 +3804,7 @@ finalize_setup() {
     echo -e "  ${CYAN}toggle-transparency${NC}: Basculer la transparence"
     
     echo ""
-    print_message "📁 FICHIERS DE CONFIGURATION IMPORTANTS :"
+    print_message "FICHIERS DE CONFIGURATION IMPORTANTS :"
     echo -e "  ${BLUE}~/.config/hypr/hyprland.conf${NC}     (Configuration principale)"
     echo -e "  ${BLUE}~/.config/waybar/config${NC}          (Barre de statut)"
     echo -e "  ${BLUE}~/.config/hypr/hyprlock.conf${NC}     (Écran de verrouillage)"
@@ -3845,7 +3813,7 @@ finalize_setup() {
     echo -e "  ${BLUE}~/.config/dunst/dunstrc${NC}          (Notifications)"
     
     echo ""
-    print_message "🎮 OPTIMISATIONS GPU APPLIQUÉES :"
+    print_message "OPTIMISATIONS GPU APPLIQUÉES :"
     case $GPU_TYPE in
         "nvidia")
             echo -e "  ${GREEN}•${NC} Configuration NVIDIA haute performance"
@@ -3873,7 +3841,7 @@ finalize_setup() {
     esac
     
     echo ""
-    print_message "🌟 APPLICATIONS INSTALLÉES :"
+    print_message "APPLICATIONS INSTALLÉES :"
     echo -e "  ${PURPLE}Développement :${NC} VS Code, Android Studio, Docker"
     echo -e "  ${PURPLE}Internet      :${NC} Google Chrome, Brave Browser"
     echo -e "  ${PURPLE}Multimédia    :${NC} Spotify (avec Spicetify non configuré), mpv"
@@ -3881,7 +3849,7 @@ finalize_setup() {
     echo -e "  ${PURPLE}Outils        :${NC} Scripts personnalisés, Gestionnaires"
     
     echo ""
-    print_message "⚠️  NOTES IMPORTANTES :"
+    print_message "⚠️ NOTES IMPORTANTES :"
     if $IS_NVIDIA; then
         echo -e "  ${YELLOW}•${NC} NVIDIA : Initramfs reconstruit avec les modules nécessaires"
         echo -e "  ${YELLOW}•${NC} Redémarrage obligatoire pour charger les drivers NVIDIA"
@@ -3893,14 +3861,14 @@ finalize_setup() {
     echo -e "  ${YELLOW}•${NC} Consultez les logs avec : journalctl --user -xe"
     
     echo ""
-    print_message "🆘 DÉPANNAGE RAPIDE :"
+    print_message "DÉPANNAGE RAPIDE :"
     echo -e "  ${RED}•${NC} Écran noir ? Essayez : ${CYAN}Super + Q${NC} pour ouvrir un terminal"
     echo -e "  ${RED}•${NC} Pas de son ? Lancez : ${CYAN}audio-menu${NC} puis redémarrer audio"
     echo -e "  ${RED}•${NC} Performance ? Utilisez : ${CYAN}toggle-transparency${NC}"
     echo -e "  ${RED}•${NC} Bluetooth ? Activez : ${CYAN}sudo systemctl start bluetooth${NC}"
     
     echo ""
-    print_header "🎆 VOTRE SETUP HYPRLAND ARCANE/FALLOUT EST PRÊT !"
+    print_header "VOTRE SETUP HYPRLAND ARCANE/FALLOUT EST PRÊT !"
     echo -e "${GREEN}Profitez de votre nouvel environnement de bureau immersif et moderne ! 🌟${NC}"
     echo ""
     
@@ -3918,9 +3886,9 @@ finalize_setup() {
     fi
 }
 
-# =============================================================================
+
 # FONCTION PRINCIPALE
-# =============================================================================
+
 
 main() {
     clear
@@ -3931,7 +3899,7 @@ main() {
     echo -e "${PURPLE}╚════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
-    print_message "🚀 Démarrage de la configuration Hyprland..."
+    print_message "Démarrage de la configuration Hyprland..."
     echo ""
     
     # Avertissement important
@@ -3950,7 +3918,7 @@ main() {
     fi
     
     echo ""
-    print_message "🎯 Lancement de la configuration complète..."
+    print_message "Lancement de la configuration complète..."
     echo ""
     
     # Vérifications préliminaires
