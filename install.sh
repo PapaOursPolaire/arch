@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 512.8, correctif 7 de la version 512.8
-# Mise à jour : 24/08/2025 à 13:10
+# Version: 512.9, correctif 7 de la version 512.9
+# Mise à jour : 24/08/2025 à 13:14
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -xeuo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="512.8"
+readonly SCRIPT_VERSION="512.9"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1070,7 +1070,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 512.8:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 512.9:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3551,25 +3551,8 @@ EOF
     print_success "Thèmes et icônes installés et configurés"
 }
 
-# --- Helpers pour post-install ---
-_resolve_user() {
-    if [[ -n "${USERNAME:-}" ]]; then
-        printf '%s' "$USERNAME"
-        return 0
-    fi
-    local u
-    u="$(/usr/bin/arch-chroot /mnt awk -F: '$3>=1000 && $1!="nobody"{print $1; exit}' /etc/passwd 2>/dev/null)"
-    [[ -n "$u" ]] && { printf '%s' "$u"; return 0; }
-    return 1
-    }
-
-
 generate_postinstall() {
     local U TARGET
-    U="$(_resolve_user)" || {
-        echo "[FATAL] Impossible de déterminer l'utilisateur pour post-install.sh" >&2
-        return 1
-    }
     TARGET="/mnt/home/${U}/post-install.sh"
     install -d -m 755 "/mnt/home/${U}"
 cat > "$TARGET" <<'POST_EOF'
@@ -4186,7 +4169,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v512.8
+# Configuration Bash - Arch Linux Fallout Edition v512.9
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4576,13 +4559,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V512.8 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V512.9 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V512.8 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V512.9 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4648,14 +4631,14 @@ finish_installation() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V512.8 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V512.9 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 512.8)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 512.9)${NC}"
     fi
 }
 
