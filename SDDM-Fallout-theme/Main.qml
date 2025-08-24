@@ -29,7 +29,7 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
  * OR OTHER DEALINGS IN THE SOFTWARE.
- ***************************************************************************/
+ ***************************************************************************
 
 
 import QtMultimedia 5.13
@@ -65,10 +65,6 @@ Rectangle {
             fillMode: VideoOutput.PreserveAspectCrop
 
             onPlaying: fallbackGif.visible = false
-            onError: {
-                console.log("Erreur lecture vidéo: " + errorString)
-                fallbackGif.visible = true
-            }
             onStatusChanged: {
                 if (status === MediaPlayer.InvalidMedia) {
                     fallbackGif.visible = true
