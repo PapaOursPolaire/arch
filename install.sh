@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 513.0, correctif 7 de la version 513.0
-# Mise à jour : 24/08/2025 à 13:24
+# Version: 513.2, correctif 7 de la version 513.2
+# Mise à jour : 24/08/2025 à 15:56
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="513.0"
+readonly SCRIPT_VERSION="513.2"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1070,7 +1070,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 513.0:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 513.2:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3553,10 +3553,17 @@ EOF
 
 generate_postinstall() {
     local U TARGET
+    U="${USERNAME:-}"
+
+    if [[ -z "$U" ]]; then
+        echo "[FATAL] USERNAME est vide, impossible de générer post-install.sh" >&2
+        return 1
+    fi
+
     TARGET="/mnt/home/${U}/post-install.sh"
     install -d -m 755 "/mnt/home/${U}"
-cat > "$TARGET" <<'POST_EOF'
-#!/usr/bin/env bash
+
+    cat > "$TARGET" <<'POST_EOF'
 # post-install.sh
 # Post-install tasks complets pour usage en session utilisateur.
 # - Journalise UNIQUEMENT stderr dans ~/post-install-errors.log
@@ -3591,61 +3598,61 @@ red()    { printf "\033[1;31m%s\033[0m\n" "$1" >&3; }
 
 # Helper : exécuter une commande, afficher résultat et logger erreur si échoue
 run_cmd() {
-  # usage: run_cmd "Description" command args...
-  local desc="$1"; shift
-  echo "--------------------------------------------------------------------------------"
-  yellow "[STEP] $desc"
-  if "$@" 1>/dev/null; then
-    green "[OK] $desc"
-    return 0
-  else
-    # Capture stdout+stderr of the command? We already redirected stderr to LOGFILE.
-    red "[ERROR] $desc — voir $LOGFILE pour les détails"
-    return 1
-  fi
-}
-
-# Helper : exécuter une commande qui doit être root, tente sudo si pas root
-run_cmd_sudo() {
-  local desc="$1"; shift
-  if (( EUID == 0 )); then
-    run_cmd "$desc" "$@"
-  else
-    if command -v sudo >/dev/null 2>&1; then
-      run_cmd "$desc" sudo "$@"
+    # usage: run_cmd "Description" command args...
+    local desc="$1"; shift
+    echo "--------------------------------------------------------------------------------"
+    yellow "[STEP] $desc"
+    if "$@" 1>/dev/null; then
+        green "[OK] $desc"
+        return 0
     else
-      red "[ERROR] sudo introuvable — impossible d'exécuter (root) : $desc"
-      return 1
+        # Capture stdout+stderr of the command? We already redirected stderr to LOGFILE.
+        red "[ERROR] $desc — voir $LOGFILE pour les détails"
+        return 1
     fi
-  fi
-}
+    }
+
+    # Helper : exécuter une commande qui doit être root, tente sudo si pas root
+    run_cmd_sudo() {
+    local desc="$1"; shift
+    if (( EUID == 0 )); then
+        run_cmd "$desc" "$@"
+    else
+        if command -v sudo >/dev/null 2>&1; then
+        run_cmd "$desc" sudo "$@"
+        else
+        red "[ERROR] sudo introuvable — impossible d'exécuter (root) : $desc"
+        return 1
+        fi
+    fi
+    }
 
 ###############################################################################
 # Détection de la distribution et du package manager
 ###############################################################################
 PKG_MANAGER=""
 DISTRO=""
-if [[ -f /etc/os-release ]]; then
-  # shellcheck disable=SC1091
-  source /etc/os-release
-  DISTRO="${ID_LIKE:-$ID}"
-fi
+    if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    DISTRO="${ID_LIKE:-$ID}"
+    fi
 
-if command -v pacman >/dev/null 2>&1; then
-  PKG_MANAGER="pacman"
-elif command -v apt >/dev/null 2>&1; then
-  PKG_MANAGER="apt"
-elif command -v dnf >/dev/null 2>&1; then
-  PKG_MANAGER="dnf"
-elif command -v zypper >/dev/null 2>&1; then
-  PKG_MANAGER="zypper"
-elif command -v apk >/dev/null 2>&1; then
-  PKG_MANAGER="apk"
-elif command -v emerge >/dev/null 2>&1; then
-  PKG_MANAGER="emerge"
-else
-  PKG_MANAGER=""
-fi
+    if command -v pacman >/dev/null 2>&1; then
+    PKG_MANAGER="pacman"
+    elif command -v apt >/dev/null 2>&1; then
+    PKG_MANAGER="apt"
+    elif command -v dnf >/dev/null 2>&1; then
+    PKG_MANAGER="dnf"
+    elif command -v zypper >/dev/null 2>&1; then
+    PKG_MANAGER="zypper"
+    elif command -v apk >/dev/null 2>&1; then
+    PKG_MANAGER="apk"
+    elif command -v emerge >/dev/null 2>&1; then
+    PKG_MANAGER="emerge"
+    else
+    PKG_MANAGER=""
+    fi
 
 echo "[INFO] Détection: PKG_MANAGER=$PKG_MANAGER, DISTRO=$DISTRO"
 
@@ -3654,78 +3661,78 @@ echo "[INFO] Détection: PKG_MANAGER=$PKG_MANAGER, DISTRO=$DISTRO"
 ###############################################################################
 
 update_db() {
-  case "$PKG_MANAGER" in
-    pacman) run_cmd_sudo "pacman -Syu (update)" pacman -Syu --noconfirm ;;
-    apt) run_cmd_sudo "apt update" apt update ;;
-    dnf) run_cmd_sudo "dnf check-update" dnf check-update || true ;;
-    zypper) run_cmd_sudo "zypper refresh" zypper refresh ;;
-    apk) run_cmd_sudo "apk update" apk update ;;
-    emerge) run_cmd_sudo "emerge --sync" emerge --sync ;;
-    *) red "[WARN] Aucun gestionnaire de paquets pris en charge détecté pour update_db" ;;
-  esac
+    case "$PKG_MANAGER" in
+        pacman) run_cmd_sudo "pacman -Syu (update)" pacman -Syu --noconfirm ;;
+        apt) run_cmd_sudo "apt update" apt update ;;
+        dnf) run_cmd_sudo "dnf check-update" dnf check-update || true ;;
+        zypper) run_cmd_sudo "zypper refresh" zypper refresh ;;
+        apk) run_cmd_sudo "apk update" apk update ;;
+        emerge) run_cmd_sudo "emerge --sync" emerge --sync ;;
+        *) red "[WARN] Aucun gestionnaire de paquets pris en charge détecté pour update_db" ;;
+    esac
 }
 
 install_packages() {
-  # usage: install_packages pkg1 pkg2 ...
-  local pkgs=( "$@" )
-  if [[ ${#pkgs[@]} -eq 0 ]]; then
-    return 0
-  fi
+    # usage: install_packages pkg1 pkg2 ...
+    local pkgs=( "$@" )
+    if [[ ${#pkgs[@]} -eq 0 ]]; then
+        return 0
+    fi
 
-  case "$PKG_MANAGER" in
-    pacman)
-      run_cmd_sudo "pacman -S --noconfirm ${pkgs[*]}" pacman -S --noconfirm --needed "${pkgs[@]}" ;;
-    apt)
-      run_cmd_sudo "apt install -y ${pkgs[*]}" apt install -y "${pkgs[@]}" ;;
-    dnf)
-      run_cmd_sudo "dnf install -y ${pkgs[*]}" dnf install -y "${pkgs[@]}" ;;
-    zypper)
-      run_cmd_sudo "zypper install -y ${pkgs[*]}" zypper install -y "${pkgs[@]}" ;;
-    apk)
-      run_cmd_sudo "apk add ${pkgs[*]}" apk add "${pkgs[@]}" ;;
-    emerge)
-      run_cmd_sudo "emerge ${pkgs[*]}" emerge "${pkgs[@]}" ;;
-    *)
-      red "[WARN] install_packages: gestionnaire inconnu, tenter apt-get/pacman manuellement"
-      return 1 ;;
-  esac
+    case "$PKG_MANAGER" in
+        pacman)
+        run_cmd_sudo "pacman -S --noconfirm ${pkgs[*]}" pacman -S --noconfirm --needed "${pkgs[@]}" ;;
+        apt)
+        run_cmd_sudo "apt install -y ${pkgs[*]}" apt install -y "${pkgs[@]}" ;;
+        dnf)
+        run_cmd_sudo "dnf install -y ${pkgs[*]}" dnf install -y "${pkgs[@]}" ;;
+        zypper)
+        run_cmd_sudo "zypper install -y ${pkgs[*]}" zypper install -y "${pkgs[@]}" ;;
+        apk)
+        run_cmd_sudo "apk add ${pkgs[*]}" apk add "${pkgs[@]}" ;;
+        emerge)
+        run_cmd_sudo "emerge ${pkgs[*]}" emerge "${pkgs[@]}" ;;
+        *)
+        red "[WARN] install_packages: gestionnaire inconnu, tenter apt-get/pacman manuellement"
+        return 1 ;;
+    esac
 }
 
 install_flatpak() {
-  # usage: install_flatpak <ref>
-  local ref="$1"
-  if ! command -v flatpak >/dev/null 2>&1; then
-    run_cmd_sudo "Installer flatpak" bash -c "true" || true
-    case "$PKG_MANAGER" in
-      pacman) run_cmd_sudo "pacman -S --noconfirm flatpak" pacman -S --noconfirm flatpak || true ;;
-      apt) run_cmd_sudo "apt install -y flatpak" apt install -y flatpak || true ;;
-      dnf) run_cmd_sudo "dnf install -y flatpak" dnf install -y flatpak || true ;;
-      zypper) run_cmd_sudo "zypper install -y flatpak" zypper install -y flatpak || true ;;
-      apk) run_cmd_sudo "apk add flatpak" apk add flatpak || true ;;
-      *) red "[WARN] flatpak non installé (gestionnaire inconnu)" ;;
-    esac
-  fi
+    # usage: install_flatpak <ref>
+    local ref="$1"
+    if ! command -v flatpak >/dev/null 2>&1; then
+        run_cmd_sudo "Installer flatpak" bash -c "true" || true
+        case "$PKG_MANAGER" in
+        pacman) run_cmd_sudo "pacman -S --noconfirm flatpak" pacman -S --noconfirm flatpak || true ;;
+        apt) run_cmd_sudo "apt install -y flatpak" apt install -y flatpak || true ;;
+        dnf) run_cmd_sudo "dnf install -y flatpak" dnf install -y flatpak || true ;;
+        zypper) run_cmd_sudo "zypper install -y flatpak" zypper install -y flatpak || true ;;
+        apk) run_cmd_sudo "apk add flatpak" apk add flatpak || true ;;
+        *) red "[WARN] flatpak non installé (gestionnaire inconnu)" ;;
+        esac
+    fi
 
-  if command -v flatpak >/dev/null 2>&1; then
-    run_cmd "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-    run_cmd "Installer flatpak ref $ref" flatpak install -y flathub "$ref"
-  else
-    red "[ERROR] flatpak indisponible, impossible d'installer $ref"
-  fi
+    if command -v flatpak >/dev/null 2>&1; then
+        run_cmd "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+        run_cmd "Installer flatpak ref $ref" flatpak install -y flathub "$ref"
+    else
+        red "[ERROR] flatpak indisponible, impossible d'installer $ref"
+    fi
 }
 
 install_aur_pkg() {
-  # usage: install_aur_pkg pkgname
-  local pkg="$1"
-  # only for Arch derivatives; try paru then yay
-  if command -v paru >/dev/null 2>&1; then
-    run_cmd "paru -S --noconfirm $pkg" paru -S --noconfirm "$pkg"
-  elif command -v yay >/dev/null 2>&1; then
-    run_cmd "yay -S --noconfirm $pkg" yay -S --noconfirm "$pkg"
-  else
-    red "[WARN] Pas d'AUR helper détecté (paru/yay). Ignorer $pkg ou installez un helper AUR."
-    return 1
-  fi
+    # usage: install_aur_pkg pkgname
+    local pkg="$1"
+    # only for Arch derivatives; try paru then yay
+    if command -v paru >/dev/null 2>&1; then
+        run_cmd "paru -S --noconfirm $pkg" paru -S --noconfirm "$pkg"
+    elif command -v yay >/dev/null 2>&1; then
+        run_cmd "yay -S --noconfirm $pkg" yay -S --noconfirm "$pkg"
+    else
+        red "[WARN] Pas d'AUR helper détecté (paru/yay). Ignorer $pkg ou installez un helper AUR."
+        return 1
+    fi
 }
 
 ###############################################################################
@@ -4169,7 +4176,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v513.0
+# Configuration Bash - Arch Linux Fallout Edition v513.2
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4559,13 +4566,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V513.0 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V513.2 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V513.0 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V513.2 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4631,14 +4638,14 @@ finish_installation() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V513.0 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V513.2 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 513.0)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 513.2)${NC}"
     fi
 }
 
