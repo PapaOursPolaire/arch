@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 498.8, correctif 7 de la version 498.8
-# Mise à jour : 24/08/2025 à 12:21
+# Version: 499.8, correctif 7 de la version 499.8
+# Mise à jour : 24/08/2025 à 12:37
 
 # Erreurs  à corriger :
 
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="498.8"
+readonly SCRIPT_VERSION="499.8"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1069,7 +1069,7 @@ Options:
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 498.8:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 499.8:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3550,20 +3550,35 @@ EOF
     print_success "Thèmes et icônes installés et configurés"
 }
 
-# Garde-fous pour la génération de post-install.sh
-if [[ -z "$USERNAME" ]]; then
-    USERNAME="$(awk -F: '$3>=1000 && $1!="nobody"{print $1; exit}' /mnt/etc/passwd 2>/dev/null)"
+# --- Garde-fou robuste pour la génération de post-install.sh ---
+# 1) Si $USERNAME est vide, essayer de détecter l'utilisateur non-système du chroot
+if [[ -z "${USERNAME:-}" ]]; then
+  USERNAME="$(
+    /usr/bin/arch-chroot /mnt /usr/bin/awk -F: '$3>=1000 && $1!="nobody"{print $1; exit}' /etc/passwd 2>/dev/null
+  )"
 fi
 
-if [[ -z "$USERNAME" ]]; then
-    echo "ERREUR: USERNAME non défini; impossible de générer /mnt/home/<user>/post-install.sh" >&2
-    exit 1
+# 2) Si ton script utilise une autre variable (ex: NEW_USER), la reprendre en secours
+if [[ -z "$USERNAME" && -n "${NEW_USER:-}" ]]; then
+  USERNAME="$NEW_USER"
 fi
 
-install -d -m 755 "/mnt/home/$USERNAME"
+# 3) Toujours vide ? Stopper proprement avec message clair
+if [[ -z "$USERNAME" ]]; then
+  echo "[FATAL] USERNAME vide au moment de générer /mnt/home/<user>/post-install.sh" >&2
+  exit 1
+fi
 
+# 4) S'assurer que le dossier home existe sous /mnt (même si /home est une partition séparée)
+install -d -m 755 "/mnt/home/$USERNAME" || {
+  echo "[FATAL] Impossible de créer /mnt/home/$USERNAME" >&2
+  exit 1
+}
 
-cat > /mnt/home/$USERNAME/post-install.sh <<'POST_EOF'
+# 5) (OPTIONNEL) petit log visuel pour confirmer quelle valeur est utilisée
+echo "[INFO] Génération de post-install.sh pour USERNAME='$USERNAME'"
+
+cat > "/mnt/home/$USERNAME/post-install.sh" <<'POST_EOF'
 #!/usr/bin/env bash
 # post-install.sh
 # Post-install tasks complets pour usage en session utilisateur.
@@ -4002,8 +4017,9 @@ exec 2>&3
 
 echo "[INFO] post-install finished at $(date '+%Y-%m-%d %H:%M:%S')"
 POST_EOF
-chmod +x "/mnt/home/$USERNAME/post-install.sh"
+
 chown "$USERNAME:$USERNAME" "/mnt/home/$USERNAME/post-install.sh"
+chmod 0755 "/mnt/home/$USERNAME/post-install.sh"
 
 # Fastfetch s'exécute automatiquement
 install_fastfetch() {
@@ -4166,7 +4182,7 @@ EOF
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
 #!/bin/bash
 # ===============================================================================
-# Configuration Bash - Arch Linux Fallout Edition v498.8
+# Configuration Bash - Arch Linux Fallout Edition v499.8
 # Toutes les corrections appliquées
 # ===============================================================================
 
@@ -4556,13 +4572,13 @@ finish_installation() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS VITESSE V498.8 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS VITESSE V499.8 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V498.8 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V499.8 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4628,14 +4644,14 @@ finish_installation() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V498.8 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V499.8 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez:${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 498.8)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 499.8)${NC}"
     fi
 }
 
