@@ -43,34 +43,37 @@ Rectangle {
         id: background
         anchors.fill: parent
 
-        // Essai vidéo
-        Video {
-            id: videoBackground
+        // Fallback GIF (animé) — visible au démarrage
+        AnimatedImage {
+            id: fallbackGif
             anchors.fill: parent
-            source: "background.mp4" // mets ton mp4 ici
+            source: "background.gif"
+            fillMode: Image.PreserveAspectCrop
+            playing: true
+            visible: true
+            smooth: true
+        }
+
+        // Vidéo principale — masque le GIF quand elle commence
+        Video {
+            id: bgVideo
+            anchors.fill: parent
+            source: "background.mp4"
             autoPlay: true
             loops: MediaPlayer.Infinite
-            visible: status == MediaPlayer.Loaded
-        }
+            muted: false
+            fillMode: VideoOutput.PreserveAspectCrop
 
-        // Fallback GIF
-        AnimatedImage {
-            
-            id: gifBackground
-            anchors.fill: parent
-            source: "background.gif" // mets ton gif ici
-            visible: !videoBackground.visible && status == AnimatedImage.Ready
-        }
-
-        // Fallback images aléatoires
-        Image {
-            id: staticBackground
-            anchors.fill: parent
-            source: {
-                var imgs = ["background1.png", "background2.png", "background3.png"]
-                return imgs[Math.floor(Math.random() * imgs.length)]
+            onPlaying: fallbackGif.visible = false
+            onError: {
+                console.log("Erreur lecture vidéo: " + errorString)
+                fallbackGif.visible = true
             }
-            visible: !videoBackground.visible && !gifBackground.visible
+            onStatusChanged: {
+                if (status === MediaPlayer.InvalidMedia) {
+                    fallbackGif.visible = true
+                }
+            }
         }
     }
 
