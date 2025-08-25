@@ -54,7 +54,9 @@ readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/P
 readonly SDDM_THEME_URL="https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip"
 readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk"
 readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme"
-readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
+readonly THEME_ID="org.kde.falloutlock"
+readonly LNF_ROOT="/usr/share/plasma/look-and-feel"
+readonly LOCKSCREEN_THEME_DIR="${LNF_ROOT}/${THEME_ID}"
 
 # Variables globales
 DISK=""
@@ -2429,7 +2431,7 @@ configure_kde_lockscreen() {
 
     # --- Respect des variables globales existantes, sans redéclaration readonly ---
     local kde_splash_url="${KDESPLASH_URL:-}"
-    local dest_pkg_dir="${LOCKSCREEN_THEME_DIR:-/usr/share/plasma/look-and-feel/org.kde.falloutlock}"
+    local dest_pkg_dir="$LOCKSCREEN_THEME_DIR"
 
     # Détection : on déploie dans le système live ou dans le chroot /mnt ?
     local in_chroot=false

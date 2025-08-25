@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "papaoursgamer@gmail.com",
+                "Name": "PapaOursPolaire"
+            }
+        ],
+        "Category": "",
+        "Description": "Fallout PipBoy Animation Splashscreen for KDE 6",
+        "Id": "org.kde.falloutlock",
+        "License": "MIT",
+        "Name": "PapaOursPolaire",
+        "Website": "https://github.com/"
+    },
+    "Keywords": "fallout;pipboy;retro;terminal;vaultboy;;papaours;papaourspolaire;ours",
+    "X-Plasma-APIVersion": "2"
+}
+
