@@ -3805,18 +3805,21 @@ install_spotify_and_spicetify() {
     fi
   fi
 
-  # Spicetify (AUR or npm) - only if user wants it
-  if command -v spicetify >/dev/null 2>&1; then
+    # Spicetify - installation via pacman si absent
+    if command -v spicetify >/dev/null 2>&1; then
     run_cmd "Spicetify backup" spicetify backup || true
     run_cmd "Spicetify apply" spicetify apply || true
-  else
-    # try to install via AUR on Arch
-    if [[ "$PKG_MANAGER" == "pacman" ]]; then
-      install_aur_pkg spicetify-cli || true
     else
-      echo "[INFO] spicetify non present; ignorer" >&3
+    if [[ "$PKG_MANAGER" == "pacman" ]]; then
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed spicetify-cli
+        if command -v spicetify >/dev/null 2>&1; then
+        run_cmd "Spicetify backup" spicetify backup || true
+        run_cmd "Spicetify apply" spicetify apply || true
+        fi
+    else
+        echo "[INFO] spicetify non présent; ignoré" >&3
     fi
-  fi
+    fi
 }
 
 ###############################################################################
@@ -3826,15 +3829,12 @@ install_vscode_extensions_user() {
   echo
   yellow "[TASK] Installer Visual Studio Code (si binaire 'code' présent) et extensions utiles"
 
-  if ! command -v code >/dev/null 2>&1 ; then
-    yellow "Binaire 'code' non trouvé : tenter installation via package manager (si souhaité)"
-    case "$PKG_MANAGER" in
-      pacman) install_packages code || install_aur_pkg visual-studio-code-bin || true ;;
-      apt) run_cmd_sudo "apt install -y code (s'il existe dans repo)" apt install -y code || true ;;
-      dnf) install_packages code || true ;;
-      *) echo "[INFO] Installez VSCode manuellement si nécessaire" >&3 ;;
-    esac
-  fi
+    if ! command -v code >/dev/null 2>&1 ; then
+    yellow "Binaire 'code' non trouvé : installation via pacman"
+    /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code || {
+        echo "[ERREUR] Impossible d’installer Visual Studio Code avec pacman" >&2
+    }
+    fi
 
   if command -v code >/dev/null 2>&1 ; then
     # Extensions list (exemples) - adapte à ta liste
