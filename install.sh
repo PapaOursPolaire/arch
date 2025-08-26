@@ -10,12 +10,9 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 523.5, correctif 5 de la version 523.5
-# Mise à jour : 26/08/2025 à 14:04
-# PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX
-
-# Erreurs  à corriger :
-
+# Version: 524.5, correctif 5 de la version 524.5
+# Mise à jour : 26/08/2025 à 16:43
+# PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
 # Erreurs à l'étape 23 : gtk-theme n'est pas reconnu
@@ -31,12 +28,13 @@ fi
 # Refonte de la variable install_paru() -> Deuxième refonte le 14/08 pour permission denied
 #[community] -> RETIRE prcq les serveurs sont des putes 13/08/2025 vers 20 heures
 #Include = /etc/pacman.d/mirrorlist -> Ces ptn de fdp ont nettoyé les serveurs dcp ça faisait eerreur 404 et en plus la plupart ont crash à cause de cel 2 heures de perdus pour des conneries pareil non mais wlh je cable argh
+# Penser à enelver le mode DRY RUN, car il est devenu futile depuis la version 246.6, il avait pour but de simuler le mode apératoire aisni que de vérifier l'appenrece du script.
+# Configuration globale -> Thème (en cours de dévellopement, pas de fonction déclarée)
 
-# Configuration globale
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="523.5"
+readonly SCRIPT_VERSION="524.5"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -114,7 +112,7 @@ main() {
     fi
 
     # Séquence complète d'installation
-    echo -e "${CYAN}Démarrage de l'installation d'Arch Linux ${NC}"
+    echo -e "${CYAN}DEMARRAGE DE L4INSTLLATION D'ARCH LINUX...${NC}"
     echo ""
 
     # Phase 1: Préparation système
@@ -1072,7 +1070,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 523.5:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 524.5:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1344,7 +1342,7 @@ select_disk() {
 }
 
 choose_partitioning() {
-    print_header "ETAPE 3/$TOTAL_STEPS: CHOIX DU PARTITIONNEMENT"
+    print_header "ETAPE 3/$TOTAL_STEPS  : CHOIX DU PARTITIONNEMENT"
     CURRENT_STEP=3
     
     echo -e "${WHITE}Options de partitionnement :${NC}"
@@ -3903,30 +3901,7 @@ user_misc_tweaks() {
     fi
 }
 
-# SECTION H: Create/Deploy post-install helper (log-only errors)
-deploy_post_install_helper() {
-    echo
-    yellow "[TASK] Déployer helper post-install (log uniquement les erreurs) vers ~/post-install-helper.sh"
-
-    cat > "$HOME/post-install-helper.sh" <<'HELPER_EOF'
-#!/usr/bin/env bash
-# Helper abrégé pour tâches additionnelles à lancer en session utilisateur
-LOG="$HOME/post-install-errors.log"
-:>>"$LOG"
-# Redirect only stderr to log; stdout stays visible
-exec 3>&2
-exec 2>>"$LOG"
-echo "[HELPER] start $(date)"
-# Add any one-off commands here
-echo "[HELPER] done $(date)"
-exec 2>&3
-HELPER_EOF
-
-    chmod +x "$HOME/post-install-helper.sh"
-    run_cmd "Déposer ~/post-install-helper.sh" true || true
-}
-
-# SECTION I: Run Steps in order
+# SECTION H: Main
 main() {
     yellow "Début des tâches post-install"
 
@@ -4528,13 +4503,13 @@ finish_install() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS DE LA V523.5 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS DE LA V524.5 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V523.5 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V524.5 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4600,14 +4575,14 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V523.5 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V524.5 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez :${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 523.5)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 524.5)${NC}"
     fi
 }
 
