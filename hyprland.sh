@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 221.1 - 26/08/2025 22:42 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 222.1 - 26/08/2025 22:55 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -112,7 +112,7 @@ detect_distro() {
 }
 
 install_yay() {
-    case "$distro" in
+    case "$DISTRO" in 
         arch)
             echo "==> Installation de yay (AUR helper)..."
             sudo pacman -S --needed --noconfirm git base-devel
@@ -126,15 +126,15 @@ install_yay() {
             fi
             ;;
         debian|ubuntu)
-            echo "⚠️  yay est un outil spécifique à Arch Linux (AUR)."
+            echo "⚠️ yay est un outil spécifique à Arch Linux (AUR)."
             echo "Vous pouvez utiliser apt/aptitude à la place."
             ;;
         fedora)
-            echo "⚠️  yay est un outil spécifique à Arch Linux (AUR)."
+            echo "⚠️ yay est un outil spécifique à Arch Linux (AUR)."
             echo "Vous pouvez utiliser dnf ou rpm-ostree selon vos besoins."
             ;;
         *)
-            echo "⚠️  Distribution non supportée pour yay."
+            echo "⚠️ Distribution non supportée pour yay."
             ;;
     esac
 }
