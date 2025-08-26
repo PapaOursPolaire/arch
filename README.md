@@ -157,5 +157,36 @@ Auteur : PapaOursPolaire
 
 *Un internet stable signifie selon moi un débit stable d'environ 40 Mbps par seconde. En guise d'exemple, l'installation d'Arch avec 10 Mbps m'a pris environ une heure.
 
+------------------------------------------------------------------------
+
+## Sources :
+
+### 🌱 Apprentissage Shell & GitHub
+- ShellCheck Wiki : https://www.shellcheck.net/wiki/
+- GNU Bash Manual : https://www.gnu.org/software/bash/manual/
+- The Linux Documentation Project : https://tldp.org/
+- Shell Scripting Tutorial : https://www.shellscript.sh/
+- Codédex (intro GitHub, pas de ShellScript) : https://www.codedex.io/
+
+### 🖥️ Guides distributions Linux
+- Arch Linux Installation Guide : https://wiki.archlinux.org/title/Installation_guide
+- BlackArch Linux : https://blackarch.org/
+- Nyarch Linux : https://nyarchlinux.moe/
+- Hyprland Wiki : https://wiki.hyprland.org/
+
+### 🎨 Personnalisation & environnements graphiques
+- KDE Plasma : https://kde.org/plasma-desktop
+- GNOME Look : https://www.gnome-look.org/
+- SDDM Themes : https://store.kde.org/browse?cat=108&ord=latest
+
+### ⚡ Utilitaires
+- Fastfetch : https://github.com/fastfetch-cli/fastfetch
+- CAVA (visualiseur audio dans le terminal) : https://github.com/karlstav/cava
+- Spicetify (personnalisation Spotify) : https://spicetify.app/
+- GRUB (GNU GRUB bootloader) : https://www.gnu.org/software/grub/
+- SDDM (Simple Desktop Display Manager) : https://github.com/sddm/sddm
+
+
+
 
 
