@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 521.4, correctif 4 de la version 521.4
-# Mise à jour : 26/08/2025 à 11:03
+# Version: 521.5, correctif 5 de la version 521.5
+# Mise à jour : 26/08/2025 à 11:06
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX
 
 # Erreurs  à corriger :
@@ -36,7 +36,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="521.4"
+readonly SCRIPT_VERSION="521.5"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -562,7 +562,7 @@ Include = /etc/pacman.d/mirrorlist
 Include = /etc/pacman.d/mirrorlist
 [multilib]
 Include = /etc/pacman.d/mirrorlist
-PACMAN_EOF 
+PACMAN_EOF
 # Suppression de [community] car il n'est plus dans les depots depuis peu
 
     # Blocage de rust pour éviter conflit rustup # Obsolète vu que j'ai nettoyé  rust & rustup, y'a plus que rustup
@@ -1072,7 +1072,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 521.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 521.5:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -4528,13 +4528,13 @@ finish_install() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS DE LA V521.4 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS DE LA V521.5 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V521.4 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V521.5 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4600,14 +4600,14 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V521.4 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V521.5 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez :${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 521.4)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 521.5)${NC}"
     fi
 }
 
