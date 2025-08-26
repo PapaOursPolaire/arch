@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 224.1 - 26/08/2025 23:05 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 225.1 - 26/08/2025 23:13 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -255,21 +255,29 @@ install_icon_themes() {
     
     case $DISTRO in
         "arch")
+            # Utilisation de yay pour Papirus et Tela
             yay -S --noconfirm papirus-icon-theme tela-icon-theme || true
             ;;
         "debian"|"fedora"|"opensuse")
-            sudo $INSTALL_CMD papirus-icon-theme || true
-            # Installation de Tela depuis GitHub
+            # Papirus depuis les dépôts
+            sudo $INSTALL_CMD -y papirus-icon-theme || true
+
+            # Installation manuelle de Tela sans exécuter install.sh
             TMPDIR=$(mktemp -d)
-            git clone https://github.com/vinceliuice/Tela-icon-theme.git "$TMPDIR/Tela-icon-theme"
-            cd "$TMPDIR/Tela-icon-theme" || exit
-            ./install.sh || true
-            cd - >/dev/null || true
+            git clone https://github.com/vinceliuice/Tela-icon-theme.git "$TMPDIR/Tela-icon-theme" || true
+            if [ -d "$TMPDIR/Tela-icon-theme" ]; then
+                sudo mkdir -p /usr/share/icons
+                sudo cp -r "$TMPDIR/Tela-icon-theme"/{Tela*,src} /usr/share/icons/ 2>/dev/null || true
+                echo "Tela-icon-theme installé (copie manuelle)"
+            fi
             rm -rf "$TMPDIR"
+            ;;
+        *)
+            echo "Distribution non supportée pour l'installation des thèmes d'icônes"
             ;;
     esac
 
-    # Mise à jour des caches d'icônes (sécurisée)
+    # Mise à jour du cache d'icônes (sécurisée, ne bloque jamais)
     if command -v gtk-update-icon-cache &>/dev/null; then
         echo "==> Mise à jour du cache d'icônes..."
         for dir in /usr/share/icons/*; do
@@ -277,6 +285,8 @@ install_icon_themes() {
                 sudo gtk-update-icon-cache -f -t "$dir" || true
             fi
         done
+    else
+        echo "gtk-update-icon-cache non trouvé, étape ignorée."
     fi
     
     echo -e "${GREEN}Thèmes d'icônes installés${NC}"
