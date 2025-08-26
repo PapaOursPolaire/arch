@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 222.1 - 26/08/2025 22:55 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 224.1 - 26/08/2025 23:05 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -114,7 +114,7 @@ detect_distro() {
 install_yay() {
     case "$DISTRO" in 
         arch)
-            echo "==> Installation de yay (AUR helper)..."
+            echo "Installation de yay (AUR helper)..."
             sudo pacman -S --needed --noconfirm git base-devel
             if ! command -v yay &> /dev/null; then
                 git clone https://aur.archlinux.org/yay.git /tmp/yay
@@ -122,19 +122,19 @@ install_yay() {
                 makepkg -si --noconfirm
                 cd - || exit
             else
-                echo "yay déjà installé ✅"
+                echo "yay déjà installé"
             fi
             ;;
         debian|ubuntu)
-            echo "⚠️ yay est un outil spécifique à Arch Linux (AUR)."
+            echo "yay est un outil spécifique à Arch Linux (AUR)."
             echo "Vous pouvez utiliser apt/aptitude à la place."
             ;;
         fedora)
-            echo "⚠️ yay est un outil spécifique à Arch Linux (AUR)."
+            echo "yay est un outil spécifique à Arch Linux (AUR)."
             echo "Vous pouvez utiliser dnf ou rpm-ostree selon vos besoins."
             ;;
         *)
-            echo "⚠️ Distribution non supportée pour yay."
+            echo "Distribution non supportée pour yay."
             ;;
     esac
 }
@@ -228,16 +228,26 @@ install_nerd_fonts() {
     FONT_DIR="$USER_HOME/.local/share/fonts"
     mkdir -p "$FONT_DIR"
     
+    # Vérification si JetBrainsMono est déjà installée
+    if fc-list | grep -i "JetBrainsMono" > /dev/null 2>&1; then
+        echo -e "${YELLOW}JetBrainsMono Nerd Font déjà installée, pas de téléchargement${NC}"
+        return 0
+    fi
+    
     # Téléchargement JetBrainsMono Nerd Font
+    echo -e "${BLUE}Téléchargement de JetBrainsMono Nerd Font...${NC}"
     cd /tmp
-    wget -q "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-    unzip -q JetBrainsMono.zip -d JetBrainsMono
-    cp JetBrainsMono/*.ttf "$FONT_DIR/"
-    
-    # Mise à jour du cache des polices
-    fc-cache -fv
-    
-    echo -e "${GREEN}JetBrainsMono Nerd Font installée${NC}"
+    if wget -q "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"; then
+        unzip -q JetBrainsMono.zip -d JetBrainsMono
+        cp JetBrainsMono/*.ttf "$FONT_DIR/" 2>/dev/null || true
+        
+        # Mise à jour du cache des polices
+        fc-cache -fv > /dev/null 2>&1
+        
+        echo -e "${GREEN}JetBrainsMono Nerd Font installée${NC}"
+    else
+        echo -e "${YELLOW}Erreur de téléchargement, utilisation des polices système${NC}"
+    fi
 }
 
 install_icon_themes() {
@@ -245,28 +255,29 @@ install_icon_themes() {
     
     case $DISTRO in
         "arch")
-            yay -S --noconfirm papirus-icon-theme tela-icon-theme
+            yay -S --noconfirm papirus-icon-theme tela-icon-theme || true
             ;;
-        "debian")
-            sudo $INSTALL_CMD papirus-icon-theme
-            # Tela depuis GitHub pour Debian
-            cd /tmp
-            git clone https://github.com/vinceliuice/Tela-icon-theme.git
-            cd Tela-icon-theme && ./install.sh
-            ;;
-        "fedora")
-            sudo $INSTALL_CMD papirus-icon-theme
-            cd /tmp
-            git clone https://github.com/vinceliuice/Tela-icon-theme.git
-            cd Tela-icon-theme && ./install.sh
-            ;;
-        "opensuse")
-            sudo $INSTALL_CMD papirus-icon-theme
-            cd /tmp
-            git clone https://github.com/vinceliuice/Tela-icon-theme.git
-            cd Tela-icon-theme && ./install.sh
+        "debian"|"fedora"|"opensuse")
+            sudo $INSTALL_CMD papirus-icon-theme || true
+            # Installation de Tela depuis GitHub
+            TMPDIR=$(mktemp -d)
+            git clone https://github.com/vinceliuice/Tela-icon-theme.git "$TMPDIR/Tela-icon-theme"
+            cd "$TMPDIR/Tela-icon-theme" || exit
+            ./install.sh || true
+            cd - >/dev/null || true
+            rm -rf "$TMPDIR"
             ;;
     esac
+
+    # Mise à jour des caches d'icônes (sécurisée)
+    if command -v gtk-update-icon-cache &>/dev/null; then
+        echo "==> Mise à jour du cache d'icônes..."
+        for dir in /usr/share/icons/*; do
+            if [ -d "$dir" ]; then
+                sudo gtk-update-icon-cache -f -t "$dir" || true
+            fi
+        done
+    fi
     
     echo -e "${GREEN}Thèmes d'icônes installés${NC}"
 }
