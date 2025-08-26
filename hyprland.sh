@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur  plusieurs distros Linux
-# Version 211.2 : Mise à jour  le 26/08/2025 à  14:43
+# Version 212.2 : Mise à jour  le 26/08/2025 à  17:33 ATTENTION : Version non testée hotmis via shellcheck
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 # Fonctionnalités: Transparence, Blur, Vidéos animées, 
 # Verrouillage stylé, Spicetify, Fastfetch, etc.
@@ -26,7 +26,7 @@ REMOVE_CMD=""
 USER_HOME="$HOME"
 CONFIG_DIR="$USER_HOME/.config"
 
-# Fonctions de détectio,
+# Fonctions de détection
 print_banner() {
     clear
     echo -e "${PURPLE}"
