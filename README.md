@@ -1,8 +1,8 @@
-# Script d'installation Arch Linux Fallout Edition (v344.2)
+# Script d'installation Arch Linux Fallout Edition (v524.5)
 
 Ce script automatise l'installation complète d'Arch Linux avec une
 thématisation par défaut Fallout.
-Version : **344.2, correctif 2**
+Version : **524.5, correctif 5**
 Auteur : PapaOursPolaire
 
 ------------------------------------------------------------------------
