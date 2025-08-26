@@ -3,6 +3,7 @@
 Ce script automatise l'installation complète d'Arch Linux avec une
 thématisation par défaut Fallout.
 Version : **524.5, correctif 5**
+
 Auteur : PapaOursPolaire
 
 ------------------------------------------------------------------------
