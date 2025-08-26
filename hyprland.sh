@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 215.0 - 26/08/2025 22:31 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 221.1 - 26/08/2025 22:42 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -109,6 +109,34 @@ detect_distro() {
     fi
     
     echo -e "${GREEN}Détecté: $DISTRO ($PACKAGE_MANAGER)${NC}"
+}
+
+install_yay() {
+    case "$distro" in
+        arch)
+            echo "==> Installation de yay (AUR helper)..."
+            sudo pacman -S --needed --noconfirm git base-devel
+            if ! command -v yay &> /dev/null; then
+                git clone https://aur.archlinux.org/yay.git /tmp/yay
+                cd /tmp/yay || exit
+                makepkg -si --noconfirm
+                cd - || exit
+            else
+                echo "yay déjà installé ✅"
+            fi
+            ;;
+        debian|ubuntu)
+            echo "⚠️  yay est un outil spécifique à Arch Linux (AUR)."
+            echo "Vous pouvez utiliser apt/aptitude à la place."
+            ;;
+        fedora)
+            echo "⚠️  yay est un outil spécifique à Arch Linux (AUR)."
+            echo "Vous pouvez utiliser dnf ou rpm-ostree selon vos besoins."
+            ;;
+        *)
+            echo "⚠️  Distribution non supportée pour yay."
+            ;;
+    esac
 }
 
 install_gpu_drivers() {
@@ -2194,6 +2222,7 @@ main() {
     # Étapes de l'installation
     detect_hardware
     detect_distro
+    install_yay
     clean_bashrc
     create_wayland_desktop_file
     install_dependencies
