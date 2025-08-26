@@ -156,3 +156,6 @@ Auteur : PapaOursPolaire
 -   Log complet disponible dans `/tmp/arch_install_*.log`.
 
 *Un internet stable signifie selon moi un débit stable d'environ 40 Mbps par seconde. En guise d'exemple, l'installation d'Arch avec 10 Mbps m'a pris environ une heure.
+
+
+
