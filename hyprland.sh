@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 225.1 - 26/08/2025 23:13 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 226.1 - 26/08/2025 23:23 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -279,7 +279,7 @@ install_icon_themes() {
 
     # Mise à jour du cache d'icônes (sécurisée, ne bloque jamais)
     if command -v gtk-update-icon-cache &>/dev/null; then
-        echo "==> Mise à jour du cache d'icônes..."
+        echo "Mise à jour du cache d'icônes..."
         for dir in /usr/share/icons/*; do
             if [ -d "$dir" ]; then
                 sudo gtk-update-icon-cache -f -t "$dir" || true
@@ -384,41 +384,34 @@ detect_current_de() {
 
 # Désinstallation propre de l'environnement graphique
 remove_current_de() {
-    if [ -n "$CURRENT_DE" ] && [ -n "$DE_PACKAGES_TO_REMOVE" ]; then
-        echo -e "${YELLOW}Désinstallation de $CURRENT_DE...${NC}"
-        
-        # IMPORTANT: Prévenir l'écran noir
-        echo -e "${BLUE}Préparation du basculement vers TTY...${NC}"
-        
-        # Arrêt des services graphiques en douceur
-        sudo systemctl stop display-manager 2>/dev/null || true
-        sudo systemctl stop gdm 2>/dev/null || true
-        sudo systemctl stop sddm 2>/dev/null || true
-        sudo systemctl stop lightdm 2>/dev/null || true
-        
-        # Attendre un peu
-        sleep 2
-        
-        # Désinstallation des paquets
-        for package in $DE_PACKAGES_TO_REMOVE; do
-            echo -e "${BLUE}  Suppression de $package...${NC}"
-            sudo $REMOVE_CMD $package 2>/dev/null || true
-        done
-        
-        # Nettoyage des configurations utilisateur
-        echo -e "${BLUE}  Nettoyage des configurations...${NC}"
-        rm -rf "$USER_HOME/.config/plasma"* 2>/dev/null || true
-        rm -rf "$USER_HOME/.config/kde"* 2>/dev/null || true
-        rm -rf "$USER_HOME/.config/gnome"* 2>/dev/null || true
-        rm -rf "$USER_HOME/.config/xfce4" 2>/dev/null || true
-        rm -rf "$USER_HOME/.config/lxqt" 2>/dev/null || true
-        
-        # Désactivation des services
-        sudo systemctl disable gdm 2>/dev/null || true
-        sudo systemctl disable lightdm 2>/dev/null || true
-        
-        echo -e "${GREEN}$CURRENT_DE désinstallé${NC}"
-    fi
+    echo -e "${BLUE}Suppression de l'environnement de bureau actuel...${NC}"
+
+    case $DISTRO in
+        "arch")
+            echo "Suppression des environnements sur Arch"
+            sudo pacman -Rns --noconfirm gnome gdm plasma-desktop sddm xfce4 lightdm || true
+            ;;
+        "debian"|"ubuntu")
+            echo "Suppression des environnements sur Debian/Ubuntu"
+            sudo apt purge -y gnome-shell gdm3 plasma-desktop sddm xfce4 lightdm || true
+            sudo apt autoremove -y || true
+            ;;
+        "fedora")
+            echo "Suppression des environnements sur Fedora"
+            sudo dnf remove -y gnome-shell gdm plasma-desktop sddm xfce4 lightdm || true
+            ;;
+        "opensuse")
+            echo "Suppression des environnements sur openSUSE"
+            sudo zypper remove -y gnome-shell gdm plasma5-desktop sddm xfce4 lightdm || true
+            ;;
+        *)
+            echo "Distribution non reconnue pour la suppression des environnements."
+            ;;
+    esac
+
+    # Pas d'arrêt brutal des services en cours
+    echo -e "${YELLOW}Les gestionnaires de sessions (gdm, sddm, lightdm) NE seront PAS stoppés maintenant.${NC}"
+    echo -e "${YELLOW}Les changements prendront effet après un redémarrage.${NC}"
 }
 
 # Installation des dépendances manquantes
