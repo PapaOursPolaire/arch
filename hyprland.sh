@@ -1,10 +1,8 @@
 #!/bin/bash
 
-# Script d'installation d'Hyprland compatible sur  plusieurs distros Linux
-# Version 214.2 : Mise à jour  le 26/08/2025 à 22:06 ATTENTION : Version non testée hormis via shellcheck
+# Script d'installation d'Hyprland compatible sur plusieurs distros Linux
+# Version 215.0 - 26/08/2025 22:31 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
-# Fonctionnalités: Transparence, Blur, Vidéos animées, 
-# Verrouillage stylé, Spicetify, Fastfetch, etc.
 
 set -e
 
@@ -25,6 +23,8 @@ UPDATE_CMD=""
 REMOVE_CMD=""
 USER_HOME="$HOME"
 CONFIG_DIR="$USER_HOME/.config"
+GPU_TYPE=""
+CPU_TYPE=""
 
 # Fonctions de détection
 print_banner() {
@@ -43,6 +43,37 @@ EOF
     echo -e "${CYAN}Installation complète de Hyprland avec thème personnalisé${NC}"
     echo -e "${YELLOW}Compatible: Arch, Ubuntu, Debian, Fedora & OpenSUSE${NC}"
     echo ""
+}
+
+detect_hardware() {
+    echo -e "${BLUE}Détection du matériel...${NC}"
+    
+    # Détection GPU
+    if lspci | grep -i nvidia > /dev/null 2>&1; then
+        GPU_TYPE="nvidia"
+        echo -e "${GREEN}GPU NVIDIA détecté${NC}"
+    elif lspci | grep -i amd > /dev/null 2>&1; then
+        GPU_TYPE="amd"
+        echo -e "${GREEN}GPU AMD détecté${NC}"
+    elif lspci | grep -i intel > /dev/null 2>&1; then
+        GPU_TYPE="intel"
+        echo -e "${GREEN}GPU Intel détecté${NC}"
+    else
+        GPU_TYPE="unknown"
+        echo -e "${YELLOW}GPU non détecté ou générique${NC}"
+    fi
+    
+    # Détection CPU
+    if grep -i "AuthenticAMD" /proc/cpuinfo > /dev/null 2>&1; then
+        CPU_TYPE="amd"
+        echo -e "${GREEN}CPU AMD détecté${NC}"
+    elif grep -i "GenuineIntel" /proc/cpuinfo > /dev/null 2>&1; then
+        CPU_TYPE="intel"
+        echo -e "${GREEN}CPU Intel détecté${NC}"
+    else
+        CPU_TYPE="unknown"
+        echo -e "${YELLOW}CPU non détecté ou générique${NC}"
+    fi
 }
 
 detect_distro() {
@@ -78,6 +109,138 @@ detect_distro() {
     fi
     
     echo -e "${GREEN}Détecté: $DISTRO ($PACKAGE_MANAGER)${NC}"
+}
+
+install_gpu_drivers() {
+    echo -e "${BLUE}Installation des pilotes GPU...${NC}"
+    
+    case $DISTRO in
+        "arch")
+            case $GPU_TYPE in
+                "nvidia")
+                    sudo $INSTALL_CMD nvidia nvidia-utils nvidia-settings
+                    ;;
+                "amd")
+                    sudo $INSTALL_CMD xf86-video-amdgpu mesa vulkan-radeon
+                    ;;
+                "intel")
+                    sudo $INSTALL_CMD xf86-video-intel mesa vulkan-intel
+                    ;;
+            esac
+            ;;
+        "debian")
+            case $GPU_TYPE in
+                "nvidia")
+                    sudo $INSTALL_CMD nvidia-driver nvidia-settings
+                    ;;
+                "amd")
+                    sudo $INSTALL_CMD xserver-xorg-video-amdgpu mesa-vulkan-drivers
+                    ;;
+                "intel")
+                    sudo $INSTALL_CMD xserver-xorg-video-intel mesa-vulkan-drivers
+                    ;;
+            esac
+            ;;
+        "fedora")
+            case $GPU_TYPE in
+                "nvidia")
+                    sudo dnf install -y akmod-nvidia xorg-x11-drv-nvidia-cuda
+                    ;;
+                "amd")
+                    sudo $INSTALL_CMD xorg-x11-drv-amdgpu mesa-vulkan-drivers
+                    ;;
+                "intel")
+                    sudo $INSTALL_CMD xorg-x11-drv-intel mesa-vulkan-drivers
+                    ;;
+            esac
+            ;;
+        "opensuse")
+            case $GPU_TYPE in
+                "nvidia")
+                    sudo $INSTALL_CMD nvidia-glG05 nvidia-computeG05
+                    ;;
+                "amd")
+                    sudo $INSTALL_CMD xf86-video-amdgpu Mesa-vulkan-device-select
+                    ;;
+                "intel")
+                    sudo $INSTALL_CMD xf86-video-intel Mesa-vulkan-device-select
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+clean_bashrc() {
+    echo -e "${BLUE}Nettoyage du .bashrc...${NC}"
+    sed -i '/Hyprland/d' ~/.bashrc
+    sed -i '/hyprland/d' ~/.bashrc
+    echo -e "${GREEN}Ancien contenu Hyprland supprimé du .bashrc${NC}"
+}
+
+create_wayland_desktop_file() {
+    echo -e "${BLUE}Création du fichier desktop Hyprland...${NC}"
+    
+    sudo mkdir -p /usr/share/wayland-sessions
+    
+    cat > /tmp/Hyprland.desktop << 'EOF'
+[Desktop Entry]
+Name=Hyprland
+Comment=An intelligent dynamic tiling Wayland compositor
+Exec=Hyprland
+Type=Application
+EOF
+    
+    sudo mv /tmp/Hyprland.desktop /usr/share/wayland-sessions/
+    echo -e "${GREEN}Fichier Hyprland.desktop créé${NC}"
+}
+
+install_nerd_fonts() {
+    echo -e "${BLUE}Installation de JetBrainsMono Nerd Font...${NC}"
+    
+    FONT_DIR="$USER_HOME/.local/share/fonts"
+    mkdir -p "$FONT_DIR"
+    
+    # Téléchargement JetBrainsMono Nerd Font
+    cd /tmp
+    wget -q "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
+    unzip -q JetBrainsMono.zip -d JetBrainsMono
+    cp JetBrainsMono/*.ttf "$FONT_DIR/"
+    
+    # Mise à jour du cache des polices
+    fc-cache -fv
+    
+    echo -e "${GREEN}JetBrainsMono Nerd Font installée${NC}"
+}
+
+install_icon_themes() {
+    echo -e "${BLUE}Installation des thèmes d'icônes...${NC}"
+    
+    case $DISTRO in
+        "arch")
+            yay -S --noconfirm papirus-icon-theme tela-icon-theme
+            ;;
+        "debian")
+            sudo $INSTALL_CMD papirus-icon-theme
+            # Tela depuis GitHub pour Debian
+            cd /tmp
+            git clone https://github.com/vinceliuice/Tela-icon-theme.git
+            cd Tela-icon-theme && ./install.sh
+            ;;
+        "fedora")
+            sudo $INSTALL_CMD papirus-icon-theme
+            cd /tmp
+            git clone https://github.com/vinceliuice/Tela-icon-theme.git
+            cd Tela-icon-theme && ./install.sh
+            ;;
+        "opensuse")
+            sudo $INSTALL_CMD papirus-icon-theme
+            cd /tmp
+            git clone https://github.com/vinceliuice/Tela-icon-theme.git
+            cd Tela-icon-theme && ./install.sh
+            ;;
+    esac
+    
+    echo -e "${GREEN}Thèmes d'icônes installés${NC}"
 }
 
 detect_current_de() {
@@ -170,16 +333,22 @@ detect_current_de() {
     fi
 }
 
-# Désinstalllation de l'environnement graphique detecté
+# Désinstallation propre de l'environnement graphique
 remove_current_de() {
     if [ -n "$CURRENT_DE" ] && [ -n "$DE_PACKAGES_TO_REMOVE" ]; then
         echo -e "${YELLOW}Désinstallation de $CURRENT_DE...${NC}"
         
-        # Arrêt des services graphiques
+        # IMPORTANT: Prévenir l'écran noir
+        echo -e "${BLUE}Préparation du basculement vers TTY...${NC}"
+        
+        # Arrêt des services graphiques en douceur
         sudo systemctl stop display-manager 2>/dev/null || true
         sudo systemctl stop gdm 2>/dev/null || true
         sudo systemctl stop sddm 2>/dev/null || true
         sudo systemctl stop lightdm 2>/dev/null || true
+        
+        # Attendre un peu
+        sleep 2
         
         # Désinstallation des paquets
         for package in $DE_PACKAGES_TO_REMOVE; do
@@ -203,6 +372,32 @@ remove_current_de() {
     fi
 }
 
+# Installation des dépendances manquantes
+install_dependencies() {
+    echo -e "${BLUE}Installation des dépendances essentielles...${NC}"
+    
+    case $DISTRO in
+        "arch")
+            DEPS="jq libnotify imagemagick"
+            sudo $INSTALL_CMD $DEPS
+            ;;
+        "debian")
+            DEPS="jq libnotify-bin imagemagick"
+            sudo $INSTALL_CMD $DEPS
+            ;;
+        "fedora")
+            DEPS="jq libnotify ImageMagick"
+            sudo $INSTALL_CMD $DEPS
+            ;;
+        "opensuse")
+            DEPS="jq libnotify-tools ImageMagick"
+            sudo $INSTALL_CMD $DEPS
+            ;;
+    esac
+    
+    echo -e "${GREEN}Dépendances installées${NC}"
+}
+
 # Installation des paquets Hyprland
 install_base_packages() {
     echo -e "${BLUE}Installation des paquets de base...${NC}"
@@ -220,8 +415,8 @@ install_base_packages() {
                 cd -
             fi
             
-            # Paquets Arch
-            PACKAGES="hyprland hyprpaper hypridle hyprlock xdg-desktop-portal-hyprland polkit-gnome waybar wofi kitty thunar dunst mpvpaper sddm pipewire wireplumber pavucontrol cava fastfetch git curl wget unzip"
+            # Paquets Arch - remplacer wofi par rofi-wayland
+            PACKAGES="hyprland hyprpaper hypridle hyprlock xdg-desktop-portal-hyprland polkit-gnome waybar rofi-wayland kitty thunar dunst mpvpaper sddm pipewire wireplumber pavucontrol cava fastfetch git curl wget unzip"
             sudo $INSTALL_CMD $PACKAGES
             
             # Paquets AUR
@@ -236,7 +431,7 @@ install_base_packages() {
                 sudo apt update
             fi
             
-            PACKAGES="hyprland waybar wofi kitty thunar dunst pipewire-pulse pavucontrol fastfetch git curl wget unzip sddm"
+            PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulse pavucontrol fastfetch git curl wget unzip sddm"
             sudo $INSTALL_CMD $PACKAGES
             
             # Installation manuelle pour les paquets non disponibles
@@ -247,14 +442,14 @@ install_base_packages() {
             # Activation des dépôts RPM Fusion
             sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
             
-            PACKAGES="hyprland waybar wofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
+            PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
             sudo $INSTALL_CMD $PACKAGES
             
             install_from_source_fedora
             ;;
             
         "opensuse")
-            PACKAGES="hyprland waybar wofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
+            PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
             sudo $INSTALL_CMD $PACKAGES
             
             install_from_source_opensuse
@@ -265,7 +460,6 @@ install_base_packages() {
 install_from_source_debian() {
     echo -e "${BLUE}Installation depuis les sources (Debian/Ubuntu)...${NC}"
     
-    # Hyprpaper, hypridle, hyprlock depuis les sources
     cd /tmp
     
     # Dépendances de compilation
@@ -294,7 +488,6 @@ install_from_source_fedora() {
     cd /tmp
     sudo dnf install -y gcc-c++ cmake meson ninja-build pkg-config wayland-devel libxkbcommon-devel
     
-    # Installation similaire à Debian mais avec les dépendances Fedora
     install_hypr_tools_from_source
 }
 
@@ -308,7 +501,6 @@ install_from_source_opensuse() {
 }
 
 install_hypr_tools_from_source() {
-    # Fonction commune pour installer les outils Hypr depuis les sources
     git clone https://github.com/hyprwm/hyprpaper.git
     cd hyprpaper && make all && sudo make install && cd ..
     
@@ -322,14 +514,13 @@ install_hypr_tools_from_source() {
     cd mpvpaper && meson build && ninja -C build && sudo ninja -C build install
 }
 
-# Configuration d'Hyprland
+# Configuration Hyprland avec améliorations visuelles
 setup_hyprland_config() {
     echo -e "${BLUE}⚙️ Configuration de Hyprland...${NC}"
     
     mkdir -p "$CONFIG_DIR/hypr"
     
     cat > "$CONFIG_DIR/hypr/hyprland.conf" << 'EOF'
-
 # Moniteur
 monitor = ,preferred,auto,1
 
@@ -350,14 +541,16 @@ input {
     follow_mouse = 1
     touchpad {
         natural_scroll = true
+        disable_while_typing = true
+        tap-to-click = true
     }
     sensitivity = 0
 }
 
-# Apparence générale
+# Apparence générale avec coins arrondis
 general {
     gaps_in = 5
-    gaps_out = 10
+    gaps_out = 15
     border_size = 2
     col.active_border = rgba(33ccffee) rgba(00ff99ee) 45deg
     col.inactive_border = rgba(595959aa)
@@ -366,72 +559,106 @@ general {
     layout = dwindle
 }
 
-# Décoration
+# Décoration avec blur et ombres douces
 decoration {
-    rounding = 10
+    rounding = 15
     active_opacity = 0.98
-    inactive_opacity = 0.95
+    inactive_opacity = 0.92
+    fullscreen_opacity = 1.0
+    
     drop_shadow = true
-    shadow_range = 4
-    shadow_render_power = 3
+    shadow_range = 25
+    shadow_render_power = 4
     col.shadow = rgba(1a1a1aee)
+    shadow_offset = 3 3
 
     blur {
         enabled = true
-        size = 8
+        size = 10
         passes = 3
         new_optimizations = true
         xray = true
+        ignore_opacity = true
+        noise = 0.02
+        contrast = 1.1
+        brightness = 1.0
     }
 }
 
-# Animations
+# Animations fluides
 animations {
     enabled = true
+    
     bezier = myBezier, 0.05, 0.9, 0.1, 1.05
-    animation = windows, 1, 7, myBezier
-    animation = windowsOut, 1, 7, default, popin 80%
+    bezier = overshot, 0.05, 0.9, 0.1, 1.1
+    bezier = smoothOut, 0.36, 0, 0.66, -0.56
+    bezier = smoothIn, 0.25, 1, 0.5, 1
+    
+    animation = windows, 1, 5, overshot, slide
+    animation = windowsOut, 1, 4, smoothOut, slide
+    animation = windowsMove, 1, 4, overshot
     animation = border, 1, 10, default
     animation = borderangle, 1, 8, default
-    animation = fade, 1, 7, default
-    animation = workspaces, 1, 6, default
+    animation = fade, 1, 7, smoothIn
+    animation = fadeDim, 1, 7, smoothIn
+    animation = workspaces, 1, 6, overshot, slidevert
 }
 
 # Layouts
 dwindle {
     pseudotile = true
     preserve_split = true
+    smart_split = false
+    smart_resizing = true
 }
 
 master {
     new_is_master = true
+    smart_resizing = true
 }
 
 # Gestes
 gestures {
     workspace_swipe = true
+    workspace_swipe_fingers = 3
+    workspace_swipe_distance = 300
+    workspace_swipe_invert = true
+    workspace_swipe_min_speed_to_force = 30
 }
 
 # Divers
 misc {
     force_default_wallpaper = 0
     disable_hyprland_logo = true
+    disable_splash_rendering = true
+    mouse_move_enables_dpms = true
+    key_press_enables_dpms = true
+    vfr = true
 }
 
-# Apparence d'une fenetre
-# Transparence par application
+# Règles de fenêtres avec transparence
 windowrulev2 = opacity 0.95 0.95,class:^(code)$
 windowrulev2 = opacity 0.90 0.90,class:^(kitty)$
 windowrulev2 = opacity 0.92 0.92,class:^(thunar)$
-windowrulev2 = opacity 0.85 0.85,class:^(waybar)$
+windowrulev2 = opacity 0.88 0.88,class:^(waybar)$
+windowrulev2 = opacity 0.85 0.85,class:^(rofi)$
 
 # Fenêtres flottantes
 windowrulev2 = float,class:^(pavucontrol)$
 windowrulev2 = float,class:^(nm-connection-editor)$
 windowrulev2 = float,class:^(thunar)$,title:^(.*Properties.*)$
 
+# Règles pour les jeux (performance maximale)
+windowrulev2 = immediate, class:^(steam_app_)(.*)$
+windowrulev2 = immediate, class:^(lutris)$
+windowrulev2 = immediate, class:^(heroic)$
 
-# Racccourcis clavier -> Touche du logo Windows
+# Plein écran sans bordures pour les jeux
+windowrulev2 = noborder, class:^(steam_app_)(.*)$, fullscreen:1
+windowrulev2 = noblur, class:^(steam_app_)(.*)$
+windowrulev2 = noshadow, class:^(steam_app_)(.*)$
+
+# Raccourcis clavier
 $mainMod = SUPER
 
 # Applications
@@ -440,13 +667,14 @@ bind = $mainMod, C, killactive,
 bind = $mainMod, M, exit,
 bind = $mainMod, E, exec, thunar
 bind = $mainMod, V, togglefloating,
-bind = $mainMod, R, exec, wofi --show drun
+bind = $mainMod, R, exec, rofi -show drun
 bind = $mainMod, P, pseudo,
 bind = $mainMod, J, togglesplit,
 
 # Système
 bind = $mainMod, L, exec, hyprlock
-bind = , Print, exec, grim -g "$(slurp)" - | wl-copy
+bind = , Print, exec, ~/.local/bin/screenshot.sh area
+bind = $mainMod, Print, exec, ~/.local/bin/screenshot.sh full
 
 # Focus et déplacement
 bind = $mainMod, left, movefocus, l
@@ -490,24 +718,746 @@ bindm = $mainMod, mouse:273, resizewindow
 bind = , XF86AudioRaiseVolume, exec, pactl set-sink-volume @DEFAULT_SINK@ +5%
 bind = , XF86AudioLowerVolume, exec, pactl set-sink-volume @DEFAULT_SINK@ -5%
 bind = , XF86AudioMute, exec, pactl set-sink-mute @DEFAULT_SINK@ toggle
+bind = , XF86MonBrightnessUp, exec, brightnessctl set +5%
+bind = , XF86MonBrightnessDown, exec, brightnessctl set 5%-
 EOF
 
     echo -e "${GREEN}Configuration Hyprland créée${NC}"
 }
 
-# Arrière-plan vidéo
+# Configuration Waybar avec transparence et Nerd Font
+setup_waybar() {
+    echo -e "${BLUE}Configuration de Waybar...${NC}"
+    
+    mkdir -p "$CONFIG_DIR/waybar"
+    
+    cat > "$CONFIG_DIR/waybar/config" << 'EOF'
+{
+    "layer": "top",
+    "position": "top",
+    "height": 40,
+    "spacing": 10,
+    "margin-top": 5,
+    "margin-left": 10,
+    "margin-right": 10,
+    
+    "modules-left": ["hyprland/workspaces", "hyprland/window"],
+    "modules-center": ["clock"],
+    "modules-right": ["cpu", "memory", "temperature", "pulseaudio", "network", "battery", "tray"],
+
+    "hyprland/workspaces": {
+        "active-only": false,
+        "all-outputs": true,
+        "format": "{icon}",
+        "format-icons": {
+            "1": "󰲠",
+            "2": "󰲢",
+            "3": "󰲤",
+            "4": "󰲦",
+            "5": "󰲨",
+            "6": "󰲪",
+            "7": "󰲬",
+            "8": "󰲮",
+            "9": "󰲰",
+            "10": "󰿬"
+        },
+        "persistent-workspaces": {
+            "1": [],
+            "2": [],
+            "3": [],
+            "4": [],
+            "5": []
+        }
+    },
+
+    "hyprland/window": {
+        "format": "{}",
+        "max-length": 50,
+        "separate-outputs": true
+    },
+
+    "clock": {
+        "format": " {:%H:%M}",
+        "format-alt": " {:%A %d %B %Y - %H:%M:%S}",
+        "tooltip-format": "<tt><small>{calendar}</small></tt>",
+        "calendar": {
+            "mode": "year",
+            "mode-mon-col": 3,
+            "weeks-pos": "right",
+            "on-scroll": 1,
+            "format": {
+                "months": "<span color='#ffead3'><b>{}</b></span>",
+                "days": "<span color='#ecc6d9'><b>{}</b></span>",
+                "weeks": "<span color='#99ffdd'><b>W{}</b></span>",
+                "weekdays": "<span color='#ffcc66'><b>{}</b></span>",
+                "today": "<span color='#ff6699'><b><u>{}</u></b></span>"
+            }
+        }
+    },
+
+    "cpu": {
+        "format": " {usage}%",
+        "tooltip": false,
+        "interval": 2
+    },
+
+    "memory": {
+        "format": " {}%",
+        "tooltip-format": "RAM: {used:0.1f}G/{total:0.1f}G"
+    },
+
+    "temperature": {
+        "thermal-zone": 2,
+        "hwmon-path": "/sys/class/hwmon/hwmon2/temp1_input",
+        "critical-threshold": 80,
+        "format-critical": " {temperatureC}°C",
+        "format": " {temperatureC}°C"
+    },
+
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon} {capacity}%",
+        "format-charging": " {capacity}%",
+        "format-plugged": " {capacity}%",
+        "format-icons": ["", "", "", "", ""]
+    },
+
+    "network": {
+        "format-wifi": " {essid}",
+        "format-ethernet": "󰈀 Câblé",
+        "format-linked": "󰈀 Connecté (Sans IP)",
+        "format-disconnected": "⚠ Déconnecté",
+        "tooltip-format-wifi": "Adresse IP: {ipaddr}\nSignal: {signalStrength}%"
+    },
+
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-bluetooth": "{icon} {volume}%",
+        "format-muted": "󰝟",
+        "format-icons": {
+            "headphone": "",
+            "hands-free": "",
+            "headset": "",
+            "phone": "",
+            "portable": "",
+            "car": "",
+            "default": ["", "", ""]
+        },
+        "on-click": "pavucontrol"
+    },
+
+    "tray": {
+        "spacing": 10
+    }
+}
+EOF
+
+    # Style CSS Waybar avec transparence avancée
+    cat > "$CONFIG_DIR/waybar/style.css" << 'EOF'
+* {
+    border: none;
+    border-radius: 0;
+    font-family: 'JetBrainsMono Nerd Font', 'Font Awesome 6 Free';
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba(30, 30, 46, 0.85);
+    color: #cdd6f4;
+    border-radius: 15px;
+    border: 2px solid rgba(137, 180, 250, 0.3);
+    margin: 0;
+    backdrop-filter: blur(20px);
+}
+
+#workspaces {
+    background: rgba(49, 50, 68, 0.8);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin: 5px 2px;
+    color: #cdd6f4;
+    transition: all 0.3s ease;
+}
+
+#workspaces button {
+    padding: 5px 8px;
+    margin: 0 2px;
+    border-radius: 8px;
+    color: #6c7086;
+    transition: all 0.3s ease;
+}
+
+#workspaces button.active {
+    background: rgba(137, 180, 250, 0.3);
+    color: #89b4fa;
+    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+}
+
+#workspaces button:hover {
+    background: rgba(137, 180, 250, 0.1);
+    color: #89b4fa;
+}
+
+#window {
+    background: rgba(49, 50, 68, 0.6);
+    border-radius: 10px;
+    padding: 5px 15px;
+    margin: 5px;
+    color: #cdd6f4;
+}
+
+#clock {
+    background: rgba(203, 166, 247, 0.2);
+    border-radius: 10px;
+    padding: 5px 15px;
+    margin: 5px;
+    color: #cba6f7;
+    font-weight: bold;
+}
+
+#cpu, #memory, #temperature, #battery, #network, #pulseaudio {
+    background: rgba(49, 50, 68, 0.6);
+    border-radius: 8px;
+    padding: 5px 12px;
+    margin: 5px 2px;
+    color: #cdd6f4;
+    transition: all 0.3s ease;
+}
+
+#cpu {
+    color: #f9e2af;
+    border: 1px solid rgba(249, 226, 175, 0.3);
+}
+
+#memory {
+    color: #a6e3a1;
+    border: 1px solid rgba(166, 227, 161, 0.3);
+}
+
+#temperature {
+    color: #f38ba8;
+    border: 1px solid rgba(243, 139, 168, 0.3);
+}
+
+#temperature.critical {
+    background: rgba(243, 139, 168, 0.3);
+    color: #1e1e2e;
+}
+
+#battery {
+    color: #94e2d5;
+    border: 1px solid rgba(148, 226, 213, 0.3);
+}
+
+#battery.critical {
+    color: #f38ba8;
+    background: rgba(243, 139, 168, 0.1);
+}
+
+#battery.warning {
+    color: #fab387;
+    background: rgba(250, 179, 135, 0.1);
+}
+
+#battery.charging {
+    color: #a6e3a1;
+    background: rgba(166, 227, 161, 0.1);
+}
+
+#network {
+    color: #89b4fa;
+    border: 1px solid rgba(137, 180, 250, 0.3);
+}
+
+#pulseaudio {
+    color: #f5c2e7;
+    border: 1px solid rgba(245, 194, 231, 0.3);
+}
+
+#cpu:hover, #memory:hover, #temperature:hover,
+#battery:hover, #network:hover, #pulseaudio:hover {
+    background: rgba(137, 180, 250, 0.1);
+    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+    transform: translateY(-1px);
+}
+
+#tray {
+    background: rgba(49, 50, 68, 0.8);
+    border-radius: 10px;
+    padding: 5px;
+    margin: 5px;
+}
+
+#tray > .passive > #idle_inhibitor {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background-color: rgba(243, 139, 168, 0.2);
+}
+EOF
+
+    echo -e "${GREEN}Configuration Waybar créée avec transparence et Nerd Fonts${NC}"
+}
+
+# Configuration Rofi (remplace Wofi)
+setup_rofi() {
+    echo -e "${BLUE}Configuration de Rofi...${NC}"
+    
+    mkdir -p "$CONFIG_DIR/rofi"
+    
+    cat > "$CONFIG_DIR/rofi/config.rasi" << 'EOF'
+configuration {
+    display-drun: "Applications";
+    display-run: "Commands";
+    display-window: "Windows";
+    show-icons: true;
+    icon-theme: "Papirus";
+    font: "JetBrainsMono Nerd Font 12";
+    modi: "drun,run,window";
+    terminal: "kitty";
+    drun-display-format: "{name}";
+    location: 0;
+    disable-history: false;
+    hide-scrollbar: true;
+    sidebar-mode: false;
+}
+
+@theme "catppuccin-mocha"
+EOF
+
+    # Thème Catppuccin pour Rofi
+    mkdir -p "$CONFIG_DIR/rofi/themes"
+    cat > "$CONFIG_DIR/rofi/themes/catppuccin-mocha.rasi" << 'EOF'
+* {
+    bg-col:  #1e1e2e;
+    bg-col-light: #313244;
+    border-col: #89b4fa;
+    selected-col: #89b4fa;
+    blue: #89b4fa;
+    fg-col: #cdd6f4;
+    fg-col2: #f38ba8;
+    grey: #6c7086;
+    
+    width: 600;
+    font: "JetBrainsMono Nerd Font 14";
+}
+
+element-text, element-icon, mode-switcher {
+    background-color: inherit;
+    text-color: inherit;
+}
+
+window {
+    height: 500px;
+    border: 2px;
+    border-color: @border-col;
+    background-color: @bg-col;
+    border-radius: 15px;
+}
+
+mainbox {
+    background-color: @bg-col;
+    border-radius: 15px;
+}
+
+inputbar {
+    children: [prompt,entry];
+    background-color: @bg-col-light;
+    border-radius: 8px;
+    padding: 2px;
+    margin: 10px;
+}
+
+prompt {
+    background-color: @blue;
+    padding: 6px;
+    text-color: @bg-col;
+    border-radius: 6px;
+    margin: 20px 0px 0px 20px;
+}
+
+textbox-prompt-colon {
+    expand: false;
+    str: ":";
+}
+
+entry {
+    padding: 6px;
+    margin: 20px 0px 0px 10px;
+    text-color: @fg-col;
+    background-color: @bg-col-light;
+}
+
+listview {
+    border: 0px 0px 0px;
+    padding: 6px 0px 0px;
+    margin: 10px 20px 0px 20px;
+    columns: 1;
+    lines: 8;
+    background-color: @bg-col;
+}
+
+element {
+    padding: 8px;
+    background-color: @bg-col;
+    text-color: @fg-col;
+    border-radius: 8px;
+}
+
+element-icon {
+    size: 25px;
+}
+
+element selected {
+    background-color: @selected-col;
+    text-color: @bg-col;
+}
+
+mode-switcher {
+    spacing: 0;
+}
+
+button {
+    padding: 10px;
+    background-color: @bg-col-light;
+    text-color: @grey;
+    vertical-align: 0.5;
+    horizontal-align: 0.5;
+}
+
+button selected {
+    background-color: @bg-col;
+    text-color: @blue;
+}
+
+message {
+    background-color: @bg-col-light;
+    margin: 2px;
+    padding: 2px;
+    border-radius: 5px;
+}
+
+textbox {
+    padding: 6px;
+    margin: 20px 0px 0px 20px;
+    text-color: @blue;
+    background-color: @bg-col-light;
+}
+EOF
+
+    echo -e "${GREEN}Configuration Rofi créée${NC}"
+}
+
+# Configuration Hyprlock avec blur et avatar
+setup_hyprlock() {
+    echo -e "${BLUE}Configuration Hyprlock avec blur avancé...${NC}"
+    
+    mkdir -p "$CONFIG_DIR/hypr"
+    
+    cat > "$CONFIG_DIR/hypr/hyprlock.conf" << 'EOF'
+general {
+    disable_loading_bar = false
+    grace = 2
+    hide_cursor = false
+    no_fade_in = false
+    no_fade_out = false
+    ignore_empty_input = false
+    immediate_render = true
+}
+
+background {
+    monitor =
+    path = ~/.config/hypr/lockscreen.jpg
+    blur_passes = 4
+    blur_size = 12
+    noise = 0.0117
+    contrast = 0.8916
+    brightness = 0.8172
+    vibrancy = 0.1696
+    vibrancy_darkness = 0.0
+    color = rgba(25, 20, 20, 1.0)
+}
+
+# Horloge principale
+label {
+    monitor =
+    text = cmd[update:1000] echo "$(date +"%-H:%M")"
+    color = rgba(255, 255, 255, 0.9)
+    font_size = 120
+    font_family = JetBrainsMono Nerd Font Bold
+    position = 0, 200
+    halign = center
+    valign = center
+    shadow_passes = 2
+    shadow_size = 5
+    shadow_color = rgba(0, 0, 0, 0.5)
+}
+
+# Date
+label {
+    monitor =
+    text = cmd[update:43200000] echo "$(date +"%A, %d %B %Y")"
+    color = rgba(255, 255, 255, 0.7)
+    font_size = 24
+    font_family = JetBrainsMono Nerd Font
+    position = 0, 150
+    halign = center
+    valign = center
+}
+
+# Avatar utilisateur (si disponible)
+image {
+    monitor =
+    path = ~/.face
+    size = 120
+    rounding = -1
+    border_size = 4
+    border_color = rgba(137, 180, 250, 0.8)
+    position = 0, 50
+    halign = center
+    valign = center
+}
+
+# Message de connexion
+label {
+    monitor =
+    text = Saisissez votre mot de passe
+    color = rgba(137, 180, 250, 0.8)
+    font_size = 18
+    font_family = JetBrainsMono Nerd Font Bold
+    position = 0, 30
+    halign = center
+    valign = center
+}
+
+# Nom d'utilisateur
+label {
+    monitor =
+    text = $USER
+    color = rgba(255, 255, 255, 0.6)
+    font_size = 16
+    font_family = JetBrainsMono Nerd Font
+    position = 0, -20
+    halign = center
+    valign = center
+}
+
+# Champ de saisie mot de passe
+input-field {
+    monitor =
+    size = 400, 60
+    outline_thickness = 2
+    dots_size = 0.2
+    dots_spacing = 0.64
+    dots_center = true
+    outer_color = rgba(137, 180, 250, 0.8)
+    inner_color = rgba(30, 30, 46, 0.8)
+    font_color = rgba(205, 214, 244, 1.0)
+    fade_on_empty = false
+    placeholder_text = <span foreground="##89b4fa">Mot de passe...</span>
+    hide_input = false
+    rounding = 12
+    check_color = rgba(166, 227, 161, 0.8)
+    fail_color = rgba(243, 139, 168, 0.8)
+    fail_text = <i>Mot de passe incorrect</i>
+    capslock_color = rgba(249, 226, 175, 0.8)
+    position = 0, -120
+    halign = center
+    valign = center
+    shadow_passes = 2
+    shadow_size = 3
+    shadow_color = rgba(0, 0, 0, 0.3)
+}
+
+# Indicateur de Caps Lock
+label {
+    monitor =
+    text = CAPS LOCK ACTIVÉ
+    color = rgba(249, 226, 175, 0.8)
+    font_size = 12
+    font_family = JetBrainsMono Nerd Font
+    position = 0, -200
+    halign = center
+    valign = center
+}
+
+# Informations système
+label {
+    monitor =
+    text = cmd[update:5000] echo " $(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo "AC")% | $(uptime -p | sed 's/up //')"
+    color = rgba(255, 255, 255, 0.4)
+    font_size = 12
+    font_family = JetBrainsMono Nerd Font
+    position = 20, -20
+    halign = left
+    valign = bottom
+}
+EOF
+
+    echo -e "${GREEN}Configuration Hyprlock créée avec blur et thème cohérent${NC}"
+}
+
+# Configuration Dunst avec thème Catppuccin
+setup_dunst() {
+    echo -e "${BLUE}Configuration de Dunst avec thème Catppuccin...${NC}"
+    
+    mkdir -p "$CONFIG_DIR/dunst"
+    
+    cat > "$CONFIG_DIR/dunst/dunstrc" << 'EOF'
+[global]
+    monitor = 0
+    follow = mouse
+    width = 350
+    height = 300
+    origin = top-right
+    offset = 15x50
+    scale = 0
+    notification_limit = 5
+    progress_bar = true
+    progress_bar_height = 12
+    progress_bar_frame_width = 1
+    progress_bar_min_width = 150
+    progress_bar_max_width = 300
+    indicate_hidden = yes
+    transparency = 15
+    separator_height = 2
+    padding = 20
+    horizontal_padding = 20
+    text_icon_padding = 0
+    frame_width = 2
+    frame_color = "#89b4fa"
+    separator_color = frame
+    sort = yes
+    idle_threshold = 120
+    font = JetBrainsMono Nerd Font 11
+    line_height = 0
+    markup = full
+    format = "<b>%s</b>\n%b"
+    alignment = left
+    vertical_alignment = center
+    show_age_threshold = 60
+    ellipsize = middle
+    ignore_newline = no
+    stack_duplicates = true
+    hide_duplicate_count = false
+    show_indicators = yes
+    icon_position = left
+    min_icon_size = 32
+    max_icon_size = 64
+    icon_path = /usr/share/icons/Papirus/16x16/status/:/usr/share/icons/Papirus/16x16/devices/
+    sticky_history = yes
+    history_length = 30
+    dmenu = /usr/bin/dmenu -p dunst:
+    browser = /usr/bin/xdg-open
+    always_run_script = true
+    title = Dunst
+    class = Dunst
+    corner_radius = 15
+    ignore_dbusclose = false
+    force_xinerama = false
+    mouse_left_click = close_current
+    mouse_middle_click = do_action, close_current
+    mouse_right_click = close_all
+
+[experimental]
+    per_monitor_dpi = false
+
+[urgency_low]
+    background = "#1e1e2e"
+    foreground = "#cdd6f4"
+    highlight = "#89b4fa"
+    timeout = 5
+
+[urgency_normal]
+    background = "#1e1e2e"
+    foreground = "#cdd6f4"
+    highlight = "#89b4fa"
+    timeout = 10
+
+[urgency_critical]
+    background = "#f38ba8"
+    foreground = "#1e1e2e"
+    frame_color = "#f38ba8"
+    timeout = 0
+EOF
+
+    echo -e "${GREEN}Configuration Dunst créée avec thème Catppuccin${NC}"
+}
+
+# Scripts de capture d'écran améliorés
+setup_screenshot_tools() {
+    echo -e "${BLUE}Installation des outils de capture...${NC}"
+    
+    case $DISTRO in
+        "arch")
+            sudo $INSTALL_CMD grim slurp wl-clipboard
+            ;;
+        "debian")
+            sudo $INSTALL_CMD grim slurp wl-clipboard
+            ;;
+        "fedora")
+            sudo $INSTALL_CMD grim slurp wl-clipboard
+            ;;
+        "opensuse")
+            sudo $INSTALL_CMD grim slurp wl-clipboard
+            ;;
+    esac
+    
+    mkdir -p "$USER_HOME/.local/bin"
+    
+    cat > "$USER_HOME/.local/bin/screenshot.sh" << 'EOF'
+#!/bin/bash
+
+# Script de capture d'écran avancé pour Hyprland
+SCREENSHOT_DIR="$HOME/Pictures/Screenshots"
+mkdir -p "$SCREENSHOT_DIR"
+
+case "$1" in
+    "area")
+        # Capture de zone sélectionnée avec bordure colorée
+        grim -g "$(slurp -d -c 89b4faff -b 1e1e2e88 -s 00000000)" "$SCREENSHOT_DIR/screenshot-$(date +%Y%m%d-%H%M%S).png"
+        notify-send -i camera-photo "Capture d'écran" "Zone sélectionnée sauvegardée" -t 2000
+        ;;
+    "window")
+        # Capture de la fenêtre active
+        hyprctl -j activewindow | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' | grim -g - "$SCREENSHOT_DIR/screenshot-$(date +%Y%m%d-%H%M%S).png"
+        notify-send -i camera-photo "Capture d'écran" "Fenêtre active sauvegardée" -t 2000
+        ;;
+    "full"|*)
+        # Capture plein écran
+        grim "$SCREENSHOT_DIR/screenshot-$(date +%Y%m%d-%H%M%S).png"
+        notify-send -i camera-photo "Capture d'écran" "Écran complet sauvegardé" -t 2000
+        ;;
+esac
+EOF
+
+    chmod +x "$USER_HOME/.local/bin/screenshot.sh"
+    
+    # Ajout au PATH si nécessaire
+    if ! grep -q ".local/bin" ~/.bashrc; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    fi
+    
+    echo -e "${GREEN}Outils de capture installés avec notifications${NC}"
+}
+
+# Arrière-plan vidéo amélioré
 setup_video_wallpaper() {
     echo -e "${BLUE}Configuration du fond vidéo animé...${NC}"
     
-    # Création du dossier pour les vidéos
     mkdir -p "$USER_HOME/.config/hypr/wallpapers"
     
-    # Script de gestion des fonds vidéo
     cat > "$CONFIG_DIR/hypr/video-wallpaper.sh" << 'EOF'
 #!/bin/bash
 
 WALLPAPER_DIR="$HOME/.config/hypr/wallpapers"
-FALLBACK_COLOR="#1a1a1a"
+FALLBACK_COLOR="#1e1e2e"
 
 # Vérification du dossier
 if [ ! -d "$WALLPAPER_DIR" ]; then
@@ -532,8 +1482,11 @@ else
     pkill -f mpvpaper 2>/dev/null || true
     sleep 1
     
-    # Démarrage de la nouvelle vidéo
-    mpvpaper -o "loop --no-audio --hwdec=auto" '*' "$selected_video" &
+    # Démarrage de la nouvelle vidéo avec optimisations
+    mpvpaper -o "loop --no-audio --hwdec=auto --vo=gpu --profile=gpu-hq" '*' "$selected_video" &
+    
+    # Notification
+    notify-send -i video-x-generic "Fond d'écran" "Lecture de $(basename "$selected_video")" -t 3000
 fi
 EOF
 
@@ -544,303 +1497,39 @@ EOF
 preload = ~/.config/hypr/wallpapers/default.jpg
 wallpaper = ,~/.config/hypr/wallpapers/default.jpg
 ipc = on
+splash = false
 EOF
 
     echo -e "${GREEN}Configuration vidéo wallpaper créée${NC}"
-    echo -e "${YELLOW}Placez vos vidéos .mp4 dans ~/.config/hypr/wallpapers/${NC}"
 }
 
-# COnfiguration  Waybar
-setup_waybar() {
-    echo -e "${BLUE}Configuration de Waybar...${NC}"
+# Check final des binaires
+check_installation() {
+    echo -e "${BLUE}Vérification finale de l'installation...${NC}"
     
-    mkdir -p "$CONFIG_DIR/waybar"
+    MISSING=""
+    BINARIES=("hyprland" "waybar" "rofi" "kitty" "dunst" "hyprlock" "grim" "slurp")
     
-    # Configuration Waybar
-    cat > "$CONFIG_DIR/waybar/config" << 'EOF'
-{
-    "layer": "top",
-    "position": "top",
-    "height": 40,
-    "spacing": 10,
-    "margin-top": 5,
-    "margin-left": 10,
-    "margin-right": 10,
+    for binary in "${BINARIES[@]}"; do
+        if ! command -v $binary >/dev/null 2>&1; then
+            MISSING="$MISSING $binary"
+        else
+            echo -e "${GREEN}✓ $binary${NC}"
+        fi
+    done
     
-    "modules-left": ["hyprland/workspaces"],
-    "modules-center": ["clock"],
-    "modules-right": ["pulseaudio", "network", "battery", "tray"],
-
-    "hyprland/workspaces": {
-        "active-only": false,
-        "all-outputs": true,
-        "format": "{icon}",
-        "format-icons": {
-            "1": "1",
-            "2": "2",
-            "3": "3",
-            "4": "4",
-            "5": "5",
-            "6": "6",
-            "7": "7",
-            "8": "8",
-            "9": "9",
-            "10": "10"
-        },
-        "persistent-workspaces": {
-            "1": [],
-            "2": [],
-            "3": [],
-            "4": [],
-            "5": []
-        }
-    },
-
-    "clock": {
-        "format": "{:%H:%M}",
-        "format-alt": "{:%A %d %B %Y - %H:%M:%S}",
-        "tooltip-format": "<tt><small>{calendar}</small></tt>",
-        "calendar": {
-            "mode": "year",
-            "mode-mon-col": 3,
-            "weeks-pos": "right",
-            "on-scroll": 1,
-            "format": {
-                "months": "<span color='#ffead3'><b>{}</b></span>",
-                "days": "<span color='#ecc6d9'><b>{}</b></span>",
-                "weeks": "<span color='#99ffdd'><b>W{}</b></span>",
-                "weekdays": "<span color='#ffcc66'><b>{}</b></span>",
-                "today": "<span color='#ff6699'><b><u>{}</u></b></span>"
-            }
-        }
-    },
-
-    "battery": {
-        "states": {
-            "warning": 30,
-            "critical": 15
-        },
-        "format": "{capacity}% {icon}",
-        "format-charging": "{capacity}% ",
-        "format-plugged": "{capacity}% ",
-        "format-icons": ["", "", "", "", ""]
-    },
-
-    "network": {
-        "format-wifi": "{essid} ",
-        "format-ethernet": "Câblé ",
-        "format-linked": "Connecté (Sans IP) ",
-        "format-disconnected": "Déconnecté ⚠",
-        "tooltip-format-wifi": "Adresse IP: {ipaddr}\nSignal: {signalStrength}%"
-    },
-
-    "pulseaudio": {
-        "format": "{volume}% {icon}",
-        "format-bluetooth": "{volume}% {icon}",
-        "format-muted": "",
-        "format-icons": {
-            "headphone": "",
-            "hands-free": "",
-            "headset": "",
-            "phone": "",
-            "portable": "",
-            "car": "",
-            "default": ["", "", ""]
-        },
-        "on-click": "pavucontrol"
-    },
-
-    "tray": {
-        "spacing": 10
-    }
-}
-EOF
-
-    # Style CSS Waybar
-    cat > "$CONFIG_DIR/waybar/style.css" << 'EOF'
-* {
-    border: none;
-    border-radius: 0;
-    font-family: 'JetBrainsMono Nerd Font', 'Font Awesome 6 Free';
-    font-size: 13px;
-    min-height: 0;
+    if [ -n "$MISSING" ]; then
+        echo -e "${RED}Binaires manquants:$MISSING${NC}"
+        return 1
+    else
+        echo -e "${GREEN}Tous les binaires sont présents${NC}"
+        return 0
+    fi
 }
 
-window#waybar {
-    background: rgba(26, 27, 38, 0.85);
-    color: #cdd6f4;
-    border-radius: 15px;
-    border: 2px solid rgba(137, 180, 250, 0.3);
-    margin: 0;
-}
-
-#workspaces {
-    background: rgba(49, 50, 68, 0.8);
-    border-radius: 10px;
-    padding: 8px 12px;
-    margin: 5px 2px;
-    color: #cdd6f4;
-    transition: all 0.3s ease;
-}
-
-#battery:hover,
-#network:hover,
-#pulseaudio:hover {
-    background: rgba(137, 180, 250, 0.1);
-    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
-}
-
-#battery.critical {
-    color: #f38ba8;
-    background: rgba(243, 139, 168, 0.1);
-}
-
-#battery.warning {
-    color: #fab387;
-    background: rgba(250, 179, 135, 0.1);
-}
-
-#battery.charging {
-    color: #a6e3a1;
-    background: rgba(166, 227, 161, 0.1);
-}
-
-#tray {
-    background: rgba(49, 50, 68, 0.8);
-    border-radius: 10px;
-    padding: 5px;
-    margin: 5px;
-}
-
-#tray > .passive > #idle_inhibitor {
-    -gtk-icon-effect: dim;
-}
-
-#tray > .needs-attention {
-    -gtk-icon-effect: highlight;
-    background-color: rgba(243, 139, 168, 0.2);
-}
-EOF
-
-    echo -e "${GREEN}Configuration Waybar créée${NC}"
-}
-
-# Configuration Hyprlock
-setup_hyprlock() {
-    echo -e "${BLUE}🔒 Configuration Hyprlock...${NC}"
-    
-    mkdir -p "$CONFIG_DIR/hypr"
-    
-    cat > "$CONFIG_DIR/hypr/hyprlock.conf" << 'EOF'
-
-general {
-    disable_loading_bar = true
-    grace = 2
-    hide_cursor = false
-    no_fade_in = false
-    no_fade_out = false
-    ignore_empty_input = false
-}
-
-background {
-    monitor =
-    path = ~/.config/hypr/lockscreen.jpg
-    blur_passes = 3
-    blur_size = 8
-    color = rgba(25, 20, 20, 1.0)
-}
-
-# Horloge
-label {
-    monitor =
-    text = cmd[update:1000] echo "$(date +"%-H:%M")"
-    color = rgba(255, 255, 255, 0.9)
-    font_size = 120
-    font_family = JetBrains Mono Bold
-    position = 0, 200
-    halign = center
-    valign = center
-}
-
-# Date
-label {
-    monitor =
-    text = cmd[update:43200000] echo "$(date +"%A, %d %B %Y")"
-    color = rgba(255, 255, 255, 0.7)
-    font_size = 24
-    font_family = JetBrains Mono
-    position = 0, 150
-    halign = center
-    valign = center
-}
-
-# Message Fallout
-label {
-    monitor =
-    text = [ VEUILLEZ SAISIR VOTRE MOT DE PASSE ]
-    color = rgba(0, 255, 100, 0.8)
-    font_size = 18
-    font_family = JetBrains Mono Bold
-    position = 0, 30
-    halign = center
-    valign = center
-}
-
-# Message système
-label {
-    monitor =
-    text = SYSTÈME DE SÉCURITÉ VAULT-TEC ACTIVÉ
-    color = rgba(0, 255, 100, 0.6)
-    font_size = 14
-    font_family = JetBrains Mono
-    position = 0, -50
-    halign = center
-    valign = center
-}
-
-# Champ de saisie mot de passe
-input-field {
-    monitor =
-    size = 400, 60
-    outline_thickness = 2
-    dots_size = 0.2
-    dots_spacing = 0.64
-    dots_center = true
-    outer_color = rgba(0, 255, 100, 0.8)
-    inner_color = rgba(0, 0, 0, 0.8)
-    font_color = rgba(0, 255, 100, 1.0)
-    fade_on_empty = false
-    placeholder_text = <span foreground="##00ff64">Mot de passe...</span>
-    hide_input = false
-    rounding = 10
-    check_color = rgba(0, 255, 100, 0.8)
-    fail_color = rgba(255, 50, 50, 0.8)
-    fail_text = <i>ACCÈS REFUSÉ</i>
-    capslock_color = rgba(255, 255, 0, 0.8)
-    position = 0, -120
-    halign = center
-    valign = center
-}
-
-# Indicateur de Caps Lock
-label {
-    monitor =
-    text = CAPS LOCK ACTIVÉ
-    color = rgba(255, 255, 0, 0.8)
-    font_size = 12
-    font_family = JetBrains Mono
-    position = 0, -200
-    halign = center
-    valign = center
-}
-EOF
-
-    echo -e "${GREEN}Configuration Hyprlock créée${NC}"
-}
-
-# Installation de Spotify & de Spicetify
+# Installation de Spicetify
 setup_spicetify() {
-    echo -e "${BLUE}🎵 Installation et configuration de Spicetify...${NC}"
+    echo -e "${BLUE}Installation et configuration de Spicetify...${NC}"
     
     # Installation de Spotify si nécessaire
     if ! command -v spotify >/dev/null 2>&1; then
@@ -871,276 +1560,28 @@ setup_spicetify() {
         echo 'export PATH="$HOME/.spicetify:$PATH"' >> ~/.bashrc
     fi
     
-    # Configuration Spicetify
-    spicetify config current_theme Dribbblish color_scheme nord-dark
+    # Configuration Spicetify avec thème Catppuccin
+    spicetify config current_theme catppuccin color_scheme mocha
     spicetify config inject_css 1 replace_colors 1 overwrite_assets 1 inject_theme_js 1
     
-    # Installation du thème Dribbblish
-    curl -fsSL https://raw.githubusercontent.com/morpheusthewhite/spicetify-themes/master/Dribbblish/install.sh | sh
+    # Installation du thème Catppuccin
+    curl -fsSL https://raw.githubusercontent.com/catppuccin/spicetify/main/install.sh | sh
     
     # Application des modifications
     spicetify backup apply
     
-    echo -e "${GREEN}Spicetify configuré avec le thème Dribbblish Nord Dark${NC}"
+    echo -e "${GREEN}Spicetify configuré avec le thème Catppuccin Mocha${NC}"
 }
 
-# Installation des outils de développement
-setup_dev_tools() {
-    echo -e "${BLUE}💻 Installation des outils de développement...${NC}"
-    
-    case $DISTRO in
-        "arch")
-            DEV_PACKAGES="visual-studio-code-bin android-studio jdk-openjdk python nodejs npm docker gcc clang cmake make"
-            yay -S --noconfirm $DEV_PACKAGES
-            ;;
-        "debian")
-            # Visual Studio Code
-            wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-            sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/
-            echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
-            
-            sudo apt update
-            DEV_PACKAGES="code default-jdk python3 python3-pip nodejs npm docker.io gcc clang cmake make"
-            sudo $INSTALL_CMD $DEV_PACKAGES
-            ;;
-        "fedora")
-            # Visual Studio Code
-            sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-            sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
-            
-            DEV_PACKAGES="code java-openjdk-devel python3 python3-pip nodejs npm docker gcc clang cmake make"
-            sudo $INSTALL_CMD $DEV_PACKAGES
-            ;;
-        "opensuse")
-            # Visual Studio Code
-            sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-            sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/zypp/repos.d/vscode.repo'
-            
-            DEV_PACKAGES="code java-openjdk-devel python3 python3-pip nodejs npm docker gcc clang cmake make"
-            sudo $INSTALL_CMD $DEV_PACKAGES
-            ;;
-    esac
-    
-    # Extensions VS Code
-    echo -e "${BLUE}  Installation des extensions VS Code...${NC}"
-    code --install-extension ms-python.python
-    code --install-extension ms-vscode.cpptools
-    code --install-extension redhat.java
-    code --install-extension bradlc.vscode-tailwindcss
-    code --install-extension github.copilot
-    
-    # Configuration Docker
-    sudo systemctl enable docker
-    sudo usermod -aG docker $USER
-    
-    echo -e "${GREEN}Outils de développement installés${NC}"
-}
-
-# Configuration de fastfetch
-setup_fastfetch() {
-    echo -e "${BLUE}Configuration de Fastfetch...${NC}"
-    
-    mkdir -p "$CONFIG_DIR/fastfetch"
-    
-    cat > "$CONFIG_DIR/fastfetch/config.jsonc" << 'EOF'
-{
-    "$schema": "https://github.com/fastfetch-rs/fastfetch/raw/dev/doc/json_schema.json",
-    "logo": {
-        "source": "arch",
-        "padding": {
-            "top": 2,
-            "left": 2
-        }
-    },
-    "display": {
-        "separator": " -> "
-    },
-    "modules": [
-        "title",
-        "separator",
-        "os",
-        "host",
-        "kernel",
-        "uptime",
-        "packages",
-        "shell",
-        "display",
-        "de",
-        "wm",
-        "terminal",
-        "cpu",
-        "gpu",
-        "memory",
-        "disk",
-        "colors"
-    ]
-}
-EOF
-
-    # Ajout de Fastfetch au .bashrc
-    if ! grep -q "fastfetch" ~/.bashrc; then
-        echo "" >> ~/.bashrc
-        echo "# Fastfetch au démarrage" >> ~/.bashrc
-        echo "if [ -t 0 ]; then" >> ~/.bashrc
-        echo "    fastfetch" >> ~/.bashrc
-        echo "fi" >> ~/.bashrc
-    fi
-    
-    echo -e "${GREEN}Fastfetch configuré${NC}"
-}
-
-# Configuration de Wofi (launcher d'applis)
-setup_wofi() {
-    echo -e "${BLUE}Configuration de Wofi...${NC}"
-    
-    mkdir -p "$CONFIG_DIR/wofi"
-    
-    cat > "$CONFIG_DIR/wofi/config" << 'EOF'
-width=600
-height=400
-location=center
-show=drun
-prompt=Applications
-filter_rate=100
-allow_markup=true
-no_actions=true
-halign=fill
-orientation=vertical
-content_halign=fill
-insensitive=true
-allow_images=true
-image_size=40
-gtk_dark=true
-EOF
-
-    cat > "$CONFIG_DIR/wofi/style.css" << 'EOF'
-window {
-    margin: 0px;
-    border: 2px solid rgba(137, 180, 250, 0.6);
-    background-color: rgba(26, 27, 38, 0.9);
-    border-radius: 15px;
-    font-family: "JetBrains Mono";
-}
-
-#input {
-    margin: 10px;
-    border: 2px solid rgba(137, 180, 250, 0.4);
-    background-color: rgba(49, 50, 68, 0.8);
-    border-radius: 10px;
-    padding: 10px;
-    color: #cdd6f4;
-    font-size: 14px;
-}
-
-#inner-box {
-    margin: 5px;
-    border: none;
-    background-color: transparent;
-}
-
-#outer-box {
-    margin: 5px;
-    border: none;
-    background-color: transparent;
-}
-
-#scroll {
-    margin: 0px;
-    border: none;
-}
-
-#text {
-    margin: 5px;
-    border: none;
-    color: #cdd6f4;
-    font-size: 13px;
-}
-
-#entry {
-    border-radius: 8px;
-    margin: 2px;
-    padding: 8px;
-    background-color: transparent;
-}
-
-#entry:selected {
-    background-color: rgba(137, 180, 250, 0.2);
-    border: 1px solid rgba(137, 180, 250, 0.4);
-}
-
-#text:selected {
-    color: #89b4fa;
-}
-EOF
-
-    echo -e "${GREEN}Configuration Wofi créée${NC}"
-}
-
-# Configuration des services système
-setup_system_services() {
-    echo -e "${BLUE}Configuration des services système...${NC}"
-    
-    # Configuration SDDM
-    sudo mkdir -p /etc/sddm.conf.d
-    cat > /tmp/sddm-hyprland.conf << 'EOF'
-[General]
-InputMethod=
-
-[Theme]
-Current=breeze
-
-[Users]
-MaximumUid=65000
-MinimumUid=1000
-
-[Wayland]
-SessionDir=/usr/share/wayland-sessions
-EOF
-    
-    sudo mv /tmp/sddm-hyprland.conf /etc/sddm.conf.d/
-    
-    # Activation des services
-    sudo systemctl enable sddm
-    sudo systemctl enable NetworkManager
-    sudo systemctl enable bluetooth
-    
-    # Configuration du démarrage automatique Hyprland
-    if ! grep -q "Hyprland" ~/.bashrc; then
-        cat >> ~/.bashrc << 'EOF'
-EOF
-    fi
-    
-    # Service de son au démarrage (optionnel)
-    cat > /tmp/boot-sound.service << 'EOF'
-[Unit]
-Description=Son de démarrage
-After=sound.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'paplay /usr/share/sounds/alsa/Front_Left.wav 2>/dev/null || true'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    sudo mv /tmp/boot-sound.service /etc/systemd/system/
-    sudo systemctl enable boot-sound.service
-    
-    echo -e "${GREEN}Services système configurés${NC}"
-}
-
-# Configuratioon du  terminal Kitty
+# Configuration de Kitty terminal
 setup_kitty() {
     echo -e "${BLUE}Configuration de Kitty terminal...${NC}"
     
     mkdir -p "$CONFIG_DIR/kitty"
     
     cat > "$CONFIG_DIR/kitty/kitty.conf" << 'EOF'
-
 # Police
-font_family      JetBrains Mono
+font_family      JetBrainsMono Nerd Font
 bold_font        auto
 italic_font      auto
 bold_italic_font auto
@@ -1157,10 +1598,6 @@ scrollback_lines 10000
 url_style curly
 open_url_with default
 
-# Sélection
-selection_foreground none
-selection_background #44475a
-
 # Performance
 repaint_delay 10
 input_delay 3
@@ -1170,11 +1607,12 @@ enable_audio_bell no
 visual_bell_duration 0.0
 
 # Fenêtre
-window_padding_width 10
+window_padding_width 15
 background_opacity 0.90
 dynamic_background_opacity yes
+background_blur 20
 
-# Couleurs de base
+# Thème Catppuccin Mocha
 foreground #cdd6f4
 background #1e1e2e
 selection_foreground #1e1e2e
@@ -1238,7 +1676,35 @@ EOF
     echo -e "${GREEN}Configuration Kitty créée${NC}"
 }
 
-# Configuration audia avancée
+# Configuration Thunar
+setup_thunar() {
+    echo -e "${BLUE}Configuration de Thunar...${NC}"
+    
+    mkdir -p "$CONFIG_DIR/xfce4/xfconf/xfce-perchannel-xml"
+    
+    cat > "$CONFIG_DIR/xfce4/xfconf/xfce-perchannel-xml/thunar.xml" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="thunar" version="1.0">
+    <property name="default-view" type="string" value="ThunarIconView"/>
+    <property name="last-view" type="string" value="ThunarIconView"/>
+    <property name="last-icon-view-zoom-level" type="string" value="THUNAR_ZOOM_LEVEL_NORMAL"/>
+    <property name="last-window-width" type="int" value="900"/>
+    <property name="last-window-height" type="int" value="700"/>
+    <property name="last-window-maximized" type="bool" value="false"/>
+    <property name="last-separator-position" type="int" value="170"/>
+    <property name="last-show-hidden" type="bool" value="false"/>
+    <property name="misc-single-click" type="bool" value="false"/>
+    <property name="misc-folders-first" type="bool" value="true"/>
+    <property name="misc-show-thumbnails" type="bool" value="true"/>
+    <property name="shortcuts-icon-emblems" type="bool" value="true"/>
+    <property name="shortcuts-icon-size" type="string" value="THUNAR_ICON_SIZE_SMALLER"/>
+</channel>
+EOF
+
+    echo -e "${GREEN}Configuration Thunar créée${NC}"
+}
+
+# Configuration audio avancée
 setup_audio() {
     echo -e "${BLUE}Configuration audio avancée...${NC}"
     
@@ -1265,12 +1731,12 @@ mono_option = average
 [color]
 gradient = 1
 gradient_count = 6
-gradient_color_1 = '#00ff00'
-gradient_color_2 = '#00ff64'
-gradient_color_3 = '#64ff00'
-gradient_color_4 = '#ffff00'
-gradient_color_5 = '#ff6400'
-gradient_color_6 = '#ff0000'
+gradient_color_1 = '#89b4fa'
+gradient_color_2 = '#74c7ec'
+gradient_color_3 = '#a6e3a1'
+gradient_color_4 = '#f9e2af'
+gradient_color_5 = '#fab387'
+gradient_color_6 = '#f38ba8'
 
 [smoothing]
 integral = 77
@@ -1288,29 +1754,204 @@ EOF
     echo -e "${GREEN}Configuration audio terminée${NC}"
 }
 
-# Téléchargement  des ressources nécessaires
+# Configuration de fastfetch
+setup_fastfetch() {
+    echo -e "${BLUE}Configuration de Fastfetch...${NC}"
+    
+    mkdir -p "$CONFIG_DIR/fastfetch"
+    
+    cat > "$CONFIG_DIR/fastfetch/config.jsonc" << 'EOF'
+{
+    "$schema": "https://github.com/fastfetch-rs/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "source": "auto",
+        "padding": {
+            "top": 2,
+            "left": 2
+        }
+    },
+    "display": {
+        "separator": " ➜ ",
+        "color": {
+            "keys": "blue",
+            "title": "yellow"
+        }
+    },
+    "modules": [
+        "title",
+        "separator",
+        "os",
+        "host",
+        "kernel",
+        "uptime",
+        "packages",
+        "shell",
+        "display",
+        "de",
+        "wm",
+        "terminal",
+        "cpu",
+        "gpu",
+        "memory",
+        "disk",
+        "colors"
+    ]
+}
+EOF
+
+    # Ajout de Fastfetch au .bashrc
+    if ! grep -q "fastfetch" ~/.bashrc; then
+        echo "" >> ~/.bashrc
+        echo "# Fastfetch au démarrage" >> ~/.bashrc
+        echo "if [ -t 0 ]; then" >> ~/.bashrc
+        echo "    fastfetch" >> ~/.bashrc
+        echo "fi" >> ~/.bashrc
+    fi
+    
+    echo -e "${GREEN}Fastfetch configuré${NC}"
+}
+
+# Configuration des services système
+setup_system_services() {
+    echo -e "${BLUE}Configuration des services système...${NC}"
+    
+    # Configuration SDDM
+    sudo mkdir -p /etc/sddm.conf.d
+    cat > /tmp/sddm-hyprland.conf << 'EOF'
+[General]
+InputMethod=
+
+[Theme]
+Current=breeze
+
+[Users]
+MaximumUid=65000
+MinimumUid=1000
+
+[Wayland]
+SessionDir=/usr/share/wayland-sessions
+
+[X11]
+SessionDir=/usr/share/xsessions
+EOF
+    
+    sudo mv /tmp/sddm-hyprland.conf /etc/sddm.conf.d/
+    
+    # Activation des services
+    sudo systemctl enable sddm
+    sudo systemctl enable NetworkManager 2>/dev/null || true
+    sudo systemctl enable bluetooth 2>/dev/null || true
+    
+    echo -e "${GREEN}Services système configurés${NC}"
+}
+
+# Téléchargement des ressources nécessaires
 download_resources() {
     echo -e "${BLUE}Téléchargement des ressources...${NC}"
     
     # Création des dossiers
     mkdir -p "$USER_HOME/.config/hypr/wallpapers"
     mkdir -p "$USER_HOME/.local/share/icons"
+    mkdir -p "$USER_HOME/Pictures/Screenshots"
     
     # Image de verrouillage par défaut
-    curl -s -o "$CONFIG_DIR/hypr/lockscreen.jpg" "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=1920&h=1080&fit=crop" 2>/dev/null || {
+    if ! curl -s -o "$CONFIG_DIR/hypr/lockscreen.jpg" "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=1920&h=1080&fit=crop" 2>/dev/null; then
         # Création d'une image de secours
-        convert -size 1920x1080 xc:'#1a1a1a' "$CONFIG_DIR/hypr/lockscreen.jpg" 2>/dev/null || true
-    }
+        if command -v convert >/dev/null 2>&1; then
+            convert -size 1920x1080 xc:'#1e1e2e' "$CONFIG_DIR/hypr/lockscreen.jpg" 2>/dev/null || true
+        fi
+    fi
     
     # Wallpaper par défaut
-    curl -s -o "$USER_HOME/.config/hypr/wallpapers/default.jpg" "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1920&h=1080&fit=crop" 2>/dev/null || {
-        convert -size 1920x1080 xc:'#2a2a2a' "$USER_HOME/.config/hypr/wallpapers/default.jpg" 2>/dev/null || true
-    }
+    if ! curl -s -o "$USER_HOME/.config/hypr/wallpapers/default.jpg" "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1920&h=1080&fit=crop" 2>/dev/null; then
+        if command -v convert >/dev/null 2>&1; then
+            convert -size 1920x1080 xc:'#2a2a2a' "$USER_HOME/.config/hypr/wallpapers/default.jpg" 2>/dev/null || true
+        fi
+    fi
     
-    echo -e "${GREEN}✅ Ressources téléchargées${NC}"
+    echo -e "${GREEN}Ressources téléchargées${NC}"
 }
 
-# Nettoyage & optimisation
+# Installation des outils de développement
+setup_dev_tools() {
+    echo -e "${BLUE}Installation des outils de développement...${NC}"
+    
+    case $DISTRO in
+        "arch")
+            DEV_PACKAGES="code android-studio jdk-openjdk python nodejs npm docker gcc clang cmake make"
+            yay -S --noconfirm $DEV_PACKAGES
+            ;;
+        "debian")
+            # Visual Studio Code
+            if ! command -v code >/dev/null 2>&1; then
+                wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+                sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/
+                echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
+                sudo apt update
+            fi
+            DEV_PACKAGES="code default-jdk python3 python3-pip nodejs npm docker.io gcc clang cmake make"
+            sudo $INSTALL_CMD $DEV_PACKAGES
+            ;;
+        "fedora")
+            # Visual Studio Code
+            if ! command -v code >/dev/null 2>&1; then
+                sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+                sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
+            fi
+            DEV_PACKAGES="code java-openjdk-devel python3 python3-pip nodejs npm docker gcc clang cmake make"
+            sudo $INSTALL_CMD $DEV_PACKAGES
+            ;;
+        "opensuse")
+            if ! command -v code >/dev/null 2>&1; then
+                sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+                sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/zypp/repos.d/vscode.repo'
+            fi
+            DEV_PACKAGES="code java-openjdk-devel python3 python3-pip nodejs npm docker gcc clang cmake make"
+            sudo $INSTALL_CMD $DEV_PACKAGES
+            ;;
+    esac
+    
+    # Extensions VS Code
+    echo -e "${BLUE}  Installation des extensions VS Code...${NC}"
+    if command -v code >/dev/null 2>&1; then
+        code --install-extension ms-python.python 2>/dev/null || true
+        code --install-extension ms-vscode.cpptools 2>/dev/null || true
+        code --install-extension redhat.java 2>/dev/null || true
+        code --install-extension bradlc.vscode-tailwindcss 2>/dev/null || true
+        code --install-extension github.copilot 2>/dev/null || true
+    fi
+    
+    # Configuration Docker
+    sudo systemctl enable docker 2>/dev/null || true
+    sudo usermod -aG docker $USER 2>/dev/null || true
+    
+    echo -e "${GREEN}Outils de développement installés${NC}"
+}
+
+# Optimisations Gaming
+setup_gaming_optimizations() {
+    echo -e "${BLUE}Application des optimisations gaming...${NC}"
+    
+    # Installation de GameMode si disponible
+    case $DISTRO in
+        "arch")
+            sudo $INSTALL_CMD gamemode lib32-gamemode 2>/dev/null || true
+            ;;
+        "debian")
+            sudo $INSTALL_CMD gamemode 2>/dev/null || true
+            ;;
+        "fedora")
+            sudo $INSTALL_CMD gamemode 2>/dev/null || true
+            ;;
+        "opensuse")
+            sudo $INSTALL_CMD gamemode 2>/dev/null || true
+            ;;
+    esac
+    
+    echo -e "${GREEN}Optimisations gaming appliquées${NC}"
+}
+
+# Nettoyage et optimisation
 cleanup_and_optimize() {
     echo -e "${BLUE}Nettoyage et optimisation...${NC}"
     
@@ -1334,9 +1975,10 @@ cleanup_and_optimize() {
     esac
     
     # Permissions des fichiers de configuration
-    chmod +x "$CONFIG_DIR/hypr/video-wallpaper.sh"
-    chmod 644 "$CONFIG_DIR/hypr/hyprland.conf"
-    chmod 644 "$CONFIG_DIR/hypr/hyprlock.conf"
+    chmod +x "$CONFIG_DIR/hypr/video-wallpaper.sh" 2>/dev/null || true
+    chmod +x "$USER_HOME/.local/bin/screenshot.sh" 2>/dev/null || true
+    chmod 644 "$CONFIG_DIR/hypr/hyprland.conf" 2>/dev/null || true
+    chmod 644 "$CONFIG_DIR/hypr/hyprlock.conf" 2>/dev/null || true
     
     # Optimisation des services
     sudo systemctl daemon-reload
@@ -1344,333 +1986,7 @@ cleanup_and_optimize() {
     echo -e "${GREEN}Nettoyage terminé${NC}"
 }
 
-# Récap de l'installation
-print_summary() {
-    clear
-    echo -e "${GREEN}"
-
-    echo -e "${NC}"
-    
-    echo -e "${CYAN}Hyprland Ultimate Edition installé avec succès !${NC}"
-    echo ""
-    echo -e "${YELLOW}Configurations créées :${NC}"
-    echo -e "  • Hyprland: ~/.config/hypr/hyprland.conf"
-    echo -e "  • Waybar: ~/.config/waybar/"
-    echo -e "  • Hyprlock: ~/.config/hypr/hyprlock.conf"
-    echo -e "  • Kitty: ~/.config/kitty/kitty.conf"
-    echo -e "  • Wofi: ~/.config/wofi/"
-    echo -e "  • Fastfetch: ~/.config/fastfetch/"
-    echo ""
-    echo -e "${BLUE}Raccourcis principaux :${NC}"
-    echo -e "  • Super + Q: Terminal"
-    echo -e "  • Super + E: Gestionnaire de fichiers"
-    echo -e "  • Super + R: Menu d'applications"
-    echo -e "  • Super + L: Verrouiller l'écran"
-    echo -e "  • Print: Capture d'écran"
-    echo ""
-    echo -e "${PURPLE}Pour les fonds vidéo animés :${NC}"
-    echo -e "  Placez vos fichiers .mp4 dans ~/.config/hypr/wallpapers/"
-    echo ""
-    echo -e "${GREEN}Redémarrez votre système pour finaliser l'installation.${NC}"
-    echo -e "${CYAN}Au prochain démarrage, Hyprland se lancera automatiquement !${NC}"
-    echo ""
-}
-
-# Main
-main() {
-    # Vérification des droits
-    if [ "$EUID" -eq 0 ]; then
-        echo -e "${RED}Ne pas exécuter ce script en tant que root${NC}"
-        exit 1
-    fi
-    
-    print_banner
-    
-    echo -e "${YELLOW}Cette installation va :${NC}"
-    echo -e "  • Détecter et désinstaller votre environnement graphique actuel"
-    echo -e "  • Installer Hyprland et tous ses composants"
-    echo -e "  • Configurer un thème personnalisé avec transparence et blur"
-    echo -e "  • Installer les outils de développement"
-    echo ""
-    
-    read -p "Continuer l'installation ? (o/N) : " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[OoYy]$ ]]; then
-        echo -e "${YELLOW}Installation annulée.${NC}"
-        exit 0
-    fi
-    
-    # Étapes de l'installation
-    detect_distro
-    detect_current_de
-    remove_current_de
-    install_base_packages
-    setup_hyprland_config
-    setup_waybar
-    setup_wofi
-    setup_kitty
-    setup_hyprlock
-    setup_video_wallpaper
-    setup_audio
-    setup_fastfetch
-    setup_spicetify
-    setup_dev_tools
-    download_resources
-    setup_system_services
-    cleanup_and_optimize
-    
-    print_summary
-}
-
-# Configuration poru les notifs (via Dunst)
-setup_dunst() {
-    echo -e "${BLUE}Configuration de Dunst (notifications)...${NC}"
-    
-    mkdir -p "$CONFIG_DIR/dunst"
-    
-    cat > "$CONFIG_DIR/dunst/dunstrc" << 'EOF'
-[global]
-    monitor = 0
-    follow = mouse
-    width = 350
-    height = 300
-    origin = top-right
-    offset = 15x50
-    scale = 0
-    notification_limit = 0
-    progress_bar = true
-    progress_bar_height = 10
-    progress_bar_frame_width = 1
-    progress_bar_min_width = 150
-    progress_bar_max_width = 300
-    indicate_hidden = yes
-    transparency = 10
-    separator_height = 2
-    padding = 20
-    horizontal_padding = 20
-    text_icon_padding = 0
-    frame_width = 2
-    frame_color = "#89b4fa"
-    separator_color = frame
-    sort = yes
-    idle_threshold = 120
-    font = JetBrains Mono 11
-    line_height = 0
-    markup = full
-    format = "<b>%s</b>\n%b"
-    alignment = left
-    vertical_alignment = center
-    show_age_threshold = 60
-    ellipsize = middle
-    ignore_newline = no
-    stack_duplicates = true
-    hide_duplicate_count = false
-    show_indicators = yes
-    icon_position = left
-    min_icon_size = 32
-    max_icon_size = 64
-    icon_path = /usr/share/icons/gnome/16x16/status/:/usr/share/icons/gnome/16x16/devices/
-    sticky_history = yes
-    history_length = 20
-    dmenu = /usr/bin/dmenu -p dunst:
-    browser = /usr/bin/firefox -new-tab
-    always_run_script = true
-    title = Dunst
-    class = Dunst
-    corner_radius = 10
-    ignore_dbusclose = false
-    force_xinerama = false
-    mouse_left_click = close_current
-    mouse_middle_click = do_action, close_current
-    mouse_right_click = close_all
-
-[experimental]
-    per_monitor_dpi = false
-
-[urgency_low]
-    background = "#1e1e2e"
-    foreground = "#cdd6f4"
-    timeout = 10
-
-[urgency_normal]
-    background = "#1e1e2e"
-    foreground = "#cdd6f4"
-    timeout = 10
-
-[urgency_critical]
-    background = "#f38ba8"
-    foreground = "#1e1e2e"
-    frame_color = "#f38ba8"
-    timeout = 0
-EOF
-
-    echo -e "${GREEN}Configuration Dunst créée${NC}"
-}
-
-# COnfiguration du gestionnaire des fichiers
-setup_thunar() {
-    echo -e "${BLUE}Configuration de Thunar...${NC}"
-    
-    # Configuration de base Thunar
-    mkdir -p "$CONFIG_DIR/xfce4/xfconf/xfce-perchannel-xml"
-    
-    cat > "$CONFIG_DIR/xfce4/xfconf/xfce-perchannel-xml/thunar.xml" << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-
-<channel name="thunar" version="1.0">
-    <property name="default-view" type="string" value="ThunarIconView"/>
-    <property name="last-view" type="string" value="ThunarIconView"/>
-    <property name="last-icon-view-zoom-level" type="string" value="THUNAR_ZOOM_LEVEL_NORMAL"/>
-    <property name="last-window-width" type="int" value="900"/>
-    <property name="last-window-height" type="int" value="700"/>
-    <property name="last-window-maximized" type="bool" value="false"/>
-    <property name="last-separator-position" type="int" value="170"/>
-    <property name="last-show-hidden" type="bool" value="false"/>
-    <property name="last-details-view-zoom-level" type="string" value="THUNAR_ZOOM_LEVEL_SMALLER"/>
-    <property name="last-details-view-column-widths" type="string" value="50,133,50,50,178,50,50,73,70"/>
-    <property name="misc-single-click" type="bool" value="false"/>
-    <property name="misc-folders-first" type="bool" value="true"/>
-    <property name="misc-show-thumbnails" type="bool" value="true"/>
-    <property name="shortcuts-icon-emblems" type="bool" value="true"/>
-    <property name="shortcuts-icon-size" type="string" value="THUNAR_ICON_SIZE_SMALLER"/>
-</channel>
-EOF
-
-    echo -e "${GREEN}Configuration Thunar créée${NC}"
-}
-
-# COnfiguration de mpvpaper (fond vidéo)
-setup_mpvpaper_config() {
-    echo -e "${BLUE}Configuration avancée MPVPaper...${NC}"
-    
-    mkdir -p "$CONFIG_DIR/mpv"
-    
-    cat > "$CONFIG_DIR/mpv/mpv.conf" << 'EOF'
-# Configuration MPV pour wallpapers
-profile=gpu-hq
-vo=gpu
-hwdec=auto-safe
-video-sync=display-resample
-interpolation
-tscale=oversample
-
-# Optimisations pour les wallpapers
-no-border
-no-osc
-no-input-default-bindings
-really-quiet=yes
-no-audio
-loop-file=inf
-panscan=1.0
-
-# Performance
-opengl-pbo=yes
-vd-lavc-threads=0
-EOF
-
-    echo -e "${GREEN}Configuration MPV créée${NC}"
-}
-
-# Config de grim & slurp (screenshots)
-setup_screenshot_tools() {
-    echo -e "${BLUE}Installation des outils de capture...${NC}"
-    
-    case $DISTRO in
-        "arch")
-            sudo $INSTALL_CMD grim slurp wl-clipboard
-            ;;
-        "debian")
-            sudo $INSTALL_CMD grim slurp wl-clipboard-tools
-            ;;
-        "fedora")
-            sudo $INSTALL_CMD grim slurp wl-clipboard
-            ;;
-        "opensuse")
-            sudo $INSTALL_CMD grim slurp wl-clipboard
-            ;;
-    esac
-    
-    # Script de capture avancé
-    mkdir -p "$USER_HOME/.local/bin"
-    
-    cat > "$USER_HOME/.local/bin/screenshot.sh" << 'EOF'
-#!/bin/bash
-
-# Script de capture d'écran avancé pour Hyprland
-SCREENSHOT_DIR="$HOME/Pictures/Screenshots"
-mkdir -p "$SCREENSHOT_DIR"
-
-case "$1" in
-    "area")
-        # Capture de zone sélectionnée
-        grim -g "$(slurp)" "$SCREENSHOT_DIR/screenshot-$(date +%Y%m%d-%H%M%S).png"
-        notify-send "Capture" "Zone sélectionnée sauvegardée"
-        ;;
-    "window")
-        # Capture de la fenêtre active
-        grim -g "$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')" "$SCREENSHOT_DIR/screenshot-$(date +%Y%m%d-%H%M%S).png"
-        notify-send "Capture" "Fenêtre active sauvegardée"
-        ;;
-    "full"|*)
-        # Capture plein écran
-        grim "$SCREENSHOT_DIR/screenshot-$(date +%Y%m%d-%H%M%S).png"
-        notify-send "Capture" "Écran complet sauvegardé"
-        ;;
-esac
-EOF
-
-    chmod +x "$USER_HOME/.local/bin/screenshot.sh"
-    
-    # Ajout au PATH si nécessaire
-    if ! grep -q ".local/bin" ~/.bashrc; then
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-    fi
-    
-    echo -e "${GREEN}Outils de capture installés${NC}"
-}
-
-# Optimisations Gaming
-setup_gaming_optimizations() {
-    echo -e "${BLUE}Application des optimisations gaming...${NC}"
-    
-    # Installation de GameMode si disponible
-    case $DISTRO in
-        "arch")
-            sudo $INSTALL_CMD gamemode lib32-gamemode
-            ;;
-        "debian")
-            sudo $INSTALL_CMD gamemode
-            ;;
-        "fedora")
-            sudo $INSTALL_CMD gamemode
-            ;;
-        "opensuse")
-            sudo $INSTALL_CMD gamemode
-            ;;
-    esac
-    
-    # Configuration pour les jeux
-    cat >> "$CONFIG_DIR/hypr/hyprland.conf" << 'EOF'
-
-# Règles pour les jeux (performance maximale)
-windowrulev2 = immediate, class:^(steam_app_)(.*)$
-windowrulev2 = immediate, class:^(lutris)$
-windowrulev2 = immediate, class:^(heroic)$
-windowrulev2 = immediate, class:^(minecraft)$
-
-# Plein écran sans bordures pour les jeux
-windowrulev2 = noborder, class:^(steam_app_)(.*)$, fullscreen:1
-windowrulev2 = noborder, class:^(lutris)$, fullscreen:1
-
-# Désactiver les effets en jeu
-windowrulev2 = noblur, class:^(steam_app_)(.*)$
-windowrulev2 = noshadow, class:^(steam_app_)(.*)$
-EOF
-
-    echo -e "${GREEN}Optimisations gaming appliquées${NC}"
-}
-
-# Création d'un script post-install
+# Script de post-installation
 create_post_install_script() {
     echo -e "${BLUE}Création du script de post-installation...${NC}"
     
@@ -1699,17 +2015,11 @@ echo "Vérification des permissions..."
 chmod +x ~/.config/hypr/video-wallpaper.sh
 chmod +x ~/.local/bin/screenshot.sh 2>/dev/null || true
 
-# Installation des polices si nécessaires
-echo "Vérification des polices..."
-if ! fc-list | grep -qi "jetbrains"; then
-    echo "Police JetBrains Mono non trouvée. Installation recommandée."
-fi
-
 # Test des commandes essentielles
 echo "Test des composants..."
 command -v hyprctl >/dev/null && echo "Hyprland OK" || echo "Hyprland manquant"
 command -v waybar >/dev/null && echo "Waybar OK" || echo "Waybar manquant" 
-command -v wofi >/dev/null && echo "Wofi OK" || echo "Wofi manquant"
+command -v rofi >/dev/null && echo "Rofi OK" || echo "Rofi manquant"
 command -v dunst >/dev/null && echo "Dunst OK" || echo "Dunst manquant"
 
 echo ""
@@ -1722,9 +2032,9 @@ EOF
     echo -e "${GREEN}Script de post-installation créé${NC}"
 }
 
-# Fonctions de dépannage
+# Guide de dépannage
 create_troubleshooting_guide() {
-    echo -e "${BLUE}📋 Création du guide de dépannage...${NC}"
+    echo -e "${BLUE}Création du guide de dépannage...${NC}"
     
     cat > "$USER_HOME/TROUBLESHOOTING.md" << 'EOF'
 # Guide de dépannage Hyprland
@@ -1785,24 +2095,68 @@ killall waybar; waybar &
 hyprctl clients
 ```
 
-### Changer le fond d'écran
-```bash
-hyprctl hyprpaper wallpaper "DP-1,/path/to/image.jpg"
-```
-
 ## Support
 
 En cas de problème persistant :
 1. Vérifiez les logs dans `~/.local/share/hyprland/`
 2. Consultez la documentation officielle : https://hyprland.org
 3. Utilisez le script de post-installation : `~/hyprland-postinstall.sh`
-4. En dernier recours, contactez moi via mon compte GitHub (PapaOursPolaire) ou par adresse électronique : papaourspolairegithub@gmail.com
 EOF
 
     echo -e "${GREEN}Guide de dépannage créé${NC}"
 }
 
-# Maj du Main
+# Récap de l'installation
+print_summary() {
+    clear
+    echo -e "${GREEN}"
+    cat << "EOF"
+╔══════════════════════════════════════════════════════════════╗
+║                 INSTALLATION TERMINÉE !                      ║
+╚══════════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+    
+    echo -e "${CYAN}Hyprland Ultimate Edition installé avec succès !${NC}"
+    echo ""
+    echo -e "${YELLOW}Configurations créées :${NC}"
+    echo -e "  • Hyprland: ~/.config/hypr/hyprland.conf"
+    echo -e "  • Waybar: ~/.config/waybar/ (avec transparence et Nerd Fonts)"
+    echo -e "  • Hyprlock: ~/.config/hypr/hyprlock.conf (avec blur et avatar)"
+    echo -e "  • Kitty: ~/.config/kitty/kitty.conf (thème Catppuccin)"
+    echo -e "  • Rofi: ~/.config/rofi/ (remplace Wofi)"
+    echo -e "  • Dunst: ~/.config/dunst/ (thème Catppuccin avec coins arrondis)"
+    echo -e "  • Fastfetch: ~/.config/fastfetch/"
+    echo ""
+    echo -e "${BLUE}Raccourcis principaux :${NC}"
+    echo -e "  • Super + Q: Terminal"
+    echo -e "  • Super + E: Gestionnaire de fichiers"
+    echo -e "  • Super + R: Menu d'applications (Rofi)"
+    echo -e "  • Super + L: Verrouiller l'écran"
+    echo -e "  • Print: Capture d'écran zone"
+    echo -e "  • Super + Print: Capture plein écran"
+    echo ""
+    echo -e "${PURPLE}Améliorations visuelles :${NC}"
+    echo -e "  • Coins arrondis et ombres douces"
+    echo -e "  • Transparence et blur sur toutes les applications"
+    echo -e "  • Wallpapers dynamiques (placez vos .mp4 dans ~/.config/hypr/wallpapers/)"
+    echo -e "  • Thème Catppuccin cohérent"
+    echo -e "  • JetBrainsMono Nerd Font et icônes Papirus/Tela"
+    echo ""
+    echo -e "${GREEN}Matériel détecté :${NC}"
+    echo -e "  • GPU: $GPU_TYPE"
+    echo -e "  • CPU: $CPU_TYPE"
+    echo ""
+    echo -e "${RED}IMPORTANT: Redémarrez votre système pour finaliser l'installation.${NC}"
+    echo -e "${CYAN}Au prochain démarrage, Hyprland se lancera automatiquement !${NC}"
+    echo ""
+    echo -e "${YELLOW}Scripts utiles créés :${NC}"
+    echo -e "  • ~/hyprland-postinstall.sh - Configuration post-installation"
+    echo -e "  • ~/TROUBLESHOOTING.md - Guide de dépannage"
+    echo ""
+}
+
+# Fonction principale
 main() {
     # Vérification des droits
     if [ "$EUID" -eq 0 ]; then
@@ -1810,15 +2164,21 @@ main() {
         exit 1
     fi
     
+    # Redirection des logs
+    exec > >(tee -a /tmp/hyprland-install.log)
+    exec 2>&1
+    
     print_banner
     
     echo -e "${YELLOW}Cette installation va :${NC}"
+    echo -e "  • Détecter votre matériel (GPU/CPU) et installer les pilotes appropriés"
     echo -e "  • Détecter et désinstaller votre environnement graphique actuel"
-    echo -e "  • Installer Hyprland et tous ses composants"
-    echo -e "  • Configurer un thème personnalisé avec transparence et blur"
-    echo -e "  • Installer les outils de développement"
-    echo -e "  • Configurer Spicetify pour Spotify"
-    echo -e "  • Optimiser le système pour les performances"
+    echo -e "  • Installer Hyprland avec tous ses composants optimisés"
+    echo -e "  • Configurer un thème Catppuccin cohérent avec transparence et blur"
+    echo -e "  • Installer JetBrainsMono Nerd Font et les thèmes d'icônes"
+    echo -e "  • Remplacer Wofi par Rofi pour plus de style"
+    echo -e "  • Installer les outils de développement et Spicetify"
+    echo -e "  • Créer un environnement gaming optimisé"
     echo ""
     
     read -p "Continuer l'installation ? (o/N) : " -n 1 -r
@@ -1831,19 +2191,26 @@ main() {
     echo -e "${BLUE}Début de l'installation...${NC}"
     echo ""
     
+    # Étapes de l'installation
+    detect_hardware
     detect_distro
+    clean_bashrc
+    create_wayland_desktop_file
+    install_dependencies
+    install_nerd_fonts
+    install_icon_themes
     detect_current_de
     remove_current_de
+    install_gpu_drivers
     install_base_packages
     setup_hyprland_config
     setup_waybar
-    setup_wofi
+    setup_rofi
     setup_kitty
     setup_dunst
     setup_thunar
     setup_hyprlock
     setup_video_wallpaper
-    setup_mpvpaper_config
     setup_audio
     setup_fastfetch
     setup_screenshot_tools
@@ -1856,7 +2223,13 @@ main() {
     create_troubleshooting_guide
     cleanup_and_optimize
     
-    print_summary
+    # Vérification finale
+    if check_installation; then
+        print_summary
+    else
+        echo -e "${RED}Installation incomplète. Consultez ~/TROUBLESHOOTING.md${NC}"
+        exit 1
+    fi
 }
 
 # Gestion des signaux pour nettoyage en cas d'interruption
