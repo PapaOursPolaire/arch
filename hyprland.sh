@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur  plusieurs distros Linux
-# Version 212.2 : Mise à jour  le 26/08/2025 à  17:33 ATTENTION : Version non testée hotmis via shellcheck
+# Version 214.2 : Mise à jour  le 26/08/2025 à 22:06 ATTENTION : Version non testée hormis via shellcheck
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 # Fonctionnalités: Transparence, Blur, Vidéos animées, 
 # Verrouillage stylé, Spicetify, Fastfetch, etc.
@@ -1107,11 +1107,6 @@ EOF
     # Configuration du démarrage automatique Hyprland
     if ! grep -q "Hyprland" ~/.bashrc; then
         cat >> ~/.bashrc << 'EOF'
-
-# Démarrage automatique de Hyprland sur TTY1
-if [ -z "$WAYLAND_DISPLAY" ] && [ "$XDG_VTNR" -eq 1 ]; then
-    exec Hyprland
-fi
 EOF
     fi
     
