@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 234.7 - 27/08/2025 12:36 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 235.7 - 27/08/2025 14:26 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -660,11 +660,6 @@ dwindle {
     smart_resizing = true
 }
 
-master {
-    new_is_master = true
-    smart_resizing = true
-}
-
 # Gestes
 gestures {
     workspace_swipe = true
@@ -919,7 +914,6 @@ window#waybar {
     border-radius: 15px;
     border: 2px solid rgba(137, 180, 250, 0.3);
     margin: 0;
-    backdrop-filter: blur(20px);
 }
 
 #workspaces {
