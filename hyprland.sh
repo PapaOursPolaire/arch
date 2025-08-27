@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 228.7 - 27/08/2025 10:17 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 229.7 - 27/08/2025 10:21 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -445,7 +445,7 @@ install_base_packages() {
     echo -e "${BLUE}Installation des paquets de base...${NC}"
     
     # Mise à jour du système
-    sudo $UPDATE_CMD
+    sudo $UPDATE_CMD || true
     
     case $DISTRO in
         "arch")
@@ -453,7 +453,7 @@ install_base_packages() {
             if ! command -v yay >/dev/null 2>&1; then
                 echo -e "${BLUE}Installation de yay (AUR helper)...${NC}"
                 git clone https://aur.archlinux.org/yay.git /tmp/yay
-                cd /tmp/yay && makepkg -si --noconfirm
+                cd /tmp/yay && makepkg -si --noconfirm || true
                 cd -
             fi
 
@@ -461,32 +461,32 @@ install_base_packages() {
             if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
                 echo "==> Activation du dépôt multilib..."
                 sudo bash -c 'echo -e "[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf'
-                sudo pacman -Sy
+                sudo pacman -Sy || true
             else
                 echo "==> Dépôt multilib déjà activé, on passe."
             fi
             
             # Paquets Arch - remplacer wofi par rofi-wayland
             PACKAGES="hyprland hyprpaper hypridle hyprlock xdg-desktop-portal-hyprland polkit-gnome waybar rofi-wayland kitty thunar dunst sddm pipewire wireplumber pavucontrol cava fastfetch git curl wget unzip"
-            sudo $INSTALL_CMD --needed $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES || true
 
             # mpvpaper doit être installé via AUR
-            yay -S --noconfirm --needed mpvpaper
+            yay -S --noconfirm --needed mpvpaper || true
 
             # Paquets AUR supplémentaires
-            yay -S --noconfirm --needed spicetify-cli
+            yay -S --noconfirm --needed spicetify-cli || true
             ;;
             
         "debian")
             # Ajout des dépôts nécessaires pour Ubuntu/Debian
             if ! grep -q "ppa:hyprland" /etc/apt/sources.list.d/* 2>/dev/null; then
-                sudo apt install -y software-properties-common
-                sudo add-apt-repository ppa:hyprland/hyprland -y
-                sudo apt update
+                sudo apt install -y software-properties-common || true
+                sudo add-apt-repository ppa:hyprland/hyprland -y || true
+                sudo apt update || true
             fi
             
             PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulse pavucontrol fastfetch git curl wget unzip sddm"
-            sudo $INSTALL_CMD --needed $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES || true
             
             # Installation manuelle pour les paquets non disponibles
             install_from_source_debian
@@ -494,17 +494,17 @@ install_base_packages() {
             
         "fedora")
             # Activation des dépôts RPM Fusion
-            sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+            sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm || true
             
             PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
-            sudo $INSTALL_CMD --needed $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES || true
             
             install_from_source_fedora
             ;;
             
         "opensuse")
             PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
-            sudo $INSTALL_CMD --needed $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES || true
             
             install_from_source_opensuse
             ;;
