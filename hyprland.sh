@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 236.7 - 27/08/2025 14:40 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 237.7 - 27/08/2025 15:12 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -137,6 +137,127 @@ install_yay() {
             echo "Distribution non supportée pour yay."
             ;;
     esac
+}
+
+# Installation intelligente de mpvpaper
+install_mpvpaper() {
+    echo -e "${BLUE}Installation de mpvpaper...${NC}"
+    
+    # Vérifier d'abord si mpvpaper est déjà installé
+    if command -v mpvpaper >/dev/null 2>&1; then
+        echo -e "${GREEN}mpvpaper est déjà installé${NC}"
+        return 0
+    fi
+    
+    case $DISTRO in
+        "arch")
+            echo -e "${BLUE}Installation via AUR...${NC}"
+            if command -v yay >/dev/null 2>&1; then
+                yay -S --noconfirm --needed mpvpaper
+            elif command -v paru >/dev/null 2>&1; then
+                paru -S --noconfirm --needed mpvpaper
+            else
+                echo -e "${YELLOW}Installation manuelle depuis les sources...${NC}"
+                install_mpvpaper
+            fi
+            ;;
+            
+        "debian"|"ubuntu")
+            echo -e "${BLUE}Installation sur Debian/Ubuntu...${NC}"
+            # Vérifier si un paquet .deb existe
+            if apt-cache show mpvpaper >/dev/null 2>&1; then
+                sudo $INSTALL_CMD mpvpaper
+            else
+                echo -e "${YELLOW}Installation depuis les sources...${NC}"
+                install_mpvpaper
+            fi
+            ;;
+            
+        "fedora")
+            echo -e "${BLUE}Installation sur Fedora...${NC}"
+            # Vérifier si disponible dans les dépôts
+            if dnf list available mpvpaper >/dev/null 2>&1; then
+                sudo $INSTALL_CMD mpvpaper
+            else
+                echo -e "${YELLOW}Installation depuis les sources...${NC}"
+                install_mpvpaper
+            fi
+            ;;
+            
+        "opensuse")
+            echo -e "${BLUE}Installation sur openSUSE...${NC}"
+            # Vérifier si disponible dans les dépôts
+            if zypper search --installed-only mpvpaper >/dev/null 2>&1; then
+                sudo $INSTALL_CMD mpvpaper
+            else
+                echo -e "${YELLOW}Installation depuis les sources...${NC}"
+                install_mpvpaper
+            fi
+            ;;
+            
+        *)
+            echo -e "${YELLOW}Distribution non reconnue, installation depuis les sources...${NC}"
+            install_mpvpaper
+            ;;
+    esac
+    
+    # Vérification finale de l'installation
+    if command -v mpvpaper >/dev/null 2>&1; then
+        echo -e "${GREEN}mpvpaper installé avec succès${NC}"
+        return 0
+    else
+        echo -e "${RED}Échec de l'installation de mpvpaper${NC}"
+        return 1
+    fi
+}
+
+# Installation de mpvpaper depuis les sources
+install_mpvpaper() {
+    echo -e "${BLUE}Installation de mpvpaper depuis les sources...${NC}"
+    
+    # Dépendances de compilation
+    case $DISTRO in
+        "arch")
+            sudo $INSTALL_CMD base-devel meson ninja cmake git mpv wayland-protocols
+            ;;
+        "debian"|"ubuntu")
+            sudo $INSTALL_CMD build-essential meson ninja-build cmake git libmpv-dev libwayland-dev wayland-protocols
+            ;;
+        "fedora")
+            sudo $INSTALL_CMD gcc-c++ meson ninja-build cmake git mpv-devel wayland-devel wayland-protocols-devel
+            ;;
+        "opensuse")
+            sudo $INSTALL_CMD gcc-c++ meson ninja cmake git mpv-devel wayland-devel wayland-protocols-devel
+            ;;
+        *)
+            # Dépendances génériques
+            sudo $INSTALL_CMD gcc g++ meson ninja-build cmake git libmpv-dev libwayland-dev wayland-protocols 2>/dev/null || true
+            ;;
+    esac
+    
+    # Cloner et compiler mpvpaper
+    local temp_dir=$(mktemp -d)
+    cd "$temp_dir"
+    
+    if git clone https://github.com/GhostNaN/mpvpaper.git; then
+        cd mpvpaper
+        if meson build && ninja -C build; then
+            sudo ninja -C build install
+            echo -e "${GREEN}mpvpaper compilé et installé depuis les sources${NC}"
+        else
+            echo -e "${RED}Échec de la compilation de mpvpaper${NC}"
+            return 1
+        fi
+    else
+        echo -e "${RED}Échec du clonage du dépôt mpvpaper${NC}"
+        return 1
+    fi
+    
+    # Nettoyage
+    cd -
+    rm -rf "$temp_dir"
+    
+    return 0
 }
 
 install_gpu_drivers() {
@@ -586,7 +707,7 @@ env = QT_QPA_PLATFORMTHEME,qt5ct
 
 # Exécution au démarrage
 exec-once = waybar
-exec-once = hyprpaper
+exec-once = mpvpaper -o "no-audio loop" '*' ~/Videos/wallpaper.mp4
 exec-once = dunst
 exec-once = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
 exec-once = ~/.config/hypr/video-wallpaper.sh
@@ -2290,6 +2411,7 @@ main() {
     detect_hardware
     detect_distro
     install_yay
+    install_mpvpaper
     clean_bashrc
     create_wayland_desktop_file
     install_dependencies
