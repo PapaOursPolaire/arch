@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 237.7 - 27/08/2025 15:12 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 238.7 - 27/08/2025 17:49 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -706,11 +706,22 @@ env = XCURSOR_SIZE,24
 env = QT_QPA_PLATFORMTHEME,qt5ct
 
 # Exécution au démarrage
-exec-once = waybar
+exec-once = ~/.config/waybar/launch.sh
 exec-once = mpvpaper -o "no-audio loop" '*' ~/Videos/wallpaper.mp4
 exec-once = dunst
 exec-once = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
 exec-once = ~/.config/hypr/video-wallpaper.sh
+
+# Raccourcis pour redémarrer les waybar
+bind = $mainMod SHIFT, W, exec, ~/.config/waybar/launch.sh
+
+# Raccourcis pour les contrôles multimédia (pour aller avec le module MPRIS)
+bind = , XF86AudioNext, exec, playerctl next
+bind = , XF86AudioPrev, exec, playerctl previous
+bind = , XF86AudioPlay, exec, playerctl play-pause
+bind = $mainMod, F9, exec, playerctl previous
+bind = $mainMod, F10, exec, playerctl play-pause  
+bind = $mainMod, F11, exec, playerctl next
 
 # Configuration d'entrée
 input {
@@ -890,40 +901,42 @@ EOF
 }
 
 # Configuration Waybar avec transparence et Nerd Font
+# Configuration Waybar avec double barre (haut + bas)
 setup_waybar() {
-    echo -e "${BLUE}Configuration de Waybar...${NC}"
+    echo -e "${BLUE}Configuration de Waybar avec double barre...${NC}"
     
     mkdir -p "$CONFIG_DIR/waybar"
     
-    cat > "$CONFIG_DIR/waybar/config" << 'EOF'
+    # Configuration Waybar du haut (monitoring/système)
+    cat > "$CONFIG_DIR/waybar/config-top" << 'EOF'
 {
     "layer": "top",
     "position": "top",
-    "height": 40,
-    "spacing": 10,
+    "height": 32,
+    "spacing": 8,
     "margin-top": 5,
     "margin-left": 10,
     "margin-right": 10,
     
     "modules-left": ["hyprland/workspaces", "hyprland/window"],
-    "modules-center": ["clock"],
-    "modules-right": ["cpu", "memory", "temperature", "pulseaudio", "network", "battery", "tray"],
+    "modules-center": ["clock", "custom/calendar"],
+    "modules-right": ["custom/weather", "custom/vpn", "custom/bluetooth", "cpu", "memory", "temperature", "disk", "pulseaudio", "network", "battery", "tray"],
 
     "hyprland/workspaces": {
         "active-only": false,
         "all-outputs": true,
         "format": "{icon}",
         "format-icons": {
-            "1": "󰲠",
-            "2": "󰲢",
-            "3": "󰲤",
-            "4": "󰲦",
-            "5": "󰲨",
-            "6": "󰲪",
-            "7": "󰲬",
-            "8": "󰲮",
-            "9": "󰲰",
-            "10": "󰿬"
+            "1": "1",
+            "2": "2",
+            "3": "3",
+            "4": "4",
+            "5": "5",
+            "6": "6",
+            "7": "7",
+            "8": "8",
+            "9": "9",
+            "10": "10"
         },
         "persistent-workspaces": {
             "1": [],
@@ -936,7 +949,7 @@ setup_waybar() {
 
     "hyprland/window": {
         "format": "{}",
-        "max-length": 50,
+        "max-length": 30,
         "separate-outputs": true
     },
 
@@ -959,15 +972,48 @@ setup_waybar() {
         }
     },
 
+    "custom/calendar": {
+        "format": "",
+        "tooltip-format": "Cliquez pour le calendrier",
+        "on-click": "gnome-calendar || evolution || thunderbird -calendar || notify-send 'Aucun calendrier installé'"
+    },
+
+    "custom/weather": {
+        "format": " {}°C",
+        "tooltip": true,
+        "interval": 3600,
+        "exec": "curl -s 'wttr.in/?format=1' | sed 's/[^0-9-+]//g'",
+        "return-type": "json",
+        "exec-if": "ping -c1 wttr.in",
+        "on-click": "xdg-open https://wttr.in"
+    },
+
+    "custom/vpn": {
+        "format": " {}",
+        "exec": "if pgrep -x openvpn > /dev/null || pgrep -x wireguard > /dev/null; then echo 'ON'; else echo 'OFF'; fi",
+        "interval": 5,
+        "on-click": "nm-connection-editor"
+    },
+
+    "custom/bluetooth": {
+        "format": " {}",
+        "exec": "if bluetoothctl show | grep -q 'Powered: yes'; then echo 'ON'; else echo 'OFF'; fi",
+        "interval": 10,
+        "on-click": "bluetoothctl power toggle && sleep 1",
+        "tooltip-format": "Bluetooth: Cliquez pour activer/désactiver"
+    },
+
     "cpu": {
         "format": " {usage}%",
         "tooltip": false,
-        "interval": 2
+        "interval": 2,
+        "on-click": "kitty -e htop"
     },
 
     "memory": {
-        "format": " {}%",
-        "tooltip-format": "RAM: {used:0.1f}G/{total:0.1f}G"
+        "format": " {used:0.1f}G",
+        "tooltip-format": "RAM: {used:0.1f}G/{total:0.1f}G ({percentage}%)",
+        "on-click": "kitty -e htop"
     },
 
     "temperature": {
@@ -975,7 +1021,15 @@ setup_waybar() {
         "hwmon-path": "/sys/class/hwmon/hwmon2/temp1_input",
         "critical-threshold": 80,
         "format-critical": " {temperatureC}°C",
-        "format": " {temperatureC}°C"
+        "format": " {temperatureC}°C",
+        "tooltip-format": "Température: {temperatureC}°C"
+    },
+
+    "disk": {
+        "interval": 30,
+        "format": " {percentage_used}%",
+        "path": "/",
+        "tooltip-format": "Disque: {used}/{total} ({percentage_used}%)"
     },
 
     "battery": {
@@ -986,21 +1040,23 @@ setup_waybar() {
         "format": "{icon} {capacity}%",
         "format-charging": " {capacity}%",
         "format-plugged": " {capacity}%",
-        "format-icons": ["", "", "", "", ""]
+        "format-icons": ["", "", "", "", ""],
+        "tooltip-format": "Batterie: {capacity}% - {time}"
     },
 
     "network": {
-        "format-wifi": " {essid}",
-        "format-ethernet": "󰈀 Câblé",
-        "format-linked": "󰈀 Connecté (Sans IP)",
-        "format-disconnected": "⚠ Déconnecté",
-        "tooltip-format-wifi": "Adresse IP: {ipaddr}\nSignal: {signalStrength}%"
+        "format-wifi": " {essid} ⬇{bandwidthDownBits} ⬆{bandwidthUpBits}",
+        "format-ethernet": " Câblé ⬇{bandwidthDownBits} ⬆{bandwidthUpBits}",
+        "format-linked": " Connecté (Sans IP)",
+        "format-disconnected": " Déconnecté",
+        "tooltip-format-wifi": "IP: {ipaddr}\nSignal: {signalStrength}%\nFréquence: {frequency}MHz",
+        "interval": 2
     },
 
     "pulseaudio": {
         "format": "{icon} {volume}%",
         "format-bluetooth": "{icon} {volume}%",
-        "format-muted": "󰝟",
+        "format-muted": "",
         "format-icons": {
             "headphone": "",
             "hands-free": "",
@@ -1010,54 +1066,141 @@ setup_waybar() {
             "car": "",
             "default": ["", "", ""]
         },
-        "on-click": "pavucontrol"
+        "on-click": "pavucontrol",
+        "tooltip-format": "Volume: {volume}%\nClic: Ouvrir pavucontrol"
     },
 
     "tray": {
-        "spacing": 10
+        "spacing": 8
     }
 }
 EOF
 
-    # Style CSS Waybar avec transparence avancée
+    # Configuration Waybar du bas (dock)
+    cat > "$CONFIG_DIR/waybar/config-bottom" << 'EOF'
+{
+    "layer": "top",
+    "position": "bottom",
+    "height": 55,
+    "spacing": 12,
+    "margin-bottom": 8,
+    "margin-left": 150,
+    "margin-right": 150,
+    
+    "modules-left": ["custom/start", "custom/search"],
+    "modules-center": ["wlr/taskbar"],
+    "modules-right": ["mpris"],
+
+    "custom/start": {
+        "format": "",
+        "tooltip-format": "Menu des applications",
+        "on-click": "rofi -show drun -theme ~/.config/rofi/themes/catppuccin-mocha.rasi"
+    },
+
+    "custom/search": {
+        "format": "",
+        "tooltip-format": "Rechercher",
+        "on-click": "rofi -show drun -theme ~/.config/rofi/themes/catppuccin-mocha.rasi"
+    },
+
+    "wlr/taskbar": {
+        "format": "{icon}",
+        "icon-size": 32,
+        "icon-theme": "Papirus",
+        "tooltip-format": "{title}",
+        "on-click": "activate",
+        "on-click-middle": "close",
+        "ignore-list": [
+            "Alacritty"
+        ],
+        "app_ids-mapping": {
+            "firefoxdeveloperedition": "firefox-developer-edition"
+        },
+        "rewrite": {
+            "Firefox Web Browser": "Firefox",
+            "Foot Server": "Terminal"
+        }
+    },
+
+    "mpris": {
+        "format": "{player_icon} {dynamic}",
+        "format-paused": "{status_icon} <i>{dynamic}</i>",
+        "player-icons": {
+            "default": "",
+            "spotify": "",
+            "vlc": "嶲",
+            "firefox": "",
+            "chromium": ""
+        },
+        "status-icons": {
+            "paused": "",
+            "playing": ""
+        },
+        "ignored-players": ["firefox"],
+        "max-length": 40,
+        "interval": 1,
+        "dynamic-order": ["title", "artist"],
+        "dynamic-importance-order": ["title", "position", "length", "artist", "album"],
+        "dynamic-len": 25,
+        "tooltip-format": "{player}: {dynamic}",
+        "on-click": "playerctl play-pause",
+        "on-click-right": "playerctl next",
+        "on-click-middle": "playerctl previous",
+        "scroll-step": 5.0,
+        "smooth-scrolling-threshold": 1
+    }
+}
+EOF
+
+    # Style CSS unifié pour les deux barres
     cat > "$CONFIG_DIR/waybar/style.css" << 'EOF'
+/* ======================
+   STYLE GÉNÉRAL WAYBAR
+   ====================== */
+
 * {
     border: none;
     border-radius: 0;
     font-family: 'JetBrainsMono Nerd Font', 'Font Awesome 6 Free';
-    font-size: 13px;
+    font-size: 11px;
     min-height: 0;
 }
 
-window#waybar {
+/* ======================
+   WAYBAR DU HAUT (TOP)
+   ====================== */
+
+window#waybar.top {
     background: rgba(30, 30, 46, 0.85);
     color: #cdd6f4;
-    border-radius: 15px;
-    border: 2px solid rgba(137, 180, 250, 0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(137, 180, 250, 0.2);
     margin: 0;
+    backdrop-filter: blur(10px);
 }
 
+/* Workspaces - Top bar */
 #workspaces {
-    background: rgba(49, 50, 68, 0.8);
-    border-radius: 12px;
-    padding: 8px 12px;
-    margin: 5px 2px;
-    color: #cdd6f4;
+    background: rgba(49, 50, 68, 0.6);
+    border-radius: 8px;
+    padding: 4px 8px;
+    margin: 3px 2px;
     transition: all 0.3s ease;
 }
 
 #workspaces button {
-    padding: 5px 8px;
-    margin: 0 2px;
-    border-radius: 8px;
+    padding: 3px 6px;
+    margin: 0 1px;
+    border-radius: 6px;
     color: #6c7086;
     transition: all 0.3s ease;
+    min-width: 20px;
 }
 
 #workspaces button.active {
     background: rgba(137, 180, 250, 0.3);
     color: #89b4fa;
-    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+    box-shadow: 0 0 8px rgba(137, 180, 250, 0.2);
 }
 
 #workspaces button:hover {
@@ -1065,45 +1208,50 @@ window#waybar {
     color: #89b4fa;
 }
 
+/* Window - Top bar */
 #window {
-    background: rgba(49, 50, 68, 0.6);
-    border-radius: 10px;
-    padding: 5px 15px;
-    margin: 5px;
+    background: rgba(49, 50, 68, 0.5);
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin: 3px;
     color: #cdd6f4;
+    font-size: 10px;
 }
 
+/* Clock - Top bar */
 #clock {
     background: rgba(203, 166, 247, 0.2);
-    border-radius: 10px;
-    padding: 5px 15px;
-    margin: 5px;
+    border-radius: 8px;
+    padding: 4px 12px;
+    margin: 3px;
     color: #cba6f7;
     font-weight: bold;
 }
 
-#cpu, #memory, #temperature, #battery, #network, #pulseaudio {
-    background: rgba(49, 50, 68, 0.6);
-    border-radius: 8px;
-    padding: 5px 12px;
-    margin: 5px 2px;
+/* Modules système - Top bar */
+#cpu, #memory, #temperature, #battery, #network, #pulseaudio, #disk {
+    background: rgba(49, 50, 68, 0.5);
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 3px 1px;
     color: #cdd6f4;
     transition: all 0.3s ease;
+    font-size: 10px;
 }
 
 #cpu {
     color: #f9e2af;
-    border: 1px solid rgba(249, 226, 175, 0.3);
+    border: 1px solid rgba(249, 226, 175, 0.2);
 }
 
 #memory {
     color: #a6e3a1;
-    border: 1px solid rgba(166, 227, 161, 0.3);
+    border: 1px solid rgba(166, 227, 161, 0.2);
 }
 
 #temperature {
     color: #f38ba8;
-    border: 1px solid rgba(243, 139, 168, 0.3);
+    border: 1px solid rgba(243, 139, 168, 0.2);
 }
 
 #temperature.critical {
@@ -1113,7 +1261,7 @@ window#waybar {
 
 #battery {
     color: #94e2d5;
-    border: 1px solid rgba(148, 226, 213, 0.3);
+    border: 1px solid rgba(148, 226, 213, 0.2);
 }
 
 #battery.critical {
@@ -1133,25 +1281,52 @@ window#waybar {
 
 #network {
     color: #89b4fa;
-    border: 1px solid rgba(137, 180, 250, 0.3);
+    border: 1px solid rgba(137, 180, 250, 0.2);
 }
 
 #pulseaudio {
     color: #f5c2e7;
-    border: 1px solid rgba(245, 194, 231, 0.3);
+    border: 1px solid rgba(245, 194, 231, 0.2);
 }
 
-#cpu:hover, #memory:hover, #temperature:hover,
-#battery:hover, #network:hover, #pulseaudio:hover {
-    background: rgba(137, 180, 250, 0.1);
-    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+#disk {
+    color: #fab387;
+    border: 1px solid rgba(250, 179, 135, 0.2);
 }
 
+/* Modules custom - Top bar */
+#custom-weather, #custom-vpn, #custom-bluetooth, #custom-calendar {
+    background: rgba(49, 50, 68, 0.5);
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 3px 1px;
+    color: #cdd6f4;
+    transition: all 0.3s ease;
+    font-size: 10px;
+}
+
+#custom-weather {
+    color: #94e2d5;
+}
+
+#custom-vpn {
+    color: #a6e3a1;
+}
+
+#custom-bluetooth {
+    color: #89b4fa;
+}
+
+#custom-calendar {
+    color: #cba6f7;
+}
+
+/* Tray - Top bar */
 #tray {
-    background: rgba(49, 50, 68, 0.8);
-    border-radius: 10px;
-    padding: 5px;
-    margin: 5px;
+    background: rgba(49, 50, 68, 0.6);
+    border-radius: 8px;
+    padding: 4px;
+    margin: 3px;
 }
 
 #tray > .passive > #idle_inhibitor {
@@ -1162,9 +1337,163 @@ window#waybar {
     -gtk-icon-effect: highlight;
     background-color: rgba(243, 139, 168, 0.2);
 }
+
+/* ======================
+   WAYBAR DU BAS (BOTTOM)
+   ====================== */
+
+window#waybar.bottom {
+    background: rgba(30, 30, 46, 0.90);
+    color: #cdd6f4;
+    border-radius: 16px;
+    border: 2px solid rgba(137, 180, 250, 0.3);
+    margin: 0;
+    backdrop-filter: blur(15px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Boutons Start/Search - Bottom bar */
+#custom-start, #custom-search {
+    background: rgba(137, 180, 250, 0.2);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin: 8px 4px;
+    color: #89b4fa;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+#custom-start:hover, #custom-search:hover {
+    background: rgba(137, 180, 250, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(137, 180, 250, 0.3);
+}
+
+/* Taskbar - Bottom bar */
+#taskbar {
+    background: transparent;
+    padding: 4px;
+    margin: 4px;
+}
+
+#taskbar button {
+    background: rgba(49, 50, 68, 0.6);
+    border-radius: 10px;
+    padding: 6px;
+    margin: 2px 3px;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+#taskbar button:hover {
+    background: rgba(137, 180, 250, 0.2);
+    transform: scale(1.1);
+    border: 1px solid rgba(137, 180, 250, 0.3);
+}
+
+#taskbar button.active {
+    background: rgba(137, 180, 250, 0.3);
+    border: 1px solid rgba(137, 180, 250, 0.5);
+    box-shadow: 0 0 12px rgba(137, 180, 250, 0.2);
+}
+
+/* MPRIS (Media Player) - Bottom bar */
+#mpris {
+    background: linear-gradient(135deg, rgba(49, 50, 68, 0.8), rgba(30, 30, 46, 0.8));
+    border-radius: 12px;
+    padding: 8px 15px;
+    margin: 8px 4px;
+    color: #cdd6f4;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(245, 194, 231, 0.3);
+}
+
+#mpris:hover {
+    background: linear-gradient(135deg, rgba(245, 194, 231, 0.2), rgba(203, 166, 247, 0.2));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(245, 194, 231, 0.2);
+}
+
+#mpris.paused {
+    opacity: 0.7;
+}
+
+/* Animation pour les hover effects */
+#cpu:hover, #memory:hover, #temperature:hover,
+#battery:hover, #network:hover, #pulseaudio:hover,
+#custom-weather:hover, #custom-vpn:hover, #custom-bluetooth:hover {
+    background: rgba(137, 180, 250, 0.1);
+    box-shadow: 0 0 8px rgba(137, 180, 250, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1366px) {
+    window#waybar.bottom {
+        margin-left: 100px;
+        margin-right: 100px;
+    }
+}
+
+@media (max-width: 1024px) {
+    window#waybar.bottom {
+        margin-left: 50px;
+        margin-right: 50px;
+    }
+    
+    #network {
+        font-size: 9px;
+    }
+}
 EOF
 
-    echo -e "${GREEN}Configuration Waybar créée avec transparence et Nerd Fonts${NC}"
+    # Script de lancement des deux Waybar
+    cat > "$CONFIG_DIR/waybar/launch.sh" << 'EOF'
+#!/bin/bash
+
+# Arrêt des instances existantes
+pkill waybar
+
+# Attente
+sleep 2
+
+# Lancement des deux barres Waybar
+waybar -c ~/.config/waybar/config-top -s ~/.config/waybar/style.css &
+sleep 1
+waybar -c ~/.config/waybar/config-bottom -s ~/.config/waybar/style.css &
+
+echo "Waybar dual lancé !"
+EOF
+
+    chmod +x "$CONFIG_DIR/waybar/launch.sh"
+
+    echo -e "${GREEN}Configuration Waybar dual créée (barre haut + dock bas)${NC}"
+    echo -e "${YELLOW}Pour lancer: ~/.config/waybar/launch.sh${NC}"
+}
+
+# Installation des dépendances supplémentaires pour les modules avancés
+install_waybar_dependencies() {
+    echo -e "${BLUE}Installation des dépendances Waybar avancées...${NC}"
+    
+    case $DISTRO in
+        "arch")
+            # Modules MPRIS et taskbar
+            sudo $INSTALL_CMD playerctl bluez-utils
+            # Support taskbar pour wlr/taskbar 
+            yay -S --noconfirm --needed waybar-mpris waybar-module-pacman-updates 2>/dev/null || true
+            ;;
+        "debian")
+            sudo $INSTALL_CMD playerctl bluez
+            ;;
+        "fedora")
+            sudo $INSTALL_CMD playerctl bluez
+            ;;
+        "opensuse")
+            sudo $INSTALL_CMD playerctl bluez
+            ;;
+    esac
+    
+    echo -e "${GREEN}Dépendances Waybar installées${NC}"
 }
 
 # Configuration Rofi (remplace Wofi)
@@ -2421,6 +2750,7 @@ main() {
     remove_current_de
     install_gpu_drivers
     install_base_packages
+    install_waybar_dependencies
     setup_hyprland_config
     setup_waybar
     setup_rofi
