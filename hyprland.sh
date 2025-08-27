@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 233.7 - 27/08/2025 10:43 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 234.7 - 27/08/2025 12:36 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -617,27 +617,19 @@ general {
 
 # Décoration avec blur et ombres douces
 decoration {
-    rounding = 15
-    active_opacity = 0.98
-    inactive_opacity = 0.92
-    fullscreen_opacity = 1.0
-    
-    drop_shadow = true
-    shadow_range = 25
-    shadow_render_power = 4
-    col.shadow = rgba(1a1a1aee)
-    shadow_offset = 3 3
+    rounding = 12
 
     blur {
         enabled = true
-        size = 10
+        size = 3
         passes = 3
-        new_optimizations = true
-        xray = true
-        ignore_opacity = true
-        noise = 0.02
-        contrast = 1.1
-        brightness = 1.0
+    }
+
+    shadow {
+        enabled = true
+        range = 20
+        render_power = 3
+        color = rgba(1a1a1aee)
     }
 }
 
