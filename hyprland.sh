@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 241.7 - 27/08/2025 18:09 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 242.7 - 27/08/2025 18:25 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -1154,9 +1154,6 @@ EOF
 
     # Style CSS unifié pour les deux barres
     cat > "$CONFIG_DIR/waybar/style.css" << 'EOF'
-/* ======================
-   STYLE GÉNÉRAL WAYBAR
-   ====================== */
 
 * {
     border: none;
@@ -1165,10 +1162,6 @@ EOF
     font-size: 11px;
     min-height: 0;
 }
-
-/* ======================
-   WAYBAR DU HAUT (TOP)
-   ====================== */
 
 window#waybar.top {
     background: rgba(30, 30, 46, 0.85);
@@ -1421,24 +1414,6 @@ window#waybar.bottom {
     box-shadow: 0 0 8px rgba(137, 180, 250, 0.2);
 }
 
-/* Responsive adjustments */
-@media (max-width: 1366px) {
-    window#waybar.bottom {
-        margin-left: 100px;
-        margin-right: 100px;
-    }
-}
-
-@media (max-width: 1024px) {
-    window#waybar.bottom {
-        margin-left: 50px;
-        margin-right: 50px;
-    }
-    
-    #network {
-        font-size: 9px;
-    }
-}
 EOF
 
     # Script de lancement des deux Waybar
