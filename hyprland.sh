@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 230.7 - 27/08/2025 10:21 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 232.7 - 27/08/2025 10:34 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -1601,20 +1601,23 @@ setup_spicetify() {
     if ! command -v spotify >/dev/null 2>&1; then
         case $DISTRO in
             "arch")
-                yay -S --noconfirm spotify
+                if ! yay -S --noconfirm --needed spotify; then
+                    echo "==> Spotify déjà installé ou erreur bénigne. On continue."
+                fi
                 ;;
             "debian")
                 curl -sS https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg | sudo gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
                 echo "deb http://repository.spotify.com stable non-free" | sudo tee /etc/apt/sources.list.d/spotify.list
-                sudo apt update && sudo apt install -y spotify-client
+                sudo apt update || echo "==> apt update échoué, on continue..."
+                sudo apt install -y spotify-client || echo "==> Spotify déjà présent."
                 ;;
             "fedora")
-                sudo dnf config-manager --add-repo=https://negativo17.org/repos/fedora-spotify.repo
-                sudo dnf install -y spotify-client
+                sudo dnf config-manager --add-repo=https://negativo17.org/repos/fedora-spotify.repo || echo "==> Dépôt déjà présent."
+                sudo dnf install -y spotify-client || echo "==> Spotify déjà présent."
                 ;;
             "opensuse")
-                sudo zypper addrepo -f https://download.spotify.com/repository/spotify.repo
-                sudo zypper install -y spotify-client
+                sudo zypper addrepo -f https://download.spotify.com/repository/spotify.repo || echo "==> Dépôt déjà présent."
+                sudo zypper install -y spotify-client || echo "==> Spotify déjà présent."
                 ;;
         esac
     fi
@@ -1623,18 +1626,34 @@ setup_spicetify() {
     if [ "$DISTRO" != "arch" ]; then
         curl -fsSL https://raw.githubusercontent.com/spicetify/spicetify-cli/master/install.sh | sh
         export PATH="$HOME/.spicetify:$PATH"
-        echo 'export PATH="$HOME/.spicetify:$PATH"' >> ~/.bashrc
+        if ! grep -q 'spicetify' ~/.bashrc; then
+            echo 'export PATH="$HOME/.spicetify:$PATH"' >> ~/.bashrc
+        fi
+    else
+        # Vérification pour Arch si spicetify est bien dispo dans le PATH
+        if ! command -v spicetify >/dev/null 2>&1; then
+            if [ -f /opt/spicetify-cli/spicetify ]; then
+                sudo ln -sf /opt/spicetify-cli/spicetify /usr/local/bin/spicetify
+                echo "==> spicetify ajouté à /usr/local/bin."
+            else
+                echo "==> spicetify introuvable après installation. Vérifiez manuellement."
+            fi
+        fi
     fi
     
     # Configuration Spicetify avec thème Catppuccin
-    spicetify config current_theme catppuccin color_scheme mocha
-    spicetify config inject_css 1 replace_colors 1 overwrite_assets 1 inject_theme_js 1
-    
-    # Installation du thème Catppuccin
-    curl -fsSL https://raw.githubusercontent.com/catppuccin/spicetify/main/install.sh | sh
-    
-    # Application des modifications
-    spicetify backup apply
+    if command -v spicetify >/dev/null 2>&1; then
+        spicetify config current_theme catppuccin color_scheme mocha
+        spicetify config inject_css 1 replace_colors 1 overwrite_assets 1 inject_theme_js 1
+
+        # Installation du thème Catppuccin
+        curl -fsSL https://raw.githubusercontent.com/catppuccin/spicetify/main/install.sh | sh
+
+        # Application des modifications
+        spicetify backup apply || echo "==> Échec backup/apply, on continue..."
+    else
+        echo "==> spicetify n'a pas pu être configuré car la commande est introuvable."
+    fi
     
     echo -e "${GREEN}Spicetify configuré avec le thème Catppuccin Mocha${NC}"
 }
