@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 226.1 - 26/08/2025 23:23 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 227.7 - 27/08/2025 10:08 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -449,20 +449,32 @@ install_base_packages() {
     
     case $DISTRO in
         "arch")
-            # Installation des dépôts AUR helper si nécessaire
+            # Installation de yay (AUR helper) si nécessaire
             if ! command -v yay >/dev/null 2>&1; then
                 echo -e "${BLUE}Installation de yay (AUR helper)...${NC}"
                 git clone https://aur.archlinux.org/yay.git /tmp/yay
                 cd /tmp/yay && makepkg -si --noconfirm
                 cd -
             fi
+
+            # Vérification et activation de multilib si non déjà activé
+            if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+                echo "==> Activation du dépôt multilib..."
+                sudo bash -c 'echo -e "[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf'
+                sudo pacman -Sy
+            else
+                echo "==> Dépôt multilib déjà activé, on passe."
+            fi
             
             # Paquets Arch - remplacer wofi par rofi-wayland
-            PACKAGES="hyprland hyprpaper hypridle hyprlock xdg-desktop-portal-hyprland polkit-gnome waybar rofi-wayland kitty thunar dunst mpvpaper sddm pipewire wireplumber pavucontrol cava fastfetch git curl wget unzip"
-            sudo $INSTALL_CMD $PACKAGES
-            
-            # Paquets AUR
-            yay -S --noconfirm spicetify-cli
+            PACKAGES="hyprland hyprpaper hypridle hyprlock xdg-desktop-portal-hyprland polkit-gnome waybar rofi-wayland kitty thunar dunst sddm pipewire wireplumber pavucontrol cava fastfetch git curl wget unzip"
+            sudo $INSTALL_CMD --needed $PACKAGES
+
+            # mpvpaper doit être installé via AUR
+            yay -S --noconfirm --needed mpvpaper
+
+            # Paquets AUR supplémentaires
+            yay -S --noconfirm --needed spicetify-cli
             ;;
             
         "debian")
@@ -474,7 +486,7 @@ install_base_packages() {
             fi
             
             PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulse pavucontrol fastfetch git curl wget unzip sddm"
-            sudo $INSTALL_CMD $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES
             
             # Installation manuelle pour les paquets non disponibles
             install_from_source_debian
@@ -485,14 +497,14 @@ install_base_packages() {
             sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
             
             PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
-            sudo $INSTALL_CMD $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES
             
             install_from_source_fedora
             ;;
             
         "opensuse")
             PACKAGES="hyprland waybar rofi kitty thunar dunst pipewire-pulseaudio pavucontrol fastfetch git curl wget unzip sddm"
-            sudo $INSTALL_CMD $PACKAGES
+            sudo $INSTALL_CMD --needed $PACKAGES
             
             install_from_source_opensuse
             ;;
