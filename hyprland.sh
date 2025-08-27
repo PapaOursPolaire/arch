@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 235.7 - 27/08/2025 14:26 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 236.7 - 27/08/2025 14:26 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -1024,7 +1024,6 @@ window#waybar {
 #battery:hover, #network:hover, #pulseaudio:hover {
     background: rgba(137, 180, 250, 0.1);
     box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
-    transform: translateY(-1px);
 }
 
 #tray {
