@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 238.7 - 27/08/2025 17:49 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 239.7 - 27/08/2025 17:56 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -712,17 +712,6 @@ exec-once = dunst
 exec-once = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
 exec-once = ~/.config/hypr/video-wallpaper.sh
 
-# Raccourcis pour redémarrer les waybar
-bind = $mainMod SHIFT, W, exec, ~/.config/waybar/launch.sh
-
-# Raccourcis pour les contrôles multimédia (pour aller avec le module MPRIS)
-bind = , XF86AudioNext, exec, playerctl next
-bind = , XF86AudioPrev, exec, playerctl previous
-bind = , XF86AudioPlay, exec, playerctl play-pause
-bind = $mainMod, F9, exec, playerctl previous
-bind = $mainMod, F10, exec, playerctl play-pause  
-bind = $mainMod, F11, exec, playerctl next
-
 # Configuration d'entrée
 input {
     kb_layout = fr
@@ -895,6 +884,17 @@ bind = , XF86AudioLowerVolume, exec, pactl set-sink-volume @DEFAULT_SINK@ -5%
 bind = , XF86AudioMute, exec, pactl set-sink-mute @DEFAULT_SINK@ toggle
 bind = , XF86MonBrightnessUp, exec, brightnessctl set +5%
 bind = , XF86MonBrightnessDown, exec, brightnessctl set 5%-
+
+# Raccourcis pour redémarrer les waybar
+bind = $mainMod SHIFT, W, exec, ~/.config/waybar/launch.sh
+
+# Raccourcis pour les contrôles multimédia (pour aller avec le module MPRIS)
+bind = , XF86AudioNext, exec, playerctl next
+bind = , XF86AudioPrev, exec, playerctl previous
+bind = , XF86AudioPlay, exec, playerctl play-pause
+bind = $mainMod, F9, exec, playerctl previous
+bind = $mainMod, F10, exec, playerctl play-pause  
+bind = $mainMod, F11, exec, playerctl next
 EOF
 
     echo -e "${GREEN}Configuration Hyprland créée${NC}"
