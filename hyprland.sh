@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 227.7 - 27/08/2025 10:08 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 228.7 - 27/08/2025 10:17 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -1357,9 +1357,19 @@ EOF
     echo -e "${GREEN}Configuration Hyprlock créée avec blur et thème cohérent${NC}"
 }
 
-# Configuration Dunst avec thème Catppuccin
 setup_dunst() {
     echo -e "${BLUE}Configuration de Dunst avec thème Catppuccin...${NC}"
+
+    # Vérification multilib (seulement pour Arch)
+    if [ "$DISTRO" = "arch" ]; then
+        if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+            echo "==> Activation du dépôt multilib..."
+            sudo bash -c 'echo -e "[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf'
+            sudo pacman -Sy
+        else
+            echo "==> Dépôt multilib déjà activé, on passe."
+        fi
+    fi
     
     mkdir -p "$CONFIG_DIR/dunst"
     
@@ -1404,10 +1414,10 @@ setup_dunst() {
     icon_position = left
     min_icon_size = 32
     max_icon_size = 64
-    icon_path = /usr/share/icons/Papirus/16x16/status/:/usr/share/icons/Papirus/16x16/devices/
+    icon_path = /usr/share/icons/Papirus/16x16/status/:/usr/share/icons/Papirus/22x22/status/:/usr/share/icons/Papirus/32x32/status/:/usr/share/icons/Papirus/48x48/status/:/usr/share/icons/Papirus/scalable/status/
     sticky_history = yes
     history_length = 30
-    dmenu = /usr/bin/dmenu -p dunst:
+    dmenu = rofi -dmenu -p dunst: || /usr/bin/dmenu -p dunst:
     browser = /usr/bin/xdg-open
     always_run_script = true
     title = Dunst
