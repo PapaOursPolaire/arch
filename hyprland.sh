@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script d'installation d'Hyprland compatible sur plusieurs distros Linux
-# Version 232.7 - 27/08/2025 10:34 : Mise à jour corrigée avec détection GPU/CPU et améliorations
+# Version 233.7 - 27/08/2025 10:43 : Mise à jour corrigée avec détection GPU/CPU et améliorations
 # Compatible: Arch, Ubuntu/Debian, Fedora, OpenSUSE
 
 set -e
@@ -1960,43 +1960,68 @@ download_resources() {
 # Installation des outils de développement
 setup_dev_tools() {
     echo -e "${BLUE}Installation des outils de développement...${NC}"
-    
+
     case $DISTRO in
         "arch")
+            # Arch : utiliser yay mais éviter les réinstallations inutiles
             DEV_PACKAGES="code android-studio jdk-openjdk python nodejs npm docker gcc clang cmake make"
-            yay -S --noconfirm $DEV_PACKAGES
+            if ! command -v yay >/dev/null 2>&1; then
+                echo -e "${BLUE}Installation de yay (AUR helper)...${NC}"
+                git clone https://aur.archlinux.org/yay.git /tmp/yay || true
+                (cd /tmp/yay && makepkg -si --noconfirm) || true
+            fi
+            # --needed évite de réinstaller ; || true empêche l'arrêt sur 'rien à faire'
+            yay -S --needed --noconfirm $DEV_PACKAGES || true
             ;;
+
         "debian")
-            # Visual Studio Code
+            # Visual Studio Code (repo Microsoft) — idempotent
             if ! command -v code >/dev/null 2>&1; then
-                wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-                sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/
-                echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
-                sudo apt update
+                wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg || true
+                sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/ || true
+                echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+                  | sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null || true
+                sudo apt update || true
             fi
             DEV_PACKAGES="code default-jdk python3 python3-pip nodejs npm docker.io gcc clang cmake make"
-            sudo $INSTALL_CMD $DEV_PACKAGES
+            sudo $INSTALL_CMD $DEV_PACKAGES || true
             ;;
+
         "fedora")
-            # Visual Studio Code
+            # Visual Studio Code (repo Microsoft) — idempotent
             if ! command -v code >/dev/null 2>&1; then
-                sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-                sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
+                sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc || true
+                sudo sh -c 'echo -e "[code]
+name=Visual Studio Code
+baseurl=https://packages.microsoft.com/yumrepos/vscode
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo' || true
+                sudo dnf -y makecache || true
             fi
             DEV_PACKAGES="code java-openjdk-devel python3 python3-pip nodejs npm docker gcc clang cmake make"
-            sudo $INSTALL_CMD $DEV_PACKAGES
+            sudo $INSTALL_CMD $DEV_PACKAGES || true
             ;;
+
         "opensuse")
+            # Visual Studio Code (repo Microsoft) — idempotent
             if ! command -v code >/dev/null 2>&1; then
-                sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-                sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/zypp/repos.d/vscode.repo'
+                sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc || true
+                sudo sh -c 'echo -e "[code]
+name=Visual Studio Code
+baseurl=https://packages.microsoft.com/yumrepos/vscode
+enabled=1
+type=rpm-md
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/zypp/repos.d/vscode.repo' || true
+                sudo zypper --non-interactive refresh || true
             fi
             DEV_PACKAGES="code java-openjdk-devel python3 python3-pip nodejs npm docker gcc clang cmake make"
-            sudo $INSTALL_CMD $DEV_PACKAGES
+            sudo $INSTALL_CMD $DEV_PACKAGES || true
             ;;
     esac
-    
-    # Extensions VS Code
+
+    # Extensions VS Code (tolérantes si déjà installées)
     echo -e "${BLUE}  Installation des extensions VS Code...${NC}"
     if command -v code >/dev/null 2>&1; then
         code --install-extension ms-python.python 2>/dev/null || true
@@ -2005,11 +2030,11 @@ setup_dev_tools() {
         code --install-extension bradlc.vscode-tailwindcss 2>/dev/null || true
         code --install-extension github.copilot 2>/dev/null || true
     fi
-    
-    # Configuration Docker
+
+    # Configuration Docker (ne casse pas si le service existe déjà / docker absent)
     sudo systemctl enable docker 2>/dev/null || true
-    sudo usermod -aG docker $USER 2>/dev/null || true
-    
+    sudo usermod -aG docker "$USER" 2>/dev/null || true
+
     echo -e "${GREEN}Outils de développement installés${NC}"
 }
 
