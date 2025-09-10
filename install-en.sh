@@ -9,8 +9,8 @@ if ! command -v arch-chroot &>/dev/null; then
 fi
 # Arch Linux automated installation script
 # Made by PapaOursPolaire - available on GitHub
-# Version: 524.5, patch 5 of version 524.5
-# Updated: 08/26/2025 at 4:43 p.m.
+# Version: 534.5, patch 5 of version 534.5
+# Updated: 09/10/2025 at 9:12 p.m.
 # GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
 # Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
 # Errors in step 17: do not install paru in the temp
@@ -4603,3 +4603,4 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Explicit exit
     exit 0
 fi
+
