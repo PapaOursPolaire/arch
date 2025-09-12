@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 534.5, correctif 5 de la version 534.5
-# Mise à jour : 10/09/2025 à 21:13
+# Version: 544.4, correctif 5 de la version 544.4
+# Mise à jour : 12/09/2025 à 19:59
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="534.5"
+readonly SCRIPT_VERSION="544.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -155,8 +155,6 @@ main() {
     # Phase 8: Outils et développement
     install_paru # -> Ne fonctionne pas, n'a jamais voulu fonctionner meme sur la session c'est une folie  !
     install_development
-
-    # Phase 8 bis : Débuguage nécessaire pour steam & spicetify
     install_steam
     #fix_spicetify_prefs  # Erreurs internes + géré par post-install; inutile dans le main
     
@@ -173,7 +171,9 @@ main() {
 }
 
 install_web() {
-    print_header "INSTALLATION DES NAVIGATEURS WEB"
+    print_header "ETAPE 21/$TOTAL_STEPS: INSTALLATION DES NAVIGATEURS WEB"
+    CURRENT_STEP=21
+
     browsers=(
         # Vérifier lesquels sont installés sur GNOME & KDE , sont différents parfois
         "Firefox|firefox|firefox||org.mozilla.firefox"
@@ -204,7 +204,8 @@ install_web() {
 }
 
 install_steam() {
-    print_header "INSTALLATION DE STEAM"
+    print_header "ETAPE 26/$TOTAL_STEPS: INSTALLATION DE STEAM"
+    CURRENT_STEP=26
 
     # Vérifie que Flatpak est installé dans le chroot
     if ! /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
@@ -537,7 +538,8 @@ install_required_commands() {
 
 # Optimisation de la configuration Pacman pour la vitesse
 optimize_pacman() {
-    print_info "Optimisation de la configuration Pacman..."
+    print_header "ETAPE 3/$TOTAL_STEPS: OPTIMISATION DE PACMAN"
+    CURRENT_STEP=3
 
     # Sauvegarde de la configuration d'origine
     cp /etc/pacman.conf /etc/pacman.conf.backup 2>/dev/null || true
@@ -1070,7 +1072,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 534.5:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 544.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1206,7 +1208,8 @@ check_requirements() {
 }
 
 test_environment() {
-    print_header "TEST DE L'ENVIRONNEMENT D'INSTALLATION"
+    print_header "ETAPE 2/$TOTAL_STEPS: TEST DE L'ENVIRONNEMENT D'INSTALLATION"
+    CURRENT_STEP=2
     
     local errors=0
     
@@ -1304,8 +1307,8 @@ test_environment() {
 
 # Fonctions de gestion des disques et partitions
 select_disk() {
-    print_header "ETAPE 2/$TOTAL_STEPS: SELECTION DU DISQUE"
-    CURRENT_STEP=2
+    print_header "ETAPE 4/$TOTAL_STEPS: SELECTION DU DISQUE"
+    CURRENT_STEP=4
     
     local disks
     mapfile -t disks < <(lsblk -dno NAME | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])')
@@ -1342,8 +1345,8 @@ select_disk() {
 }
 
 choose_partitioning() {
-    print_header "ETAPE 3/$TOTAL_STEPS  : CHOIX DU PARTITIONNEMENT"
-    CURRENT_STEP=3
+    print_header "ETAPE 5/$TOTAL_STEPS: CHOIX DU PARTITIONNEMENT"
+    CURRENT_STEP=5
     
     echo -e "${WHITE}Options de partitionnement :${NC}"
     echo -e "${CYAN}1.${NC} Conserver les partitions existantes"
@@ -1701,8 +1704,8 @@ create_new_partitioning() {
 }
 
 format_partitions() {
-    print_header "ETAPE 4/$TOTAL_STEPS : FORMATAGE DES PARTITIONS"
-    CURRENT_STEP=4
+    print_header "ETAPE 6/$TOTAL_STEPS: FORMATAGE DES PARTITIONS"
+    CURRENT_STEP=6
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation du formatage"
@@ -1768,8 +1771,8 @@ format_partitions() {
 }
 
 mount_partitions() { # Tiré directement du guide d'installation d'Arch Linux
-    print_header "ETAPE 5/$TOTAL_STEPS: MONTAGE DES PARTITIONS"
-    CURRENT_STEP=5
+    print_header "ETAPE 7/$TOTAL_STEPS: MONTAGE DES PARTITIONS"
+    CURRENT_STEP=7
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation du montage"
@@ -1817,8 +1820,8 @@ mount_partitions() { # Tiré directement du guide d'installation d'Arch Linux
 # Fonctions d'installation du système de base
 
 install_system() {
-    print_header "ETAPE 6/$TOTAL_STEPS : INSTALLATION DU SYSTEME DE BASE"
-    CURRENT_STEP=6
+    print_header "ETAPE 8/$TOTAL_STEPS: INSTALLATION DU SYSTEME DE BASE"
+    CURRENT_STEP=8
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation du système de base"
@@ -1866,8 +1869,8 @@ install_system() {
 }
 
 configure_system() {
-    print_header "ETAPE 7/$TOTAL_STEPS: CONFIGURATION SYSTEME"
-    CURRENT_STEP=7
+    print_header "ETAPE 9/$TOTAL_STEPS: CONFIGURATION SYSTEME"
+    CURRENT_STEP=9
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de la configuration système"
@@ -1921,15 +1924,14 @@ EOF
 }
 
 create_users() {
-    print_header "ETAPE 8/$TOTAL_STEPS: CREATION UTILISATEURS"
-    CURRENT_STEP=8
+    print_header "ETAPE 10/$TOTAL_STEPS: CREATION UTILISATEURS"
+    CURRENT_STEP=10
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de la création d'utilisateurs"
         return 0
     fi
 
-    # Demander le nom d'utilisateur principal
     while true; do
         read -r -p "Nom d'utilisateur principal : " USERNAME
         export USERNAME
@@ -1939,66 +1941,71 @@ create_users() {
         print_warning "Nom d'utilisateur invalide"
     done
 
-    # Demander le mot de passe ROOT (différent de l'utilisateur)
-    local root_password root_password2
-    echo -e "${YELLOW}=== MOT DE PASSE ROOT ===${NC}"
-    echo -e "${WHITE}Le mot de passe root est pour les administration système${NC}"
-    
+    local password password2
     while true; do
-        read -r -s -p "Mot de passe root (min 8 caractères) : " root_password
+        read -r -s -p "Mot de passe (min 6 caractères) : " password
         echo ""
-        if validate_input "$root_password" "password" 8; then
-            read -r -s -p "Confirmez le mot de passe root : " root_password2
+        if validate_input "$password" "password" 6; then
+            read -r -s -p "Confirmez le mot de passe : " password2
             echo ""
-            if [[ "$root_password" == "$root_password2" ]]; then
+            if [[ "$password" == "$password2" ]]; then
+                USER_PASSWORD="$password"
                 break
             fi
-            print_warning "Mots de passe root différents"
+            print_warning "Mots de passe différents"
         else
-            print_warning "Mot de passe root trop court (minimum 8 caractères)"
+            print_warning "Mot de passe trop court (minimum 6 caractères)"
         fi
     done
 
-    # Demander le mot de passe UTILISATEUR (différent du root)
-    local user_password user_password2
-    echo -e "${YELLOW}=== MOT DE PASSE UTILISATEUR ===${NC}"
-    echo -e "${WHITE}Le mot de passe utilisateur est pour votre compte quotidien${NC}"
-    
-    while true; do
-        read -r -s -p "Mot de passe utilisateur (min 6 caractères) : " user_password
-        echo ""
-        if validate_input "$user_password" "password" 6; then
-            read -r -s -p "Confirmez le mot de passe utilisateur : " user_password2
-            echo ""
-            if [[ "$user_password" == "$user_password2" ]]; then
-                USER_PASSWORD="$user_password"
-                break
-            fi
-            print_warning "Mots de passe utilisateur différents"
-        else
-            print_warning "Mot de passe utilisateur trop court (minimum 6 caractères)"
-        fi
-    done
-
-    # Créer l'utilisateur avec les mots de passe différents
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
 useradd -m -G wheel,audio,video,storage,optical,network "$USERNAME"
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
-echo "root:$root_password" | chpasswd
+echo "root:$USER_PASSWORD" | chpasswd
 mkdir -p /home/"$USERNAME"/{Documents,Téléchargements,Images,Vidéos,Musique,Bureau}
 chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"
 EOF
 
     print_success "Utilisateur créé : $USERNAME"
-    print_success "Mot de passe root défini (différent de l'utilisateur)"
 
-    # [Le reste de la fonction pour les utilisateurs supplémentaires reste inchangé...]
+    if confirm_action "Créer des utilisateurs supplémentaires ?"; then
+        while true; do
+            local additional_user
+            read -r -p "Nom d'utilisateur supplémentaire (vide pour terminer): " additional_user
+            [[ -z "$additional_user" ]] && break
+
+            if validate_input "$additional_user" "username"; then
+                local add_password add_password2
+                while true; do
+                    read -r -s -p "Mot de passe pour $additional_user: " add_password
+                    echo ""
+                    read -r -s -p "Confirmez le mot de passe : " add_password2
+                    echo ""
+                    if [[ "$add_password" == "$add_password2" ]]; then
+                        break
+                    fi
+                    print_warning "Mots de passe différents"
+                done
+
+                /usr/bin/arch-chroot /mnt /bin/bash <<EOF
+useradd -m -G audio,video,storage,optical,network "$additional_user"
+echo "$additional_user:$add_password" | chpasswd
+mkdir -p /home/"$additional_user"/{Documents,Téléchargements,Images,Vidéos,Musique,Bureau}
+chown -R "$additional_user":"$additional_user" /home/"$additional_user"
+EOF
+
+                print_success "Utilisateur supplémentaire créé : $additional_user"
+            else
+                print_warning "Nom d'utilisateur invalide, ignoré"
+            fi
+        done
+    fi
 }
 
 select_desktop() {
-    print_header "ETAPE 9/$TOTAL_STEPS: SELECTION ENVIRONNEMENT DE BUREAU"
-    CURRENT_STEP=9
+    print_header "ETAPE 11/$TOTAL_STEPS: SELECTION ENVIRONNEMENT DE BUREAU"
+    CURRENT_STEP=11
     
     echo -e "${WHITE}Environnements disponibles :${NC}"
     echo -e "${CYAN}1.${NC} KDE Plasma"
@@ -2022,8 +2029,8 @@ select_desktop() {
 }
 
 install_desktop() {
-    print_header "ETAPE 10/$TOTAL_STEPS: INSTALLATION DE L'ENVIRONNEMENT DE BUREAU"
-    CURRENT_STEP=10
+    print_header "ETAPE 12/$TOTAL_STEPS: INSTALLATION DE L'ENVIRONNEMENT DE BUREAU"
+    CURRENT_STEP=12
     
     if [[ "$DE_CHOICE" == "none" ]]; then
         print_info "Aucun environnement de bureau à installer"
@@ -2053,8 +2060,8 @@ install_desktop() {
 
 # Fonctions de bootloader et thèmes
 configure_grub() {
-    print_header "ETAPE 11/$TOTAL_STEPS: CONFIGURATION GRUB"
-    CURRENT_STEP=11
+    print_header "ETAPE 13/$TOTAL_STEPS: CONFIGURATION GRUB"
+    CURRENT_STEP=13
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de la configuration GRUB"
@@ -2099,8 +2106,8 @@ EOF
 }
 
 install_fallout_theme() {
-    print_header "ETAPE 12/$TOTAL_STEPS : INSTALLATION DU THÈME GRUB FALLOUT" # J'y pense les étapes ne sont plus dans l'ordre fait chier
-    CURRENT_STEP=12
+    print_header "ETAPE 14/$TOTAL_STEPS: INSTALLATION DU THEME GRUB FALLOUT"
+    CURRENT_STEP=14
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation du thème Fallout"
@@ -2151,8 +2158,8 @@ EOF
 
 # Fonctions audia et multimedia
 install_audio_system() {
-    print_header "ETAPE 13/$TOTAL_STEPS: INSTALLATION SYSTEME AUDIO PIPEWIRE"
-    CURRENT_STEP=13
+    print_header "ETAPE 16/$TOTAL_STEPS: INSTALLATION SYSTEME AUDIO PIPEWIRE"
+    CURRENT_STEP=16
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation du système audio"
@@ -2210,8 +2217,8 @@ EOF
 }
 
 install_boot_sound() { # L'installation du bip sonore est disfonctionnelle, il faudra aller se faire foutre
-    print_header "ETAPE 14/$TOTAL_STEPS: CONFIGURATION BIP SONORE BOOT"
-    CURRENT_STEP=14
+    print_header "ETAPE 17/$TOTAL_STEPS: CONFIGURATION BIP SONORE BOOT"
+    CURRENT_STEP=17
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation du bip sonore"
@@ -2221,8 +2228,8 @@ install_boot_sound() { # L'installation du bip sonore est disfonctionnelle, il f
     mkdir -p /mnt/usr/share/sounds
     
     # Téléchargement du son Fallout
-    if curl -o /mnt/usr/share/sounds/fallout-bip.mp3 \
-        'https://raw.githubusercontent.com/PapaOursPolaire/arch/refs/heads/Projets/FalloutBip.mp3' 2>/dev/null; then # Peut etre que c'est pas  compatible avec un .mp3, essayer un .wav  ?
+    if curl -o /mnt/usr/share/sounds/boot.wav \
+        'https://raw.githubusercontent.com/PapaOursPolaire/arch/refs/heads/Projets/boot.wav' 2>/dev/null; then # Peut etre que c'est pas  compatible avec un .mp3, essayer un .wav  ?
         
         # Service systemd pour le son MP3
         cat > /mnt/etc/systemd/system/boot-sound.service <<EOF
@@ -2232,14 +2239,14 @@ After=default.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/mpg123 -a pulse /usr/share/sounds/fallout-bip.mp3
+ExecStart=/usr/bin/aplay -q /usr/share/sounds/boot.wav
 RemainAfterExit=true
 
 [Install]
 WantedBy=default.target
 EOF
         
-        # Installation mpg123 pour jouer le MP3 - Ce qui est "censé" le rendre compatible
+        # Installation mpg123 pour jouer le MP3 - Ce qui est "censé" le rendre compatible  -> Inutile  car remplacé par un fichier .wav pour éviter les problèmes de compatibilité
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm mpg123 || {
             print_warning "mpg123 non installé, création d'un bip système"
             # Fallback vers bip système
@@ -2304,7 +2311,8 @@ EOF
 }
 
 configure_plymouth() {
-    print_header "ETAPE $((++CURRENT_STEP))/$TOTAL_STEPS : CONFIGURATION PLYMOUTH"
+    print_header "ETAPE 18/$TOTAL_STEPS: CONFIGURATION PLYMOUTH"
+    CURRENT_STEP=18
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de la configuration de Plymouth"
@@ -2346,7 +2354,8 @@ EOF
 }
 
 configure_sddm() {
-    print_header "CONFIGURATION DU DISPLAY MANAGER (SDDM OU GDM selon l'environnement)"
+    print_header "ETAPE 19/$TOTAL_STEPS: CONFIGURATION DU DISPLAY MANAGER"
+    CURRENT_STEP=19
 
     local repo_zip="/root/Projets.zip"
     local extract_dir="/root/arch-Projets"
@@ -2422,8 +2431,8 @@ EOF"
 
 configure_kde_lockscreen() {
     # Configuration du lockscreen pour KDE uniquement (via KSplash QML)
-    print_header "CONFIGURATION KDE SPLASH (look-and-feel)"
-    CURRENT_STEP=$((CURRENT_STEP+1))
+    print_header "ETAPE 15/$TOTAL_STEPS: CONFIGURATION KDE SPLASH"
+    CURRENT_STEP=15
 
     # Respect des variables globales existantes, sans redéclaration readonly - je remet du local qd mm
     local kde_splash_url="${KDESPLASH_URL:-}"
@@ -2582,7 +2591,8 @@ chmod 440 /etc/sudoers.d/01-pacman-nopasswd
 
 # Fonctions d'installation des applications, n'a jamais marché - PENSER A LE SUPPRIMER DANS LA VERSION DEF
 install_paru() {
-    print_header "INSTALLATION PARU (AUR Helper)"
+    print_header "ETAPE 24/$TOTAL_STEPS: INSTALLATION PARU (AUR HELPER)"
+    CURRENT_STEP=24
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation installation Paru"
@@ -2750,8 +2760,8 @@ refresh_mirrors() { # A utiliser si erreurs de téléchargement dans les futures
 }
 
 install_development() {
-    print_header "ETAPE 18/$TOTAL_STEPS: INSTALLATION DE  L'ENVIRONNEMENT DE DEVELOPPEMENT"
-    CURRENT_STEP=18
+    print_header "ETAPE 25/$TOTAL_STEPS: INSTALLATION ENVIRONNEMENT DE DEVELOPPEMENT"
+    CURRENT_STEP=25
 
     # Vérifie et supprime rust installé par pacman pour éviter conflit avec rustup
     print_info "Vérification conflit rust/rustup..."
@@ -2886,7 +2896,8 @@ CHROOT_EOF
 }
 
 install_spotify() {
-    print_header "INSTALLATION DE SPOTIFY + SPICETIFY" # Fonctionne pas dans le chroot,dispo dans le post-install ->Recap : Spotify (laucnher) s'est installé mais pas les autres trucs
+    print_header "ETAPE 22/$TOTAL_STEPS: INSTALLATION DE SPOTIFY"
+    CURRENT_STEP=22
 
     # Vérifie que Flatpak est installé dans le chroot
     if ! chroot_cmd_exists flatpak; then
@@ -3004,8 +3015,8 @@ clean_tmp() { # Plus efficace depuis la version 238.0, à enelver dans la versio
 }
 
 install_wine() {
-    print_header "ETAPE 21/$TOTAL_STEPS: INSTALLATION DE WINE"
-    CURRENT_STEP=21
+    print_header "ETAPE 23/$TOTAL_STEPS: INSTALLATION DE WINE"
+    CURRENT_STEP=23
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation de Wine"
@@ -3050,8 +3061,8 @@ EOF
 }
 
 install_software() {
-    print_header "ETAPE 22/$TOTAL_STEPS: INSTALLATION DES LOGICIELS ESSENTIELS"
-    CURRENT_STEP=22
+    print_header "ETAPE 20/$TOTAL_STEPS: INSTALLATION DES LOGICIELS ESSENTIELS"
+    CURRENT_STEP=20
 
     if declare -F clean_tmp >/dev/null; then
         clean_tmp
@@ -3440,8 +3451,8 @@ EOF
 }
 
 install_themes() {
-    print_header "ETAPE 23/$TOTAL_STEPS: INSTALLATION THEMES ET ICONES"
-    CURRENT_STEP=23
+    print_header "ETAPE 27/$TOTAL_STEPS: INSTALLATION THEMES ET ICONES"
+    CURRENT_STEP=27
     
     if [[ "$DRY_RUN" == true ]] || [[ "$DE_CHOICE" == "none" ]]; then
         print_info "Thèmes et icones ignorés (mode console ou dry-run)"
@@ -3548,6 +3559,9 @@ EOF
 }
 
 generate_postinstall() {
+    print_header "ETAPE 30/$TOTAL_STEPS: GENERATION SCRIPT POST-INSTALLATION"
+    CURRENT_STEP=30
+
     local U TARGET
     U="${USERNAME:-}"
 
@@ -3958,7 +3972,8 @@ POST_EOF
 
 # Fastfetch s'exécute automatiquement -> A rééxaminer, en attendant passer à l'installation via fastfetch.sh dispo sur le repo
 install_fastfetch() {
-    print_header "INSTALLATION ET CONFIGURATION DE FASTFETCH"
+    print_header "ETAPE 28/$TOTAL_STEPS: INSTALLATION ET CONFIGURATION DE FASTFETCH"
+    CURRENT_STEP=28
 
     if [[ -z "${USERNAME:-}" ]]; then
         print_error "USERNAME non défini. Abandon."
@@ -4074,8 +4089,8 @@ BASHFF
 
 # Fonctions pour la configuration finale du système
 final_config() {
-    print_header "ETAPE 25/$TOTAL_STEPS: CONFIGURATION FINALE"
-    CURRENT_STEP=25
+    print_header "ETAPE 29/$TOTAL_STEPS: CONFIGURATION FINALE"
+    CURRENT_STEP=29
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de la configuration finale"
@@ -4423,7 +4438,8 @@ EOF
 }
 
 finish_install() {
-    print_header "INSTALLATION ARCH LINUX FALLOUT EDITION COMPLETE TERMINEE!"
+    print_header "ETAPE 31/$TOTAL_STEPS: FINALISATION DE L'INSTALLATION"
+    CURRENT_STEP=31
     
     if [[ "$DRY_RUN" == true ]]; then
         print_success " SIMULATION TERMINEE - Aucune modification réelle effectuée"
@@ -4499,13 +4515,13 @@ finish_install() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS DE LA V534.5 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS DE LA V544.4 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V534.5 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V544.4 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -4571,14 +4587,14 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V534.5 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V544.4 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez :${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 534.5)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 544.4)${NC}"
     fi
 }
 
