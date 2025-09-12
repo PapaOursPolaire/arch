@@ -73,42 +73,43 @@ Auteur : PapaOursPolaire
 
 13. **configure_grub** : installe GRUB UEFI avec thème Fallout.
 14. **install_fallout_theme** : applique thème GRUB Fallout.
+15. **configure_kde_lockscreen** : ajoute une transtion animée entre le SDDM  et la session, uniquement disponible sur l'environnement KDE.
 
 ------------------------------------------------------------------------
 
 ### Phase 6 : Audio & multimédia
 
-15. **install_audio_system** : installe PipeWire + WirePlumber +
+16. **install_audio_system** : installe PipeWire + WirePlumber +
     PavuControl.\
-16. **install_boot_sound** : ajoute son Fallout au démarrage.
-17. **configure_plymouth** : splashscreen animé Fallout (PipBoy).
-18. **configure_sddm** : fond Fallout pour l'écran de login.
+17. **install_boot_sound** : ajoute son Fallout au démarrage.
+18. **configure_plymouth** : splashscreen animé Fallout (PipBoy).
+19. **configure_sddm** : fond Fallout pour l'écran de login.
 
 ------------------------------------------------------------------------
 
 ### Phase 7 : Logiciels principaux
 
-19. **install_software_packages** :
+20. **install_software_packages** :
 
 -   VLC, MPV, OBS Studio, Audacity.
 -   GIMP, Inkscape.
 -   KeePassXC, GParted, TimeShift.
 
-20. **install_web_browsers** : Firefox, Chromium, Brave, Vivaldi, Opera,
+21. **install_web_browsers** : Firefox, Chromium, Brave, Vivaldi, Opera,
     Tor Browser, GNOME Web, Midori, Chrome.
 
-21. **install_spotify_spicetify** : installe Spotify (Flatpak) +
+22. **install_spotify_spicetify** : installe Spotify (Flatpak) +
     Spicetify + thème Dribbblish Nord Dark.
 
-22. **install_wine_compatibility** : Wine, Winetricks, Wine-mono,
+23. **install_wine_compatibility** : Wine, Winetricks, Wine-mono,
     Wine-gecko pour compatibilité Windows.
 
 ------------------------------------------------------------------------
 
 ### Phase 8 : Développement
 
-23. **install_paru** : installe l'AUR helper `paru`.
-24. **install_development_environment** :
+24. **install_paru** : installe l'AUR helper `paru`.
+25. **install_development_environment** :
 
 -   Visual Studio Code + extensions : Python, C++, Java, Tailwind CSS,
     Prettier, ESLint, Jupyter, GitHub Copilot, etc.
@@ -116,15 +117,13 @@ Auteur : PapaOursPolaire
     gcc, clang.
 -   Android Studio (Flatpak `com.google.AndroidStudio`).
 
-25. **install_steam** : Steam (Flatpak, avec Proton).
-26. **fix_spicetify_prefs** : corrige Spicetify si Spotify n'a pas
-    encore généré ses fichiers.
+26. **install_steam** : Steam (Flatpak, avec Proton).
 
 ------------------------------------------------------------------------
 
 ### Phase 9 : Thèmes & personnalisation
 
-27. **install_themes_and_icons** : Papirus, Arc, Breeze, Tela.
+27. **install_themes** : Papirus, Arc, Breeze, Tela.
 28. **install_fastfetch** : logo ASCII Arch + infos système.
 
 ------------------------------------------------------------------------
@@ -132,7 +131,8 @@ Auteur : PapaOursPolaire
 ### Phase 10 : Finalisation
 
 29. **final_configuration** : nettoie, optimise les services.
-30. **finish_installation** : affiche succès, propose reboot.
+30. *postinstall* : Créée un script shell supplémentaire à éxécuter lors de la première connection à la session pour la finalisation de l'installation logistique.
+31. **finish_installation** : affiche succès, propose reboot.
 
 ------------------------------------------------------------------------
 
