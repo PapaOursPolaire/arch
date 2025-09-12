@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 if ! command -v arch-chroot &>/dev/null; then
@@ -9,8 +10,8 @@ if ! command -v arch-chroot &>/dev/null; then
 fi
 # Arch Linux automated installation script
 # Made by PapaOursPolaire - available on GitHub
-# Version: 534.5, patch 5 of version 534.5
-# Updated: 09/10/2025 at 9:12 p.m.
+# Version: 574.5, patch 5 of version 574.5
+# Updated: 09/12/2025 at 7:58 p.m.
 # GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
 # Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
 # Errors in step 17: do not install paru in the temp
@@ -29,12 +30,13 @@ fi
 #Include = /etc/pacman.d/mirrorlist -> Those assholes cleaned up the dcp servers, causing a 404 error, and on top of that, most of them crashed because of it. Two hours wasted on bullshit like that, no way, I'm pissed off, argh
 # Remember to remove DRY RUN mode, as it has become useless since version 246.6. Its purpose was to simulate the operating mode and check the script's appearance.
 # Global configuration -> Theme (under development, no declared function)
+# Translated by DBG - my local AI
 
-Translated with DeepL.com (free version)
+
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="524.5"
+readonly SCRIPT_VERSION="574.5"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -80,8 +82,6 @@ PARTITION_HOME_SIZE="remaining"
 CUSTOM_PARTITIONING=false
 
 # Main function - main entry point
-Translated with DeepL.com (free version)
-
 main() {
 # Initialization
     init_logging
@@ -174,7 +174,9 @@ main() {
 }
 
 install_web() {
-    print_header "INSTALLING WEB BROWSERS"
+    print_header "STEP 21/$TOTAL_STEPS: WEB BROWSERS INSTALLATION"
+    CURRENT_STEP=21
+
     browsers=(
         # Check which ones are installed on GNOME & KDE, they are sometimes different
         "Firefox|firefox|firefox||org.mozilla.firefox"
@@ -205,7 +207,8 @@ install_web() {
 }
 
 install_steam() {
-    print_header "INSTALLING STEAM"
+    print_header "STEP 26/$TOTAL_STEPS: STEAM INSTALLATION"
+    CURRENT_STEP=26
 
     # Check that Flatpak is installed in the chroot
     if ! /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
@@ -538,7 +541,8 @@ install_required_commands() {
 
 # Optimization of Pacman configuration for speed
 optimize_pacman() {
-    print_info "Optimizing Pacman configuration..."
+    print_header "STEP 3/$TOTAL_STEPS: PACMAN OPTIMIZATION"
+    CURRENT_STEP=3
 
     # Backup original configuration
     cp /etc/pacman.conf /etc/pacman.conf.backup 2>/dev/null || true
@@ -1071,7 +1075,7 @@ Options:
     • Progress bars with real time estimates
     • Robust error handling with automatic fallbacks
 
-    NEW FEATURES OF VERSION 524.5:
+    NEW FEATURES OF VERSION 574.5:
 
     • Custom partition size configuration
     • Optional separate /home partition with Y/N interface
@@ -1141,7 +1145,7 @@ parse_arguments() { # Does it really work? I only managed to make it work once!
 
 # Verification and test functions
 check_requirements() {
-    print_header "STEP 1/$TOTAL_STEPS: PREREQUISITES VERIFICATION"
+    print_header "STEP 1/$TOTAL_STEPS: SYSTEM REQUIREMENTS CHECK"
     CURRENT_STEP=1
     
     # Immediately remove the [community] repository if present because it no longer exists
@@ -1207,7 +1211,8 @@ check_requirements() {
 }
 
 test_environment() {
-    print_header "INSTALLATION ENVIRONMENT TEST"
+    print_header "STEP 2/$TOTAL_STEPS: INSTALLATION ENVIRONMENT TEST"
+    CURRENT_STEP=2
     
     local errors=0
     
@@ -1305,8 +1310,8 @@ test_environment() {
 
 # Disk and partition management functions
 select_disk() {
-    print_header "STEP 2/$TOTAL_STEPS: DISK SELECTION"
-    CURRENT_STEP=2
+    print_header "STEP 4/$TOTAL_STEPS: DISK SELECTION"
+    CURRENT_STEP=4
     
     local disks
     mapfile -t disks < <(lsblk -dno NAME | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])')
@@ -1343,8 +1348,8 @@ select_disk() {
 }
 
 choose_partitioning() {
-    print_header "STEP 3/$TOTAL_STEPS: PARTITIONING CHOICE"
-    CURRENT_STEP=3
+    print_header "STEP 5/$TOTAL_STEPS: PARTITIONING CHOICE"
+    CURRENT_STEP=5
     
     echo -e "${WHITE}Partitioning options:${NC}"
     echo -e "${CYAN}1.${NC} Keep existing partitions"
@@ -1702,8 +1707,8 @@ create_new_partitioning() {
 }
 
 format_partitions() {
-    print_header "STEP 4/$TOTAL_STEPS: PARTITION FORMATTING"
-    CURRENT_STEP=4
+    print_header "STEP 6/$TOTAL_STEPS: PARTITION FORMATTING"
+    CURRENT_STEP=6
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Formatting simulation"
@@ -1769,8 +1774,8 @@ format_partitions() {
 }
 
 mount_partitions() { # Taken directly from the Arch Linux installation guide
-    print_header "STEP 5/$TOTAL_STEPS: MOUNTING PARTITIONS"
-    CURRENT_STEP=5
+    print_header "STEP 7/$TOTAL_STEPS: PARTITION MOUNTING"
+    CURRENT_STEP=7
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Mounting simulation"
@@ -1818,9 +1823,9 @@ mount_partitions() { # Taken directly from the Arch Linux installation guide
 # Base system installation functions
 
 install_system() {
-    print_header "STEP 6/$TOTAL_STEPS: BASE SYSTEM INSTALLATION"
-    CURRENT_STEP=6
-    
+    print_header "STEP 8/$TOTAL_STEPS: BASE SYSTEM INSTALLATION"
+    CURRENT_STEP=8
+
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Base system installation simulation"
         return 0
@@ -1867,8 +1872,8 @@ install_system() {
 }
 
 configure_system() {
-    print_header "STEP 7/$TOTAL_STEPS: SYSTEM CONFIGURATION"
-    CURRENT_STEP=7
+    print_header "STEP 9/$TOTAL_STEPS: SYSTEM CONFIGURATION"
+    CURRENT_STEP=9
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] System configuration simulation"
@@ -1922,8 +1927,8 @@ EOF
 }
 
 create_users() {
-    print_header "STEP 8/$TOTAL_STEPS: USER CREATION"
-    CURRENT_STEP=8
+    print_header "STEP 10/$TOTAL_STEPS: USER CREATION"
+    CURRENT_STEP=10
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] User creation simulation"
@@ -2002,8 +2007,8 @@ EOF
 }
 
 select_desktop() {
-    print_header "STEP 9/$TOTAL_STEPS: DESKTOP ENVIRONMENT SELECTION"
-    CURRENT_STEP=9
+    print_header "STEP 11/$TOTAL_STEPS: DESKTOP ENVIRONMENT SELECTION"
+    CURRENT_STEP=11
     
     echo -e "${WHITE}Available environments:${NC}"
     echo -e "${CYAN}1.${NC} KDE Plasma"
@@ -2027,8 +2032,8 @@ select_desktop() {
 }
 
 install_desktop() {
-    print_header "STEP 10/$TOTAL_STEPS: DESKTOP ENVIRONMENT INSTALLATION"
-    CURRENT_STEP=10
+    print_header "STEP 12/$TOTAL_STEPS: DESKTOP ENVIRONMENT INSTALLATION"
+    CURRENT_STEP=12
     
     if [[ "$DE_CHOICE" == "none" ]]; then
         print_info "No desktop environment to install"
@@ -2058,8 +2063,8 @@ install_desktop() {
 
 # Bootloader and theme functions
 configure_grub() {
-    print_header "STEP 11/$TOTAL_STEPS: GRUB CONFIGURATION"
-    CURRENT_STEP=11
+    print_header "STEP 13/$TOTAL_STEPS: GRUB CONFIGURATION"
+    CURRENT_STEP=13
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] GRUB configuration simulation"
@@ -2104,8 +2109,8 @@ EOF
 }
 
 install_fallout_theme() {
-    print_header "STEP 12/$TOTAL_STEPS: GRUB FALLOUT THEME INSTALLATION" # I realize the steps are no longer in order, damn it
-    CURRENT_STEP=12
+    print_header "STEP 14/$TOTAL_STEPS: FALLOUT GRUB THEME INSTALLATION"
+    CURRENT_STEP=14
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Fallout theme installation simulation"
@@ -2156,8 +2161,8 @@ EOF
 
 # Audio and multimedia functions
 install_audio_system() {
-    print_header "STEP 13/$TOTAL_STEPS: PIPEWIRE AUDIO SYSTEM INSTALLATION"
-    CURRENT_STEP=13
+    print_header "STEP 16/$TOTAL_STEPS: PIPEWIRE AUDIO SYSTEM INSTALLATION"
+    CURRENT_STEP=16
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Audio system installation simulation"
@@ -2215,8 +2220,8 @@ EOF
 }
 
 install_boot_sound() { # Boot sound installation is dysfunctional, we'll have to go fuck ourselves
-    print_header "STEP 14/$TOTAL_STEPS: BOOT SOUND BEEP CONFIGURATION"
-    CURRENT_STEP=14
+    print_header "STEP 17/$TOTAL_STEPS: BOOT SOUND CONFIGURATION"
+    CURRENT_STEP=17
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Boot sound installation simulation"
@@ -2226,8 +2231,8 @@ install_boot_sound() { # Boot sound installation is dysfunctional, we'll have to
     mkdir -p /mnt/usr/share/sounds
     
     # Fallout sound download
-    if curl -o /mnt/usr/share/sounds/fallout-bip.mp3 \
-        'https://raw.githubusercontent.com/PapaOursPolaire/arch/refs/heads/Projets/FalloutBip.mp3' 2>/dev/null; then # Maybe it's not compatible with .mp3, try .wav?
+    if curl -o /mnt/usr/share/sounds/boot.wav \
+        'https://raw.githubusercontent.com/PapaOursPolaire/arch/refs/heads/Projets/boot.wav' 2>/dev/null; then # Maybe it's not compatible with .mp3, try .wav?
         
         # Systemd service for MP3 sound
         cat > /mnt/etc/systemd/system/boot-sound.service <<EOF
@@ -2237,7 +2242,7 @@ After=default.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/mpg123 -a pulse /usr/share/sounds/fallout-bip.mp3
+ExecStart=/usr/bin/aplay -q /usr/share/sounds/boot.wav
 RemainAfterExit=true
 
 [Install]
@@ -2309,7 +2314,8 @@ EOF
 }
 
 configure_plymouth() {
-    print_header "STEP $((++CURRENT_STEP))/$TOTAL_STEPS: PLYMOUTH CONFIGURATION"
+    print_header "STEP 18/$TOTAL_STEPS: PLYMOUTH CONFIGURATION"
+    CURRENT_STEP=18
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Plymouth configuration simulation"
@@ -2351,7 +2357,8 @@ EOF
 }
 
 configure_sddm() {
-    print_header "DISPLAY MANAGER CONFIGURATION (SDDM OR GDM DEPENDING ON ENVIRONMENT)"
+    print_header "STEP 19/$TOTAL_STEPS: DISPLAY MANAGER CONFIGURATION"
+    CURRENT_STEP=19
 
     local repo_zip="/root/Projets.zip"
     local extract_dir="/root/arch-Projets"
@@ -2427,8 +2434,8 @@ EOF"
 
 configure_kde_lockscreen() {
     # Lockscreen configuration for KDE only (via KSplash QML)
-    print_header "KDE SPLASH CONFIGURATION (look-and-feel)"
-    CURRENT_STEP=$((CURRENT_STEP+1))
+    print_header "STEP 15/$TOTAL_STEPS: KDE SPLASH CONFIGURATION"
+    CURRENT_STEP=15
 
     # Respect existing global variables, without redeclaring readonly - I'll still put local
     local kde_splash_url="${KDESPLASH_URL:-}"
@@ -2587,7 +2594,8 @@ chmod 440 /etc/sudoers.d/01-pacman-nopasswd
 
 # Functions for installing applications, never worked - REMEMBER TO DELETE IN THE FINAL VERSION
 install_paru() {
-    print_header "INSTALLATION PARU (AUR Helper)"
+    print_header "STEP 24/$TOTAL_STEPS: PARU (AUR HELPER) INSTALLATION"
+    CURRENT_STEP=24
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulating Paru installation"
@@ -2755,8 +2763,8 @@ refresh_mirrors() { # To use if download errors in future variables  # Disabled 
 }
 
 install_development() {
-    print_header "STEP 18/$TOTAL_STEPS: INSTALLING DEVELOPMENT ENVIRONMENT"
-    CURRENT_STEP=18
+    print_header "STEP 25/$TOTAL_STEPS: DEVELOPMENT ENVIRONMENT INSTALLATION"
+    CURRENT_STEP=25
 
     # Check and remove rust installed by pacman to avoid conflict with rustup
     print_info "Checking rust/rustup conflict..."
@@ -2891,7 +2899,8 @@ CHROOT_EOF
 }
 
 install_spotify() {
-    print_header "INSTALLING SPOTIFY + SPICETIFY" # Doesn't work in chroot, available in post-install -> Recap: Spotify (launcher) installed but not the other stuff
+    print_header "STEP 22/$TOTAL_STEPS: SPOTIFY INSTALLATION"
+    CURRENT_STEP=22
 
     # Check that Flatpak is installed in chroot
     if ! chroot_cmd_exists flatpak; then
@@ -3009,8 +3018,8 @@ clean_tmp() { # More effective since version 238.0, to remove in final version
 }
 
 install_wine() {
-    print_header "STEP 21/$TOTAL_STEPS: INSTALLING WINE"
-    CURRENT_STEP=21
+    print_header "STEP 23/$TOTAL_STEPS: WINE INSTALLATION"
+    CURRENT_STEP=23
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulating Wine installation"
@@ -3055,8 +3064,8 @@ EOF
 }
 
 install_software() {
-    print_header "STEP 22/$TOTAL_STEPS: INSTALLING ESSENTIAL SOFTWARE"
-    CURRENT_STEP=22
+    print_header "STEP 20/$TOTAL_STEPS: ESSENTIAL SOFTWARE INSTALLATION"
+    CURRENT_STEP=20
 
     if declare -F clean_tmp >/dev/null; then
         clean_tmp
@@ -3445,8 +3454,8 @@ EOF
 }
 
 install_themes() {
-    print_header "STEP 23/$TOTAL_STEPS: INSTALLING THEMES AND ICONS"
-    CURRENT_STEP=23
+    print_header "STEP 27/$TOTAL_STEPS: THEMES AND ICONS INSTALLATION"
+    CURRENT_STEP=27
     
     if [[ "$DRY_RUN" == true ]] || [[ "$DE_CHOICE" == "none" ]]; then
         print_info "Themes and icons ignored (console mode or dry-run)"
@@ -3553,6 +3562,9 @@ EOF
 }
 
 generate_postinstall() {
+    print_header "STEP 30/$TOTAL_STEPS: POST-INSTALL SCRIPT GENERATION"
+    CURRENT_STEP=30
+
     local U TARGET
     U="${USERNAME:-}"
 
@@ -3963,7 +3975,8 @@ POST_EOF
 
 # Fastfetch runs automatically -> To reexamine, meanwhile proceed with installation via fastfetch.sh available on the repo
 install_fastfetch() {
-    print_header "INSTALLING AND CONFIGURING FASTFETCH"
+    print_header "STEP 28/$TOTAL_STEPS: FASTFETCH INSTALLATION AND CONFIGURATION"
+    CURRENT_STEP=28
 
     if [[ -z "${USERNAME:-}" ]]; then
         print_error "USERNAME not defined. Aborting."
@@ -4079,8 +4092,8 @@ BASHFF
 
 # Functions for final system configuration
 final_config() {
-    print_header "STEP 25/$TOTAL_STEPS: FINAL CONFIGURATION"
-    CURRENT_STEP=25
+    print_header "STEP 29/$TOTAL_STEPS: FINAL CONFIGURATION"
+    CURRENT_STEP=29
     
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulating final configuration"
@@ -4428,7 +4441,8 @@ EOF
 }
 
 finish_install() {
-    print_header "ARCH LINUX FALLOUT EDITION COMPLETE INSTALLATION FINISHED!"
+    print_header "STEP 31/$TOTAL_STEPS: INSTALLATION FINISHED"
+    CURRENT_STEP=31
     
     if [[ "$DRY_RUN" == true ]]; then
         print_success " SIMULATION COMPLETED - No actual modifications made"
@@ -4504,13 +4518,13 @@ finish_install() {
     echo -e "• Fastfetch with Arch logo and custom configuration"
     echo -e "• Complete Bash configuration with aliases and functions"
     echo ""
-    echo -e "${GREEN} V524.5 OPTIMIZATIONS :${NC}"
+    echo -e "${GREEN} V574.5 OPTIMIZATIONS :${NC}"
     echo -e "• Optimized Pacman configuration (ParallelDownloads=10)"
     echo -e "• Optimized mirrors with advanced Reflector"
     echo -e "• Maximized parallel downloads"
     echo -e "• BBR network configuration for maximum performance"
     echo ""
-    echo -e "${GREEN} NEW FEATURES V524.5 :${NC}"
+    echo -e "${GREEN} NEW FEATURES V574.5 :${NC}"
     echo -e "• Custom partition size configuration"
     echo -e "• Optional separate /home partition with Y/N interface"
     echo -e "• Minimum password length reduced to 6 characters"
@@ -4576,14 +4590,14 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Complete installation V524.5! Your Arch Linux system is ready.${NC}"
+        echo -e "${GREEN} Complete installation V574.5! Your Arch Linux system is ready.${NC}"
         echo ""
         echo -e "${CYAN}Once rebooted, execute:${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Post-installation script"
         echo -e "• ${WHITE}fastfetch${NC} - Display system information"
         echo -e "• ${WHITE}cava${NC} - Test audio visualizer"
         echo ""
-        echo -e "${PURPLE} Thank you for using the Arch Linux installation script (version 524.5)${NC}"
+        echo -e "${PURPLE} Thank you for using the Arch Linux installation script (version 574.5)${NC}"
     fi
 }
 
@@ -4603,4 +4617,3 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Explicit exit
     exit 0
 fi
-
