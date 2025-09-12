@@ -11,7 +11,7 @@ fi
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
 # Version: 544.4, correctif 5 de la version 544.4
-# Mise à jour : 12/09/2025 à 19:59
+# Mise à jour : 12/09/2025 à 20:13
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -1932,6 +1932,7 @@ create_users() {
         return 0
     fi
 
+    # Création de l’utilisateur principal
     while true; do
         read -r -p "Nom d'utilisateur principal : " USERNAME
         export USERNAME
@@ -1967,8 +1968,9 @@ mkdir -p /home/"$USERNAME"/{Documents,Téléchargements,Images,Vidéos,Musique,B
 chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"
 EOF
 
-    print_success "Utilisateur créé : $USERNAME"
+    print_success "Utilisateur créé : $USERNAME (avec sudo)"
 
+    # Création d’utilisateurs supplémentaires avec sudo aussi
     if confirm_action "Créer des utilisateurs supplémentaires ?"; then
         while true; do
             local additional_user
@@ -1989,13 +1991,13 @@ EOF
                 done
 
                 /usr/bin/arch-chroot /mnt /bin/bash <<EOF
-useradd -m -G audio,video,storage,optical,network "$additional_user"
+useradd -m -G wheel,audio,video,storage,optical,network "$additional_user"
 echo "$additional_user:$add_password" | chpasswd
 mkdir -p /home/"$additional_user"/{Documents,Téléchargements,Images,Vidéos,Musique,Bureau}
 chown -R "$additional_user":"$additional_user" /home/"$additional_user"
 EOF
 
-                print_success "Utilisateur supplémentaire créé : $additional_user"
+                print_success "Utilisateur supplémentaire créé : $additional_user (avec sudo)"
             else
                 print_warning "Nom d'utilisateur invalide, ignoré"
             fi
