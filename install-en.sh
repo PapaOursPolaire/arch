@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 if ! command -v arch-chroot &>/dev/null; then
@@ -11,7 +10,7 @@ fi
 # Arch Linux automated installation script
 # Made by PapaOursPolaire - available on GitHub
 # Version: 574.5, patch 5 of version 574.5
-# Updated: 09/12/2025 at 7:58 p.m.
+# Updated: 09/12/2025 at 8:13 p.m.
 # GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
 # Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
 # Errors in step 17: do not install paru in the temp
@@ -1935,6 +1934,7 @@ create_users() {
         return 0
     fi
 
+    # Main user creation
     while true; do
         read -r -p "Main username: " USERNAME
         export USERNAME
@@ -1966,12 +1966,13 @@ set -e
 useradd -m -G wheel,audio,video,storage,optical,network "$USERNAME"
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
 echo "root:$USER_PASSWORD" | chpasswd
-mkdir -p /home/"$USERNAME"/{Documents,Téléchargements,Images,Vidéos,Musique,Bureau}
+mkdir -p /home/"$USERNAME"/{Documents,Downloads,Pictures,Videos,Music,Desktop}
 chown -R "$USERNAME":"$USERNAME" /home/"$USERNAME"
 EOF
 
-    print_success "User created: $USERNAME"
+    print_success "User created: $USERNAME (with sudo)"
 
+    # Additional users with sudo too
     if confirm_action "Create additional users?"; then
         while true; do
             local additional_user
@@ -1992,13 +1993,13 @@ EOF
                 done
 
                 /usr/bin/arch-chroot /mnt /bin/bash <<EOF
-useradd -m -G audio,video,storage,optical,network "$additional_user"
+useradd -m -G wheel,audio,video,storage,optical,network "$additional_user"
 echo "$additional_user:$add_password" | chpasswd
-mkdir -p /home/"$additional_user"/{Documents,Téléchargements,Images,Vidéos,Musique,Bureau}
+mkdir -p /home/"$additional_user"/{Documents,Downloads,Pictures,Videos,Music,Desktop}
 chown -R "$additional_user":"$additional_user" /home/"$additional_user"
 EOF
 
-                print_success "Additional user created: $additional_user"
+                print_success "Additional user created: $additional_user (with sudo)"
             else
                 print_warning "Invalid username, ignored"
             fi
