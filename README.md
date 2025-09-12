@@ -22,7 +22,7 @@ Auteur : PapaOursPolaire
         `parted`, `git`, etc.).
     -   Vérifie connexion Internet, UEFI, RAM, espace disque.
     -   Test de vitesse réseau.
-3.  **optimize_pacman_configuration** :
+3.  **optimize_pacman** :
     -   Sauvegarde `pacman.conf` et applique une config optimisée.
     -   Active `ParallelDownloads=10`, `ILoveCandy`.
     -   Utilise `reflector` pour générer la meilleure liste de miroirs.
@@ -44,7 +44,7 @@ Auteur : PapaOursPolaire
 
 ### Phase 3 : Installation système
 
-8.  **install_base_system** : installe via `pacstrap` :
+8.  **install_system** : installe via `pacstrap` :
     -   `base`, `base-devel`, `linux`, `linux-firmware`
     -   `networkmanager`, `sudo`, `grub`, `efibootmgr`, `os-prober`
     -   `vim`, `nano`, `curl`, `wget`, `git`, `unzip`, `p7zip`
@@ -61,8 +61,8 @@ Auteur : PapaOursPolaire
 
 ### Phase 4 : Environnement graphique
 
-11. **select_desktop_environment** : choix KDE Plasma, GNOME ou aucun.
-12. **install_desktop_environment** : installe l'environnement choisi.
+11. **select_desktop** : choix KDE Plasma, GNOME ou aucun.
+12. **install_desktop** : installe l'environnement choisi.
 
 -   KDE : `plasma-meta`, `kde-applications`, `sddm`.
 -   GNOME : `gnome`, `gnome-extra`, `gdm`.
@@ -89,19 +89,19 @@ Auteur : PapaOursPolaire
 
 ### Phase 7 : Logiciels principaux
 
-20. **install_software_packages** :
+20. **install_software** :
 
 -   VLC, MPV, OBS Studio, Audacity.
 -   GIMP, Inkscape.
 -   KeePassXC, GParted, TimeShift.
 
-21. **install_web_browsers** : Firefox, Chromium, Brave, Vivaldi, Opera,
+21. **install_web** : Firefox, Chromium, Brave, Vivaldi, Opera,
     Tor Browser, GNOME Web, Midori, Chrome.
 
-22. **install_spotify_spicetify** : installe Spotify (Flatpak) +
+22. **install_spotify** : installe Spotify (Flatpak) +
     Spicetify + thème Dribbblish Nord Dark.
 
-23. **install_wine_compatibility** : Wine, Winetricks, Wine-mono,
+23. **install_wine** : Wine, Winetricks, Wine-mono,
     Wine-gecko pour compatibilité Windows.
 
 ------------------------------------------------------------------------
@@ -109,7 +109,7 @@ Auteur : PapaOursPolaire
 ### Phase 8 : Développement
 
 24. **install_paru** : installe l'AUR helper `paru`.
-25. **install_development_environment** :
+25. **install_developmentt** :
 
 -   Visual Studio Code + extensions : Python, C++, Java, Tailwind CSS,
     Prettier, ESLint, Jupyter, GitHub Copilot, etc.
@@ -131,8 +131,8 @@ Auteur : PapaOursPolaire
 ### Phase 10 : Finalisation
 
 29. **final_configuration** : nettoie, optimise les services.
-30. *postinstall* : Créée un script shell supplémentaire à éxécuter lors de la première connection à la session pour la finalisation de l'installation logistique.
-31. **finish_installation** : affiche succès, propose reboot.
+30. *generate_postinstall* : Créée un script shell supplémentaire à éxécuter lors de la première connection à la session pour la finalisation de l'installation logistique.
+31. **finish_install** : affiche succès, propose reboot.
 
 ------------------------------------------------------------------------
 
@@ -151,7 +151,7 @@ Auteur : PapaOursPolaire
 ## 📌 Remarques importantes
 
 -   **Nécessite UEFI + Internet stable*.**
--   Installation peut prendre entre **30 à 60 minutes** selon la technologie du disque durr et de la bande passante disponible.
+-   Installation peut prendre entre **15 à 45 minutes** selon l'ancienneté des composants et de la bande passante disponible.
 -   Android Studio peut échouer si
     `kernel.unprivileged_userns_clone=0`.
 -   Log complet disponible dans `/tmp/arch_install_*.log`.
