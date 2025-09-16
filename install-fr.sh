@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 664.4, correctif 4 de la version 664.4
-# Mise à jour : 14/09/2025 à 15:15
+# Version: 674.4, correctif 4 de la version 674.4
+# Mise à jour : 16/09/2025 à 19:02
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="664.4"
+readonly SCRIPT_VERSION="674.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1079,7 +1079,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 664.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 674.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1362,12 +1362,33 @@ choose_partitioning() {
     
     local choice
     while true; do
-        read -r -p "Votre choix (1-3) : " choice
+        read -r -p "Votre choix (1-3): " choice
         case $choice in
             1)
                 print_info "Conservation des partitions existantes"
-                detect_existing_partitions
-                return 0
+                # Sous-menu pour l'option 1
+                echo -e "${WHITE}Sous-options :${NC}"
+                echo -e "${CYAN}a.${NC} Utiliser une partition unique et la diviser"
+                echo -e "${CYAN}b.${NC} Utiliser des partitions existantes déjà créées"
+                local sub_choice
+                while true; do
+                    read -r -p "Votre choix (a/b): " sub_choice
+                    case $sub_choice in
+                        a)
+                            print_info "Utilisation d'une partition unique à diviser"
+                            use_single_partition_and_split
+                            return 0
+                            ;;
+                        b)
+                            print_info "Utilisation de partitions existantes"
+                            detect_existing_partitions
+                            return 0
+                            ;;
+                        *)
+                            print_warning "Choix invalide !"
+                            ;;
+                    esac
+                done
                 ;;
             2)
                 print_info "Création d'un nouveau partitionnement automatique"
@@ -1385,6 +1406,118 @@ choose_partitioning() {
                 ;;
         esac
     done
+}
+
+use_single_partition_and_split() {
+    print_info "Sélection d'une partition unique à diviser"
+    
+    # Détection des partitions disponibles
+    local partitions
+    mapfile -t partitions < <(lsblk -no NAME "$DISK" | grep -E "${DISK##*/}[0-9p]")
+    
+    if [[ ${#partitions[@]} -eq 0 ]]; then
+        print_error "Aucune partition trouvée sur $DISK"
+        return 1
+    fi
+    
+    echo -e "${WHITE}Partitions détectées :${NC}"
+    for i in "${!partitions[@]}"; do
+        local part="/dev/${partitions[i]}"
+        local size=$(lsblk -no SIZE "$part" 2>/dev/null || echo "Inconnu")
+        local fstype=$(lsblk -no FSTYPE "$part" 2>/dev/null || echo "Inconnu")
+        echo -e "${CYAN}$((i + 1)).${NC} $part - $size - $fstype"
+    done
+    
+    local part_choice
+    while true; do
+        read -r -p "Sélectionnez la partition à diviser (numéro) : " part_choice
+        if [[ "$part_choice" =~ ^[0-9]+$ ]] && \
+           [[ "$part_choice" -ge 1 ]] && \
+           [[ "$part_choice" -le "${#partitions[@]}" ]]; then
+            local selected_part="/dev/${partitions[$((part_choice - 1))]}"
+            break
+        fi
+        print_warning "Sélection invalide !"
+    done
+    
+    # Configuration des tailles pour les nouvelles partitions
+    print_info "Configuration des tailles des nouvelles partitions"
+    configure_custom_partitioning
+    
+    # Effacer la partition sélectionnée et créer nouvelle table de partitions
+    print_warning "ATTENTION : Toutes les données sur $selected_part seront effacées !"
+    if ! confirm_action "Confirmer l'effacement de la partition ?"; then
+        return 1
+    fi
+    
+    # Calculer la taille totale disponible
+    local total_size=$(lsblk -bno SIZE "$selected_part" | head -1)
+    local total_size_mb=$((total_size / 1024 / 1024))
+    
+    # Convertir les tailles en MB
+    local efi_mb=$(convert_to_mb "$PARTITION_EFI_SIZE")
+    local root_mb=$(convert_to_mb "$PARTITION_ROOT_SIZE")
+    local swap_mb=0
+    local home_mb=0
+    
+    [[ "$USE_SWAP" == true ]] && swap_mb=$(convert_to_mb "$PARTITION_SWAP_SIZE")
+    [[ "$USE_SEPARATE_HOME" == true ]] && home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE")
+    
+    # Vérifier l'espace disponible
+    local total_required_mb=$((efi_mb + root_mb + swap_mb + home_mb))
+    if [[ $total_required_mb -gt $total_size_mb ]]; then
+        print_error "Espace insuffisant sur la partition !"
+        print_error "Disponible: ${total_size_mb}MB, Requis: ${total_required_mb}MB"
+        return 1
+    fi
+    
+    # Commencer le partitionnement
+    print_info "Début du partitionnement de $selected_part"
+    
+    # Effacer la partition
+    parted -s "$selected_part" rm 1 || {
+        print_error "Impossible de supprimer la partition"
+        return 1
+    }
+    
+    # Créer nouvelle table de partitions
+    parted -s "$selected_part" mklabel gpt || {
+        print_error "Impossible de créer la table de partitions"
+        return 1
+    }
+    
+    # Créer les partitions
+    local current_pos=1
+    
+    # Partition EFI
+    local efi_end=$((current_pos + efi_mb))
+    parted -s "$selected_part" mkpart primary fat32 ${current_pos}MiB ${efi_end}MiB
+    parted -s "$selected_part" set 1 esp on
+    EFI_PART="${selected_part}1"
+    current_pos=$efi_end
+    
+    # Partition Root
+    local root_end=$((current_pos + root_mb))
+    parted -s "$selected_part" mkpart primary ext4 ${current_pos}MiB ${root_end}MiB
+    ROOT_PART="${selected_part}2"
+    current_pos=$root_end
+    
+    # Partition Swap (optionnelle)
+    if [[ "$USE_SWAP" == true ]]; then
+        local swap_end=$((current_pos + swap_mb))
+        parted -s "$selected_part" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB
+        SWAP_PART="${selected_part}3"
+        current_pos=$swap_end
+    fi
+    
+    # Partition Home (optionnelle)
+    if [[ "$USE_SEPARATE_HOME" == true ]]; then
+        parted -s "$selected_part" mkpart primary ext4 ${current_pos}MiB 100%
+        HOME_PART="${selected_part}$((USE_SWAP ? 4 : 3))"
+    fi
+    
+    print_success "Partitionnement terminé"
+    return 0
 }
 
 detect_existing_partitions() {
@@ -2534,7 +2667,7 @@ mkdir -p "$TEMP_DIR"
 
 # Téléchargement du thème lockscreen Fallout
 log_info "Téléchargement du thème lockscreen Fallout..."
-if ! curl -fL -o "$TEMP_DIR/fallout-lockscreen.zip" "https://github.com/PapaOursPolaire/arch/raw/refs/heads/Projets/fallout-lockscreen.zip"; then
+if ! curl -fL -o "$TEMP_DIR/fallout-splashscreen4k.zip" "https://github.com/PapaOursPolaire/arch/blob/Projets/fallout-splashscreen4k.zip"; then
     log_warning "Échec téléchargement, création thème basique Fallout"
     
     # Création d'un thème basique Fallout
@@ -2667,7 +2800,7 @@ QML_EOF
 else
     # Extraction du thème téléchargé
     log_info "Extraction du thème lockscreen..."
-    if ! unzip -o "$TEMP_DIR/fallout-lockscreen.zip" -d "$TEMP_DIR"; then
+    if ! unzip -o "$TEMP_DIR/fallout-splashscreen4k.zip" -d "$TEMP_DIR"; then
         log_error "Échec extraction de l'archive"
     fi
     
@@ -4948,13 +5081,13 @@ finish_install() {
     echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
     echo -e "• Configuration Bash complète avec aliases et fonctions"
     echo ""
-    echo -e "${GREEN} OPTIMISATIONS DE LA V664.4 :${NC}"
+    echo -e "${GREEN} OPTIMISATIONS DE LA V674.4 :${NC}"
     echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
     echo -e "• Miroirs optimisés avec Reflector avancé"
     echo -e "• Téléchargements parallèles maximisés"
     echo -e "• Configuration réseau BBR pour performances maximales"
     echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V664.4 :${NC}"
+    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V674.4 :${NC}"
     echo -e "• Configuration personnalisée des tailles de partitions"
     echo -e "• Partition /home séparée optionnelle avec interface O/N"
     echo -e "• Mot de passe minimum réduit à 6 caractères"
@@ -5020,14 +5153,14 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V664.4 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V674.4 ! Votre système Arch Linux est prêt.${NC}"
         echo ""
         echo -e "${CYAN}Une fois redémarré, exécutez :${NC}"
         echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
         echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
         echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
         echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 664.4)${NC}"
+        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 674.4)${NC}"
     fi
 }
 
