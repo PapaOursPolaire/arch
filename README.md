@@ -1,8 +1,8 @@
-# Script d'installation Arch Linux Fallout Edition (v524.5)
+# Script d'installation Arch Linux Fallout Edition (v674.4)
 
 Ce script automatise l'installation complète d'Arch Linux avec une
 thématisation par défaut Fallout.
-Version : **524.5, correctif 5**
+Version : **674.4, correctif 5**
 
 Auteur : PapaOursPolaire
 
@@ -109,7 +109,7 @@ Auteur : PapaOursPolaire
 ### Phase 8 : Développement
 
 24. **install_paru** : installe l'AUR helper `paru`.
-25. **install_developmentt** :
+25. **install_development** :
 
 -   Visual Studio Code + extensions : Python, C++, Java, Tailwind CSS,
     Prettier, ESLint, Jupyter, GitHub Copilot, etc.
@@ -136,7 +136,7 @@ Auteur : PapaOursPolaire
 
 ------------------------------------------------------------------------
 
-## ⚙️ Particularités de la version 344.2
+## ⚙️ Particularités de la version 674.4
 
 -   Correction des 2358 erreurs ShellCheck.
 -   Partition `/home` séparée optionnelle.
