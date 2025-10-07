@@ -11,7 +11,7 @@ fi
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
 # Version: 694.4, correctif 4 de la version 694.4
-# Mise à jour : 16/09/2025 à 19:02
+# Mise à jour : 07/10/2025 à 21:14
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
