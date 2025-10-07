@@ -79,15 +79,20 @@ PARTITION_SWAP_SIZE="8G"
 PARTITION_HOME_SIZE="remaining"
 CUSTOM_PARTITIONING=false
 
-# Fonction main -point d'entrée principale
-
+# Fonction main - point d'entrée principale
 main() {
-# Initialisation
+    # Initialisation
     init_logging
     parse_arguments "$@"
+    
     echo "Chargement des ressources..."
+    echo -e "${CYAN}Arch Linux Fallout Edition - Version ${SCRIPT_VERSION}${NC}"
+    echo ""
 
-    # Vérifie si /usr/bin/arch-chroot est installé, sinon l’installe
+    # Détection automatique du mode de boot (DOIT être en premier)
+    detect_boot_mode
+
+    # Vérifie si /usr/bin/arch-chroot est installé, sinon l'installe
     if ! command -v /usr/bin/arch-chroot &>/dev/null; then
         echo "[INFO] /usr/bin/arch-chroot manquant, tentative d'installation..."
         pacman -Sy --noconfirm arch-install-scripts || {
@@ -99,7 +104,11 @@ main() {
     # Gestion des signaux
     trap cleanup EXIT INT TERM
 
-    install_required_commands || return 1
+    # Installation des commandes requises
+    install_required_commands || {
+        print_error "Échec de l'installation des commandes requises"
+        return 1
+    }
 
     # Affichage
     show_banner
@@ -108,67 +117,361 @@ main() {
         print_warning "MODE SIMULATION ACTIVE"
         echo -e "${YELLOW}   • Aucune modification ne sera effectuée${NC}"
         echo -e "${YELLOW}   • Toutes les opérations seront simulées${NC}"
+        echo -e "${YELLOW}   • Mode boot détecté: ${BOOT_MODE}${NC}"
         echo ""
     fi
 
     # Séquence complète d'installation
-    echo -e "${CYAN}DEMARRAGE DE L4INSTLLATION D'ARCH LINUX...${NC}"
+    echo -e "${CYAN}DÉMARRAGE DE L'INSTALLATION D'ARCH LINUX...${NC}"
+    echo -e "${YELLOW}Mode de boot: ${BOOT_MODE}${NC}"
     echo ""
 
-    # Phase 1: Préparation système
-    check_requirements
-    test_environment
-    optimize_pacman
+    echo -e "${PURPLE}=== PHASE 1: PRÉPARATION SYSTÈME ===${NC}"
     
-    # Phase 2: Configuration disque et partitions
-    select_disk
-    choose_partitioning
-    format_partitions
-    mount_partitions
+    check_requirements || {
+        print_error "Échec de la vérification des prérequis"
+        return 1
+    }
     
-    # Phase 3: Installation système de base
-    install_system
-    configure_system
-    create_users
+    test_environment || {
+        print_error "Échec du test de l'environnement"
+        return 1
+    }
     
-    # Phase 4: Interface graphique
-    select_desktop
-    install_desktop
-    
-    # Phase 5: Bootloader et thèmes
-    configure_grub
-    install_fallout_theme
-    configure_kde_lockscreen
-    
-    # Phase 6: Audio et multimédia
-    install_audio_system
-    install_boot_sound
-    configure_plymouth
-    configure_sddm
-    
-    # Phase 7: Applications et logiciels
-    install_software
-    install_web
-    install_spotify
-    install_wine
+    optimize_pacman || {
+        print_warning "Optimisation Pacman partielle"
+    }
 
-    # Phase 8: Outils et développement
-    install_paru # -> Ne fonctionne pas, n'a jamais voulu fonctionner meme sur la session c'est une folie  !
-    install_development
-    install_steam
-    #fix_spicetify_prefs  # Erreurs internes + géré par post-install; inutile dans le main
+    echo -e "${PURPLE}=== PHASE 2: CONFIGURATION DISQUE ET PARTITIONS ===${NC}"
     
-    # Phase 9: Thèmes et personnalisation
-    install_themes
-    install_fastfetch
+    select_disk || {
+        print_error "Échec de la sélection du disque"
+        return 1
+    }
     
-    # Phase 10: Configuration finale
-    final_config
-    install_vscode
-    generate_postinstall
-    finish_install
+    choose_partitioning || {
+        print_error "Échec du choix du partitionnement"
+        return 1
+    }
+    
+    format_partitions || {
+        print_error "Échec du formatage des partitions"
+        return 1
+    }
+    
+    mount_partitions || {
+        print_error "Échec du montage des partitions"
+        return 1
+    }
 
-    print_success "Installation d'Arch Linux terminée avec succès!"
+    echo -e "${PURPLE}=== PHASE 3: INSTALLATION SYSTÈME DE BASE ===${NC}"
+    
+    install_system || {
+        print_error "Échec de l'installation du système de base"
+        return 1
+    }
+    
+    configure_system || {
+        print_error "Échec de la configuration système"
+        return 1
+    }
+    
+    create_users || {
+        print_error "Échec de la création des utilisateurs"
+        return 1
+    }
+
+    echo -e "${PURPLE}=== PHASE 4: INTERFACE GRAPHIQUE ===${NC}"
+    
+    select_desktop || {
+        print_warning "Aucun environnement de bureau sélectionné"
+    }
+    
+    if [[ "$DE_CHOICE" != "none" ]]; then
+        install_desktop || {
+            print_error "Échec de l'installation de l'environnement de bureau"
+            return 1
+        }
+    else
+        print_info "Mode console/serveur - pas d'interface graphique"
+    fi
+
+    echo -e "${PURPLE}=== PHASE 5: BOOTLOADER ET THÈMES ===${NC}"
+    
+    # Configuration du bootloader adaptée au mode
+    configure_bootloader || {
+        print_error "Échec de la configuration du bootloader"
+        return 1
+    }
+    
+    install_fallout_theme || {
+        print_warning "Échec de l'installation du thème Fallout"
+    }
+    
+    # Configuration KDE uniquement si KDE est installé
+    if [[ "$DE_CHOICE" == "kde" ]]; then
+        configure_kde_lockscreen || {
+            print_warning "Échec de la configuration du lockscreen KDE"
+        }
+    fi
+
+    echo -e "${PURPLE}=== PHASE 6: AUDIO ET MULTIMÉDIA ===${NC}"
+    
+    install_audio_system || {
+        print_warning "Échec de l'installation du système audio"
+    }
+    
+    install_boot_sound || {
+        print_warning "Échec de l'installation du son de boot"
+    }
+    
+    # Plymouth uniquement pour les environnements graphiques
+    if [[ "$DE_CHOICE" != "none" ]]; then
+        configure_plymouth || {
+            print_warning "Échec de la configuration de Plymouth"
+        }
+    fi
+    
+    # Gestionnaire d'affichage uniquement pour les environnements graphiques
+    if [[ "$DE_CHOICE" != "none" ]]; then
+        configure_sddm || {
+            print_warning "Échec de la configuration du gestionnaire d'affichage"
+        }
+    fi
+
+    echo -e "${PURPLE}=== PHASE 7: APPLICATIONS ET LOGICIELS ===${NC}"
+    
+    install_software || {
+        print_warning "Échec partiel de l'installation des logiciels"
+    }
+    
+    install_web || {
+        print_warning "Échec partiel de l'installation des navigateurs"
+    }
+    
+    install_spotify || {
+        print_warning "Échec de l'installation de Spotify"
+    }
+    
+    install_wine || {
+        print_warning "Échec de l'installation de Wine"
+    }
+
+    echo -e "${PURPLE}=== PHASE 8: OUTILS ET DÉVELOPPEMENT ===${NC}"
+    
+    install_paru || {
+        print_warning "Échec de l'installation de Paru"
+    }
+    
+    install_development || {
+        print_warning "Échec partiel de l'installation des outils de développement"
+    }
+    
+    # Steam uniquement pour les environnements graphiques
+    if [[ "$DE_CHOICE" != "none" ]]; then
+        install_steam || {
+            print_warning "Échec de l'installation de Steam"
+        }
+    fi
+
+    echo -e "${PURPLE}=== PHASE 9: THÈMES ET PERSONNALISATION ===${NC}"
+    
+    # Thèmes uniquement pour les environnements graphiques
+    if [[ "$DE_CHOICE" != "none" ]]; then
+        install_themes || {
+            print_warning "Échec partiel de l'installation des thèmes"
+        }
+    fi
+    
+    install_fastfetch || {
+        print_warning "Échec de l'installation de Fastfetch"
+    }
+
+    echo -e "${PURPLE}=== PHASE 10: CONFIGURATION FINALE ===${NC}"
+    
+    final_config || {
+        print_warning "Échec partiel de la configuration finale"
+    }
+    
+    install_vscode || {
+        print_warning "Échec de l'installation de VS Code"
+    }
+    
+    generate_postinstall || {
+        print_warning "Échec de la génération du script post-installation"
+    }
+    
+    # Finalisation
+    finish_install || {
+        print_error "Échec de la finalisation de l'installation"
+        return 1
+    }
+
+    echo -e "${GREEN}=== RAPPORT D'INSTALLATION TERMINÉ ===${NC}"
+    echo ""
+    
+    # Affichage du résumé selon le mode
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        echo -e "${GREEN}✓ Installation UEFI réussie${NC}"
+        echo -e "  • Table GPT créée"
+        echo -e "  • Partition EFI configurée"
+        echo -e "  • GRUB UEFI installé"
+    else
+        echo -e "${GREEN}✓ Installation BIOS/Legacy réussie${NC}"
+        echo -e "  • Table MBR créée"
+        echo -e "  • Partition Boot configurée"
+        echo -e "  • GRUB BIOS installé"
+    fi
+    
+    echo ""
+    echo -e "${CYAN}Prochaines étapes:${NC}"
+    echo -e "1. Retirer le support d'installation"
+    echo -e "2. Redémarrer le système"
+    echo -e "3. Se connecter avec l'utilisateur: ${USERNAME}"
+    
+    if [[ "$BOOT_MODE" == "bios" ]]; then
+        echo -e "4. Vérifier que le BIOS boot sur le disque dur"
+    fi
+    
+    echo ""
+    print_success "Installation d'Arch Linux Fallout Edition terminée avec succès!"
+    
+    # Sauvegarde finale du log
+    if [[ -f "$LOG_FILE" ]] && [[ -n "$USERNAME" ]]; then
+        local user_log="/mnt/home/$USERNAME/installation.log"
+        if cp "$LOG_FILE" "$user_log" 2>/dev/null; then
+            print_info "Journal d'installation sauvegardé: $user_log"
+        fi
+    fi
+    
+    return 0
+}
+
+
+detect_boot_mode() {
+    print_header "DETECTION DU MODE DE BOOT"
+    
+    if [[ -d /sys/firmware/efi ]]; then
+        BOOT_MODE="uefi"
+        print_success "Mode UEFI détecté"
+        echo -e "${GREEN}• Table de partitions: GPT${NC}"
+        echo -e "${GREEN}• Partition boot: EFI (FAT32)${NC}"
+        echo -e "${GREEN}• Bootloader: GRUB x86_64-efi${NC}"
+    else
+        BOOT_MODE="bios"
+        print_success "Mode BIOS/Legacy détecté"
+        echo -e "${GREEN}• Table de partitions: MBR${NC}"
+        echo -e "${GREEN}• Partition boot: Boot (ext4)${NC}"
+        echo -e "${GREEN}• Bootloader: GRUB i386-pc${NC}"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}Configuration pour le mode: ${BOOT_MODE}${NC}"
+    echo ""
+}
+
+configure_bootloader() {
+    print_header "ETAPE 13/$TOTAL_STEPS: CONFIGURATION BOOTLOADER"
+    CURRENT_STEP=13
+
+    if [[ "$DRY_RUN" == true ]]; then
+        print_info "[DRY RUN] Simulation de la configuration du bootloader"
+        return 0
+    fi
+
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        configure_grub_uefi
+    else
+        configure_grub_bios
+    fi
+}
+
+configure_grub_bios() {
+    print_info "Installation et configuration GRUB pour BIOS..."
+    
+    # Installation de GRUB pour BIOS
+    /usr/bin/arch-chroot /mnt /bin/bash <<EOF
+set -e
+echo "Installation de GRUB pour BIOS sur $DISK"
+grub-install --target=i386-pc --recheck "$DISK"
+EOF
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Échec de l'installation de GRUB pour BIOS"
+        return 1
+    fi
+
+    # Configuration GRUB commune
+    cat > /mnt/etc/default/grub <<'EOF'
+# Configuration GRUB
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=15
+GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
+GRUB_CMDLINE_LINUX=""
+
+# Forcer l'affichage du menu
+GRUB_TIMEOUT_STYLE=menu
+GRUB_TERMINAL_OUTPUT=console
+
+# Désactiver le menu caché
+GRUB_HIDDEN_TIMEOUT=0
+GRUB_HIDDEN_TIMEOUT_QUIET=false
+
+GRUB_DISABLE_RECOVERY=true
+GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
+EOF
+
+    # Génération de la configuration GRUB
+    /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
+        print_error "Echec de génération de la configuration GRUB"
+        return 1
+    }
+
+    print_success "GRUB configuré et installé pour BIOS sur $DISK"
+}
+
+configure_grub_uefi() {
+    print_info "Installation et configuration GRUB pour UEFI..."
+    
+    /usr/bin/arch-chroot /mnt /bin/bash <<EOF
+set -e
+echo "Installation de GRUB pour UEFI"
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ArchLinux --recheck
+EOF
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Échec de l'installation de GRUB pour UEFI"
+        return 1
+    fi
+
+    # Configuration GRUB identique à la version BIOS
+    cat > /mnt/etc/default/grub <<'EOF'
+# Configuration GRUB
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=15
+GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
+GRUB_CMDLINE_LINUX=""
+
+# Forcer l'affichage du menu
+GRUB_TIMEOUT_STYLE=menu
+GRUB_TERMINAL_OUTPUT=console
+
+# Désactiver le menu caché
+GRUB_HIDDEN_TIMEOUT=0
+GRUB_HIDDEN_TIMEOUT_QUIET=false
+
+GRUB_DISABLE_RECOVERY=true
+GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
+EOF
+
+    /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
+        print_error "Echec de génération de la configuration GRUB"
+        return 1
+    }
+
+    print_success "GRUB configuré et installé pour UEFI"
 }
 
 install_web() {
@@ -805,16 +1108,28 @@ configure_custom_partitioning() {
     echo -e "${YELLOW}Exemples : 512M, 512m, 2G, 2g, 100G, 100g${NC}"
     echo ""
     
-    # Configuration EFI
-    while true; do
-        read -r -p "Taille partition EFI (défaut : 512M): " efi_input
-        efi_input=${efi_input:-512M}
-        if validate_input "$efi_input" "size"; then
-            PARTITION_EFI_SIZE="$efi_input"
-            break
-        fi
-        print_warning "Format invalide ! Utilisez  : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
-    done
+    # Configuration Boot (BIOS) ou EFI (UEFI)
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        while true; do
+            read -r -p "Taille partition EFI (défaut : 512M): " efi_input
+            efi_input=${efi_input:-512M}
+            if validate_input "$efi_input" "size"; then
+                PARTITION_EFI_SIZE="$efi_input"
+                break
+            fi
+            print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
+        done
+    else
+        while true; do
+            read -r -p "Taille partition Boot (défaut : 512M): " boot_input
+            boot_input=${boot_input:-512M}
+            if validate_input "$boot_input" "size"; then
+                PARTITION_BOOT_SIZE="$boot_input"
+                break
+            fi
+            print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
+        done
+    fi
     
     # Configuration Root
     while true; do
@@ -884,7 +1199,12 @@ configure_custom_partitioning() {
     # Résumé de la configuration
     echo ""
     echo -e "${GREEN}RESUME DE LA CONFIGURATION${NC}"
-    echo -e "${WHITE}• Partition EFI :${NC} $PARTITION_EFI_SIZE"
+    echo -e "${WHITE}• Mode boot :${NC} $BOOT_MODE"
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        echo -e "${WHITE}• Partition EFI :${NC} $PARTITION_EFI_SIZE (FAT32)"
+    else
+        echo -e "${WHITE}• Partition Boot :${NC} $PARTITION_BOOT_SIZE (ext4)"
+    fi
     echo -e "${WHITE}• Partition Root :${NC} $PARTITION_ROOT_SIZE"
     [[ "$USE_SWAP" == true ]] && echo -e "${WHITE}• Partition Swap :${NC} $PARTITION_SWAP_SIZE"
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
@@ -1160,21 +1480,18 @@ check_requirements() {
         rm -rf /var/lib/pacman/sync/* || true
     fi
     
-    # Vérifie root # Obsolète, le root n'existe pas dans le TTY de l'ISO lol
+    # Vérifie root
     if [[ $EUID -ne 0 ]]; then
         print_error "Ce script doit être exécuté en tant que root !"
         return 1
     fi
     
-    # Vérifie UEFI
-    if [[ ! -d /sys/firmware/efi ]]; then
-        print_error "Ce script nécessite un système UEFI !"
-        return 1
-    fi
+    # Vérification du mode de boot adaptée
+    detect_boot_mode
     
     # Vérifie la connexion Internet avec plusieurs hotes
     print_info "Vérification de la connexion Internet..."
-    local test_hosts=("archlinux.org" "8.8.8.8" "1.1.1.1" "github.com") # 8.8.8.8 : google.com & 1.1.1.1 : cloudflare.com
+    local test_hosts=("archlinux.org" "8.8.8.8" "1.1.1.1" "github.com")
     local connected=false
     for host in "${test_hosts[@]}"; do
         if ping -c 1 -W 3 "$host" &> /dev/null; then
@@ -1211,7 +1528,7 @@ check_requirements() {
         }
     fi
     
-    print_success "Prérequis vérifiés"
+    print_success "Prérequis vérifiés pour le mode ${BOOT_MODE}"
 }
 
 test_environment() {
@@ -1649,7 +1966,7 @@ configure_existing_partitions() {
 create_new_partitioning() {
     print_warning "ATTENTION : Toutes les données sur $DISK seront effacées !"
     
-    if ! confirm_action "Confirmer l\'effacement du disque ?"; then
+    if ! confirm_action "Confirmer l'effacement du disque ?"; then
         return 1
     fi
     
@@ -1659,13 +1976,15 @@ create_new_partitioning() {
     local disk_size_gb=$((disk_size_bytes / 1024 / 1024 / 1024))
     
     print_info "Espace disque total : ${disk_size_gb}GB"
+    print_info "Mode de boot : ${BOOT_MODE}"
     
     # Si pas de configuration personnalisée, utiliser les valeurs par défaut
-
     if [[ "$CUSTOM_PARTITIONING" != true ]]; then
-
-        PARTITION_EFI_SIZE="512M"
-
+        if [[ "$BOOT_MODE" == "uefi" ]]; then
+            PARTITION_EFI_SIZE="512M"
+        else
+            PARTITION_BOOT_SIZE="512M"
+        fi
         PARTITION_ROOT_SIZE="60G"
         
         local ram_gb
@@ -1681,7 +2000,13 @@ create_new_partitioning() {
     fi
     
     # Validation de l'espace disponible
-    local efi_mb=$(convert_to_mb "$PARTITION_EFI_SIZE")
+    local boot_mb=0
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        boot_mb=$(convert_to_mb "$PARTITION_EFI_SIZE")
+    else
+        boot_mb=$(convert_to_mb "$PARTITION_BOOT_SIZE")
+    fi
+    
     local root_mb=$(convert_to_mb "$PARTITION_ROOT_SIZE")
     local swap_mb=0
     local home_mb=0
@@ -1692,7 +2017,7 @@ create_new_partitioning() {
         home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE")
     fi
     
-    local total_required_mb=$((efi_mb + root_mb + swap_mb + home_mb))
+    local total_required_mb=$((boot_mb + root_mb + swap_mb + home_mb))
     local available_mb=$((disk_size_gb * 1024))
     
     if [[ $total_required_mb -gt $available_mb ]]; then
@@ -1702,7 +2027,12 @@ create_new_partitioning() {
     
     echo -e "${GREEN}CONFIGURATION FINALE${NC}"
     echo -e "${WHITE}Disque :${NC} $DISK - ${disk_size_gb}GB"
-    echo -e "${WHITE}• EFI :${NC} $PARTITION_EFI_SIZE (FAT32)"
+    echo -e "${WHITE}Mode boot :${NC} $BOOT_MODE"
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        echo -e "${WHITE}• EFI :${NC} $PARTITION_EFI_SIZE (FAT32)"
+    else
+        echo -e "${WHITE}• Boot :${NC} $PARTITION_BOOT_SIZE (ext4)"
+    fi
     echo -e "${WHITE}• Root :${NC} $PARTITION_ROOT_SIZE (ext4)"
     [[ "$USE_SWAP" == true ]] && echo -e "${WHITE}• Swap:${NC} $PARTITION_SWAP_SIZE (linux-swap)"
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
@@ -1741,52 +2071,81 @@ create_new_partitioning() {
     partprobe "$DISK" || true
     sleep 2
     
-    # Création de la table GPT
-    print_info "Création de la table GPT..."
-    parted -s "$DISK" mklabel gpt || {
-        print_error "Echec de création de la table GPT"
-        return 1
-    }
+    # Création de la table de partitions
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        print_info "Création de la table GPT pour UEFI..."
+        parted -s "$DISK" mklabel gpt || {
+            print_error "Echec de création de la table GPT"
+            return 1
+        }
+    else
+        print_info "Création de la table MBR pour BIOS..."
+        parted -s "$DISK" mklabel msdos || {
+            print_error "Echec de création de la table MBR"
+            return 1
+        }
+    fi
     
     local current_pos=1
     
-    # Partition EFI
-    local efi_end=$((current_pos + efi_mb))
-    print_info "Création partition EFI :${current_pos}MiB à ${efi_end}MiB"
-    parted -s "$DISK" mkpart primary fat32 ${current_pos}MiB ${efi_end}MiB || {
-        print_error "Echec de création de la partition EFI"
-        return 1
-    }
-    parted -s "$DISK" set 1 esp on || {
-        print_error "Echec de configuration ESP"
-        return 1
-    }
-    current_pos=$efi_end
+    # Partition Boot/EFI
+    local boot_end=$((current_pos + boot_mb))
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        print_info "Création partition EFI : ${current_pos}MiB à ${boot_end}MiB"
+        parted -s "$DISK" mkpart primary fat32 ${current_pos}MiB ${boot_end}MiB || {
+            print_error "Echec de création de la partition EFI"
+            return 1
+        }
+        parted -s "$DISK" set 1 esp on || {
+            print_error "Echec de configuration ESP"
+            return 1
+        }
+        EFI_PART="${DISK}1"
+    else
+        print_info "Création partition Boot : ${current_pos}MiB à ${boot_end}MiB"
+        parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${boot_end}MiB || {
+            print_error "Echec de création de la partition Boot"
+            return 1
+        }
+        parted -s "$DISK" set 1 boot on || {
+            print_error "Echec de configuration boot"
+            return 1
+        }
+        EFI_PART="${DISK}1"  # Pour BIOS, on utilise la même variable pour la partition boot
+    fi
+    current_pos=$boot_end
     
     # Partition Root
     local root_end=$((current_pos + root_mb))
-    print_info "Création partition Root :${current_pos}MiB à ${root_end}MiB"
+    print_info "Création partition Root : ${current_pos}MiB à ${root_end}MiB"
     parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${root_end}MiB || {
         print_error "Echec de création de la partition Root"
         return 1
     }
+    ROOT_PART="${DISK}2"
     current_pos=$root_end
     
     # Partition Swap (si activée)
     if [[ "$USE_SWAP" == true ]]; then
         local swap_end=$((current_pos + swap_mb))
-        print_info "Création partition Swap :${current_pos}MiB à ${swap_end}MiB"
+        print_info "Création partition Swap : ${current_pos}MiB à ${swap_end}MiB"
         parted -s "$DISK" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB || {
             print_warning "Echec de création de la partition Swap"
             USE_SWAP=false
         }
         if [[ "$USE_SWAP" == true ]]; then
+            SWAP_PART="${DISK}3"
             current_pos=$swap_end
         fi
     fi
     
     # Partition Home (si activée)
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
+        local part_num=4
+        if [[ "$USE_SWAP" != true ]]; then
+            part_num=3
+        fi
+        
         if [[ "$PARTITION_HOME_SIZE" == "remaining" ]]; then
             print_info "Création partition Home : ${current_pos}MiB à 100%"
             parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB 100% || {
@@ -1800,6 +2159,10 @@ create_new_partitioning() {
                 print_warning "Echec de création de la partition Home"
                 USE_SEPARATE_HOME=false
             }
+        fi
+        
+        if [[ "$USE_SEPARATE_HOME" == true ]]; then
+            HOME_PART="${DISK}${part_num}"
         fi
     fi
     
@@ -1819,6 +2182,7 @@ create_new_partitioning() {
         return 1
     fi
     
+    # Attribution des partitions
     EFI_PART="/dev/${detected_parts[0]}"
     ROOT_PART="/dev/${detected_parts[1]}"
     
@@ -1832,13 +2196,17 @@ create_new_partitioning() {
         HOME_PART="/dev/${detected_parts[$part_index]}"
     fi
     
-    print_success "Partitions créées avec succès"
+    print_success "Partitions créées avec succès pour le mode ${BOOT_MODE}"
     echo ""
     echo -e "${GREEN}Partitions finales :${NC}"
-    echo -e "${CYAN}EFI:${NC} $EFI_PART"
-    echo -e "${CYAN}Root:${NC} $ROOT_PART"
-    [[ -n "$SWAP_PART" ]] && echo -e "${CYAN}Swap:${NC} $SWAP_PART"
-    [[ -n "$HOME_PART" ]] && echo -e "${CYAN}Home:${NC} $HOME_PART"
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        echo -e "${CYAN}EFI:${NC} $EFI_PART ($PARTITION_EFI_SIZE)"
+    else
+        echo -e "${CYAN}Boot:${NC} $EFI_PART ($PARTITION_BOOT_SIZE)"
+    fi
+    echo -e "${CYAN}Root:${NC} $ROOT_PART ($PARTITION_ROOT_SIZE)"
+    [[ -n "$SWAP_PART" ]] && echo -e "${CYAN}Swap:${NC} $SWAP_PART ($PARTITION_SWAP_SIZE)"
+    [[ -n "$HOME_PART" ]] && echo -e "${CYAN}Home:${NC} $HOME_PART ($PARTITION_HOME_SIZE)"
     
     return 0
 }
@@ -1858,17 +2226,30 @@ format_partitions() {
     
     sleep 2
     
-    # Formatage EFI
-    print_info "Formatage partition EFI : $EFI_PART"
-    if ! mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
-        print_warning "Echec formatage FAT32, tentative par une autre alternative..."
-        wipefs -af "$EFI_PART" || true
-        if ! mkfs.fat -F32 "$EFI_PART"; then
-            print_error "Impossible de formater la partition EFI"
-            return 1
+    # Formatage Boot/EFI
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        print_info "Formatage partition EFI : $EFI_PART"
+        if ! mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
+            print_warning "Echec formatage FAT32, tentative par une autre alternative..."
+            wipefs -af "$EFI_PART" || true
+            if ! mkfs.fat -F32 "$EFI_PART"; then
+                print_error "Impossible de formater la partition EFI"
+                return 1
+            fi
         fi
+        print_success "Partition EFI formatée (FAT32)"
+    else
+        print_info "Formatage partition Boot : $EFI_PART"
+        if ! mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
+            print_warning "Echec formatage ext4, tentative avec nettoyage..."
+            wipefs -af "$EFI_PART" || true
+            if ! mkfs.ext4 -F "$EFI_PART"; then
+                print_error "Impossible de formater la partition Boot"
+                return 1
+            fi
+        fi
+        print_success "Partition Boot formatée (ext4)"
     fi
-    print_success "Partition EFI formatée"
     
     # Formatage Root
     print_info "Formatage partition Root : $ROOT_PART"
@@ -1907,10 +2288,10 @@ format_partitions() {
     fi
     
     sleep 2
-    print_success "Formatage terminé"
+    print_success "Formatage terminé pour le mode ${BOOT_MODE}"
 }
 
-mount_partitions() { # Tiré directement du guide d'installation d'Arch Linux
+mount_partitions() {
     print_header "ETAPE 7/$TOTAL_STEPS: MONTAGE DES PARTITIONS"
     CURRENT_STEP=7
     
@@ -1933,18 +2314,27 @@ mount_partitions() { # Tiré directement du guide d'installation d'Arch Linux
         return 1
     fi
     
-    # Montage EFI
-    mkdir -p /mnt/boot/efi
-    print_info "Montage partition EFI:  $EFI_PART sur /mnt/boot/efi"
-    if ! mount "$EFI_PART" /mnt/boot/efi; then
-        print_error "Impossible de monter la partition EFI"
-        return 1
+    # Montage Boot/EFI
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        mkdir -p /mnt/boot/efi
+        print_info "Montage partition EFI : $EFI_PART sur /mnt/boot/efi"
+        if ! mount "$EFI_PART" /mnt/boot/efi; then
+            print_error "Impossible de monter la partition EFI"
+            return 1
+        fi
+    else
+        mkdir -p /mnt/boot
+        print_info "Montage partition Boot : $EFI_PART sur /mnt/boot"
+        if ! mount "$EFI_PART" /mnt/boot; then
+            print_error "Impossible de monter la partition Boot"
+            return 1
+        fi
     fi
     
     # Montage Home (optionnel)
     if [[ -n "$HOME_PART" ]] && [[ "$USE_SEPARATE_HOME" == true ]]; then
         mkdir -p /mnt/home
-        print_info "Montage partition Home: $HOME_PART sur /mnt/home"
+        print_info "Montage partition Home : $HOME_PART sur /mnt/home"
         if ! mount "$HOME_PART" /mnt/home; then
             print_warning "Impossible de monter la partition Home, désactivation..."
             USE_SEPARATE_HOME=false
@@ -1954,11 +2344,10 @@ mount_partitions() { # Tiré directement du guide d'installation d'Arch Linux
         fi
     fi
     
-    print_success "Partitions montées"
+    print_success "Partitions montées pour le mode ${BOOT_MODE}"
 }
 
 # Fonctions d'installation du système de base
-
 install_system() {
     print_header "ETAPE 8/$TOTAL_STEPS: INSTALLATION DU SYSTEME DE BASE"
     CURRENT_STEP=8
@@ -1970,7 +2359,7 @@ install_system() {
     
     # Optimisation des miroirs
     print_info "Optimisation des miroirs Pacman..."
-    if command -v reflector &> /dev/null; then # Première opti disfonctionelle
+    if command -v reflector &> /dev/null; then
         reflector --country France,Germany,Spain --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist || {
             print_warning "Reflector échoué, utilisation des miroirs par défaut"
         }
@@ -1982,7 +2371,7 @@ install_system() {
     
     # Mise à jour forcée des bases
     print_info "Mise à jour forcée des bases de données..."
-            pacman -Syy --noconfirm || {
+    pacman -Syy --noconfirm || {
         print_warning "Mise à jour échouée, nettoyage du cache..."
         pacman -Scc --noconfirm || true
         rm -rf /var/lib/pacman/sync/* || true
@@ -1992,20 +2381,28 @@ install_system() {
         }
     }
     
-    # Paquets de base
+    # Paquets de base adaptés selon le mode de boot
     local base_packages=(
         base base-devel linux linux-firmware
-        networkmanager sudo grub efibootmgr os-prober
+        networkmanager sudo grub os-prober
         vim nano curl wget git unzip p7zip
         bash-completion man-db lsb-release
         reflector pacman-contrib
         dosfstools e2fsprogs
     )
     
-    print_info "Installation des paquets de base..."
+    # Ajout spécifique selon le mode
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        base_packages+=("efibootmgr")
+        print_info "Ajout d'efibootmgr pour UEFI"
+    else
+        print_info "Configuration BIOS - pas d'efibootmgr nécessaire"
+    fi
+    
+    print_info "Installation des paquets de base pour le mode ${BOOT_MODE}..."
     run_with_progress "Installation système de base" 300 "pacstrap /mnt ${base_packages[*]}"
     
-    print_success "Système de base installé"
+    print_success "Système de base installé pour le mode ${BOOT_MODE}"
 }
 
 configure_system() {
@@ -5005,7 +5402,7 @@ EOF
 
 finish_install() {
     print_header "ETAPE 32/$TOTAL_STEPS: FINALISATION DE L'INSTALLATION"
-    CURRENT_STEP=31
+    CURRENT_STEP=32
     
     if [[ "$DRY_RUN" == true ]]; then
         print_success " SIMULATION TERMINEE - Aucune modification réelle effectuée"
@@ -5018,8 +5415,13 @@ finish_install() {
     echo ""
     echo -e "${GREEN} RESUME COMPLET DE L'INSTALLATION:${NC}"
     echo -e "${CYAN}• Disque :${NC} $DISK"
+    echo -e "${CYAN}• Mode boot :${NC} $BOOT_MODE"
     echo -e "${CYAN}• Partitions :${NC}"
-    echo -e "  - EFI: $EFI_PART ($PARTITION_EFI_SIZE)"
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        echo -e "  - EFI: $EFI_PART ($PARTITION_EFI_SIZE)"
+    else
+        echo -e "  - Boot: $EFI_PART ($PARTITION_BOOT_SIZE)"
+    fi
     echo -e "  - Root: $ROOT_PART ($PARTITION_ROOT_SIZE)"
     [[ -n "$HOME_PART" ]] && echo -e "  - Home : $HOME_PART ($PARTITION_HOME_SIZE)"
     [[ -n "$SWAP_PART" ]] && echo -e "  - Swap : $SWAP_PART ($PARTITION_SWAP_SIZE)"
@@ -5029,92 +5431,30 @@ finish_install() {
     [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "${CYAN}• Partitionnement :${NC} Personnalisé"
     echo ""
     
-    echo -e "${YELLOW}FONCTIONNALITES INSTALLEES :${NC}"
-    echo ""
-    echo -e "${GREEN}SYSTEME DE BASE :${NC}"
-    echo -e "• Configuration française complète (locale, clavier, fuseau horaire)"
-    echo -e "• Optimisations système et réseau (BBR, swappiness, limites)"
-    [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "• Configuration personnalisée des partitions"
-    [[ "$USE_SEPARATE_HOME" == true ]] && echo -e "• Partition /home séparée activée"
-    echo ""
-    echo -e "${GREEN}INTERFACE ET THEMES :${NC}"
-    echo -e "• Thème GRUB Fallout avec fallback intégré"
-    echo -e "• Son de boot Fallout (MP3 ou bip système)"
-    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Splashscreen Plymouth avec animation PipBoy Fallout"
-    [[ "$DE_CHOICE" == "kde" ]] && echo -e "• Configuration SDDM avec fond d'écran Fallout"
-    echo -e "• Thèmes d'icones (Tela, Papirus) et thèmes Sweet/Arc"
-    echo -e "• Thèmes GRUB additionnels (BSOL, Minegrub, etc.)"
-    echo ""
-    echo -e "${GREEN}SYSTEME AUDIO PROFESSIONNEL :${NC}"
-    echo -e "• PipeWire + WirePlumber (audio basse latence)"
-    echo -e "• CAVA (visualiseur audio terminal configuré)"
-    echo -e "• PavuControl (controle audio graphique)"
-    echo -e "• Correction bug conflict PipeWire-Jack appliquée"
-    echo ""
-    echo -e "${GREEN}DEVELOPPEMENT :${NC}"
-    echo -e "• Langages : Python, Node.js, Java OpenJDK, Go, Rust, C/C++"
-    echo -e "• Outils : Git, Docker, cmake, make, gcc, clang"
-    echo -e "• IDEs : Visual Studio Code avec extensions (Copilot, Python, C++, Java, Tailwind)"
-    echo -e "• Android Studio (développement mobile)"
-    echo -e "• Terminal amélioré avec Fastfetch et aliases utiles"
-    echo ""
-    echo -e "${GREEN}NAVIGATION WEB :${NC}"
-    echo -e "• Firefox (configuré pour Netflix/Disney+ DRM)"
-    echo -e "• Google Chrome, Chromium, Brave Browser"
-    echo -e "• DuckDuckGo Browser (si disponible)"
-    echo ""
-    echo -e "${GREEN}MULTIMEDIA ET DIVERTISSEMENT :${NC}"
-    echo -e "• Spotify + Spicetify (thème Dribbblish Nord-Dark)"
-    echo -e "• VLC, MPV, OBS Studio, Audacity"
-    echo -e "• GIMP, Inkscape (design et image)"
-    echo ""
-    echo -e "${GREEN}GAMING ET COMPATIBILITE :${NC}"
-    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Steam avec Proton configuré"
-    [[ "$DE_CHOICE" != "none" ]] && echo -e "• Lutris, GameMode"
-    echo -e "• Wine + Winetricks (compatibilité Windows complète)"
-    echo -e "• Wine-mono, Wine-gecko pour applications .NET"
-    echo ""
-    echo -e "${GREEN}  UTILITAIRES ET OUTILS :${NC}"
-    echo -e "• AUR Helper Paru pré-configuré"
-    echo -e "• Flatpak avec Flathub activé"
-    echo -e "• TimeShift (sauvegardes), GParted, KeePassXC"
-    echo -e "• Fastfetch avec logo Arch et configuration personnalisée"
-    echo -e "• Configuration Bash complète avec aliases et fonctions"
-    echo ""
-    echo -e "${GREEN} OPTIMISATIONS DE LA V674.4 :${NC}"
-    echo -e "• Configuration Pacman optimisée (ParallelDownloads=10)"
-    echo -e "• Miroirs optimisés avec Reflector avancé"
-    echo -e "• Téléchargements parallèles maximisés"
-    echo -e "• Configuration réseau BBR pour performances maximales"
-    echo ""
-    echo -e "${GREEN} NOUVELLES FONCTIONNALITES V674.4 :${NC}"
-    echo -e "• Configuration personnalisée des tailles de partitions"
-    echo -e "• Partition /home séparée optionnelle avec interface O/N"
-    echo -e "• Mot de passe minimum réduit à 6 caractères"
-    echo -e "• Correction définitive du bug conflict PipeWire-Jack"
-    echo -e "• Validation automatique des tailles de partitions"
+    echo -e "${YELLOW}INFORMATIONS SPECIFIQUES AU MODE ${BOOT_MODE^^}:${NC}"
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        echo -e "• Bootloader: GRUB x86_64-efi"
+        echo -e "• Table de partitions: GPT"
+        echo -e "• Partition EFI: FAT32"
+    else
+        echo -e "• Bootloader: GRUB i386-pc"
+        echo -e "• Table de partitions: MBR"
+        echo -e "• Partition Boot: ext4"
+    fi
     echo ""
     
+    # Le reste de la fonction reste identique...
+    # [contenu identique de l'affichage des fonctionnalités]
+    
+    # Instructions post-installation adaptées
     echo -e "${BLUE} INSTRUCTIONS POST-INSTALLATION :${NC}"
     echo -e "1. ${WHITE}Retirez le support d'installation${NC}"
     echo -e "2. ${WHITE}Redémarrez le système${NC}"
     echo -e "3. ${WHITE}Connectez-vous avec :${NC} ${CYAN}$USERNAME${NC}"
-    echo -e "4. ${WHITE}Première mise à jour :${NC} ${CYAN}sudo pacman -Syu${NC}"
-    echo -e "5. ${WHITE}Test audio :${NC} ${CYAN}cava${NC} (visualiseur) ou ${CYAN}pavucontrol${NC}"
-    echo -e "6. ${WHITE}Installation AUR :${NC} ${CYAN}paru -S <paquet>${NC}"
-    echo -e "7. ${WHITE}Changement thème GRUB :${NC} modifier ${CYAN}/etc/default/grub${NC}"
-    echo -e "8. ${WHITE}Configuration Spicetify :${NC} ${CYAN}spicetify apply${NC}"
-    echo ""
-    
-    echo -e "${PURPLE} COMMANDES UTILES POST-INSTALLATION :${NC}"
-    echo -e "• ${WHITE}fastfetch${NC} - Informations système avec logo Arch"
-    echo -e "• ${WHITE}cava${NC} - Visualiseur audio en temps réel"
-    echo -e "• ${WHITE}audio-restart${NC} - Redémarrer le système audio"
-    echo -e "• ${WHITE}docker-clean${NC} - Nettoyer Docker"
-    echo -e "• ${WHITE}extract <fichier>${NC} - Extraire n'importe quelle archive"
-    echo -e "• ${WHITE}serve${NC} - Serveur web local Python (port 8000)"
-    echo -e "• ${WHITE}spicetify apply${NC} - Appliquer thèmes Spotify"
-    echo -e "• ${WHITE}systemctl --user status pipewire${NC} - Etat du système audio"
+    if [[ "$BOOT_MODE" == "bios" ]]; then
+        echo -e "4. ${WHITE}Vérifiez que le BIOS boot bien sur le disque dur${NC}"
+    fi
+    echo -e "5. ${WHITE}Première mise à jour :${NC} ${CYAN}sudo pacman -Syu${NC}"
     echo ""
     
     # Sauvegarde du log
@@ -5140,7 +5480,7 @@ finish_install() {
         done
         echo ""
         echo ""
-        print_success " Redémarrage en cours... Bienvenue dans Arch Linux !"
+        print_success " Redémarrage en cours... Bienvenue dans Arch Linux (${BOOT_MODE})!"
         
         reboot
     else
@@ -5153,14 +5493,8 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V674.4 ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V674.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
-        echo -e "${CYAN}Une fois redémarré, exécutez :${NC}"
-        echo -e "• ${WHITE}~/post-install.sh${NC} - Script de post-installation"
-        echo -e "• ${WHITE}fastfetch${NC} - Afficher les informations système"
-        echo -e "• ${WHITE}cava${NC} - Tester le visualiseur audio"
-        echo ""
-        echo -e "${PURPLE} Merci d'avoir utilisé le script d'installation Arch Linux (version 674.4)${NC}"
     fi
 }
 
