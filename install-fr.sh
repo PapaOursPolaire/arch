@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 694.4, correctif 4 de la version 694.4
-# Mise à jour : 07/10/2025 à 21:14
+# Version: 704.4, correctif 4 de la version 704.4
+# Mise à jour : 08/10/2025 à 19:55
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="694.4"
+readonly SCRIPT_VERSION="704.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -126,7 +126,7 @@ main() {
     echo -e "${YELLOW}Mode de boot: ${BOOT_MODE}${NC}"
     echo ""
 
-    echo -e "${PURPLE}=== PHASE 1: PRÉPARATION SYSTÈME ===${NC}"
+    echo -e "${PURPLE}PHASE 1: PRÉPARATION SYSTÈME${NC}"
     
     check_requirements || {
         print_error "Échec de la vérification des prérequis"
@@ -142,7 +142,7 @@ main() {
         print_warning "Optimisation Pacman partielle"
     }
 
-    echo -e "${PURPLE}=== PHASE 2: CONFIGURATION DISQUE ET PARTITIONS ===${NC}"
+    echo -e "${PURPLE}PHASE 2: CONFIGURATION DISQUE ET PARTITIONS${NC}"
     
     select_disk || {
         print_error "Échec de la sélection du disque"
@@ -164,7 +164,7 @@ main() {
         return 1
     }
 
-    echo -e "${PURPLE}=== PHASE 3: INSTALLATION SYSTÈME DE BASE ===${NC}"
+    echo -e "${PURPLE}PHASE 3: INSTALLATION SYSTÈME DE BASE${NC}"
     
     install_system || {
         print_error "Échec de l'installation du système de base"
@@ -181,7 +181,7 @@ main() {
         return 1
     }
 
-    echo -e "${PURPLE}=== PHASE 4: INTERFACE GRAPHIQUE ===${NC}"
+    echo -e "${PURPLE}PHASE 4: INTERFACE GRAPHIQUE${NC}"
     
     select_desktop || {
         print_warning "Aucun environnement de bureau sélectionné"
@@ -196,7 +196,7 @@ main() {
         print_info "Mode console/serveur - pas d'interface graphique"
     fi
 
-    echo -e "${PURPLE}=== PHASE 5: BOOTLOADER ET THÈMES ===${NC}"
+    echo -e "${PURPLE}PHASE 5: BOOTLOADER ET THÈMES${NC}"
     
     # Configuration du bootloader adaptée au mode
     configure_bootloader || {
@@ -215,7 +215,7 @@ main() {
         }
     fi
 
-    echo -e "${PURPLE}=== PHASE 6: AUDIO ET MULTIMÉDIA ===${NC}"
+    echo -e "${PURPLE}PHASE 6: AUDIO ET MULTIMÉDIA${NC}"
     
     install_audio_system || {
         print_warning "Échec de l'installation du système audio"
@@ -239,7 +239,7 @@ main() {
         }
     fi
 
-    echo -e "${PURPLE}=== PHASE 7: APPLICATIONS ET LOGICIELS ===${NC}"
+    echo -e "${PURPLE}PHASE 7: APPLICATIONS ET LOGICIELS${NC}"
     
     install_software || {
         print_warning "Échec partiel de l'installation des logiciels"
@@ -257,7 +257,7 @@ main() {
         print_warning "Échec de l'installation de Wine"
     }
 
-    echo -e "${PURPLE}=== PHASE 8: OUTILS ET DÉVELOPPEMENT ===${NC}"
+    echo -e "${PURPLE}PHASE 8: OUTILS ET DÉVELOPPEMENTT${NC}"
     
     install_paru || {
         print_warning "Échec de l'installation de Paru"
@@ -274,7 +274,7 @@ main() {
         }
     fi
 
-    echo -e "${PURPLE}=== PHASE 9: THÈMES ET PERSONNALISATION ===${NC}"
+    echo -e "${PURPLE}PHASE 9: THÈMES ET PERSONNALISATION${NC}"
     
     # Thèmes uniquement pour les environnements graphiques
     if [[ "$DE_CHOICE" != "none" ]]; then
@@ -287,7 +287,7 @@ main() {
         print_warning "Échec de l'installation de Fastfetch"
     }
 
-    echo -e "${PURPLE}=== PHASE 10: CONFIGURATION FINALE ===${NC}"
+    echo -e "${PURPLE}PHASE 10: CONFIGURATION FINALE${NC}"
     
     final_config || {
         print_warning "Échec partiel de la configuration finale"
@@ -307,7 +307,7 @@ main() {
         return 1
     }
 
-    echo -e "${GREEN}=== RAPPORT D'INSTALLATION TERMINÉ ===${NC}"
+    echo -e "${GREEN}RAPPORT D'INSTALLATION TERMINÉ${NC}"
     echo ""
     
     # Affichage du résumé selon le mode
@@ -1399,7 +1399,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 694.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 704.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1569,12 +1569,17 @@ test_environment() {
         errors=$((errors + 1))
     fi
     
-    # Test UEFI
+    # Test mode boot (UEFI ou BIOS) - CORRECTION: Support des deux modes
     if [[ -d /sys/firmware/efi ]]; then
         print_success " Système UEFI détecté"
+        echo -e "${GREEN}  • Table de partitions: GPT${NC}"
+        echo -e "${GREEN}  • Partition boot: EFI (FAT32)${NC}"
+        echo -e "${GREEN}  • Bootloader: GRUB x86_64-efi${NC}"
     else
-        print_error " Système UEFI requis"
-        errors=$((errors + 1))
+        print_success " Système BIOS/Legacy détecté"
+        echo -e "${GREEN}  • Table de partitions: MBR${NC}"
+        echo -e "${GREEN}  • Partition boot: Boot (ext4)${NC}"
+        echo -e "${GREEN}  • Bootloader: GRUB i386-pc${NC}"
     fi
     
     # Test root
@@ -5493,7 +5498,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V694.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V704.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
