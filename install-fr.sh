@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 734.4, correctif 4 de la version 734.4
-# Mise à jour : 08/10/2025 à 21:00
+# Version: 744.4, correctif 4 de la version 744.4
+# Mise à jour : 08/10/2025 à 21:20
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="734.4"
+readonly SCRIPT_VERSION="744.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -58,6 +58,7 @@ readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlo
 # Variables globales
 DISK=""
 EFI_PART=""
+BOOT_PART=""
 ROOT_PART=""
 HOME_PART=""
 SWAP_PART=""
@@ -330,7 +331,15 @@ main() {
     echo -e "3. Se connecter avec l'utilisateur: ${USERNAME}"
     
     if [[ "$BOOT_MODE" == "bios" ]]; then
-        echo -e "4. Vérifier que le BIOS boot sur le disque dur"
+        while true; do
+            read -r -p "Taille partition Boot (défaut : 512M): " boot_input
+            boot_input=${boot_input:-512M}
+            if validate_input "$boot_input" "size"; then
+                PARTITION_BOOT_SIZE="$boot_input"
+                break
+            fi
+            print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
+        done
     fi
     
     echo ""
@@ -1108,8 +1117,9 @@ configure_custom_partitioning() {
     echo -e "${YELLOW}Exemples : 512M, 512m, 2G, 2g, 100G, 100g${NC}"
     echo ""
     
-    # Configuration Boot (BIOS) ou EFI (UEFI)
+    # Configuration différente selon le mode de boot
     if [[ "$BOOT_MODE" == "uefi" ]]; then
+        # Configuration EFI pour UEFI
         while true; do
             read -r -p "Taille partition EFI (défaut : 512M): " efi_input
             efi_input=${efi_input:-512M}
@@ -1120,6 +1130,7 @@ configure_custom_partitioning() {
             print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
         done
     else
+        # Configuration Boot pour BIOS
         while true; do
             read -r -p "Taille partition Boot (défaut : 512M): " boot_input
             boot_input=${boot_input:-512M}
@@ -1131,7 +1142,7 @@ configure_custom_partitioning() {
         done
     fi
     
-    # Configuration Root
+    # Configuration Root (identique pour les deux modes)
     while true; do
         read -r -p "Taille partition Root (défaut: 60G) : " root_input
         root_input=${root_input:-60G}
@@ -1217,7 +1228,7 @@ configure_custom_partitioning() {
         echo -e "${WHITE}• Partition Home :${NC} Intégrée dans Root"
     fi
     echo ""
-    echo ""
+    
     if ! confirm_action "Confirmer cette configuration ?" "O"; then
         print_info "Reconfiguration des partitions..."
         configure_custom_partitioning
@@ -1399,7 +1410,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 734.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 744.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2018,8 +2029,6 @@ create_new_partitioning() {
     # Synchronisation et attente
     sync
     sleep 3
-    partprobe "$DISK" 2>/dev/null || true
-    sleep 3
 
     # Création de la table de partitions selon le mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
@@ -2030,21 +2039,14 @@ create_new_partitioning() {
         fi
     else
         print_info "Création de la table MBR pour BIOS..."
-        
-        # Méthode plus robuste pour MBR
-        echo "o\nw\n" | fdisk "$DISK" >/dev/null 2>&1 || {
-            # Fallback avec parted
-            if ! parted -s "$DISK" mklabel msdos; then
-                print_error "Echec de création de la table MBR avec toutes les méthodes"
-                return 1
-            fi
-        }
+        if ! parted -s "$DISK" mklabel msdos; then
+            print_error "Echec de création de la table MBR"
+            return 1
+        fi
     fi
 
     # Synchronisation après création table
     sync
-    sleep 2
-    partprobe "$DISK" 2>/dev/null || true
     sleep 2
 
     # Calcul des tailles en MB
@@ -2060,6 +2062,7 @@ create_new_partitioning() {
         home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE") || home_mb=0
 
     local current_pos=1
+    local part_num=1
 
     # Partition 1: Boot/EFI
     local boot_end=$((current_pos + boot_mb))
@@ -2071,6 +2074,7 @@ create_new_partitioning() {
         fi
         parted -s "$DISK" set 1 esp on
         EFI_PART="${DISK}1"
+        print_success "Partition EFI créée: $EFI_PART"
     else
         print_info "Création partition Boot (${current_pos}MiB-${boot_end}MiB)..."
         if ! parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${boot_end}MiB; then
@@ -2078,9 +2082,11 @@ create_new_partitioning() {
             return 1
         fi
         parted -s "$DISK" set 1 boot on
-        EFI_PART="${DISK}1"
+        BOOT_PART="${DISK}1"
+        print_success "Partition Boot créée: $BOOT_PART"
     fi
     current_pos=$boot_end
+    part_num=2
 
     # Synchronisation après première partition
     sync
@@ -2094,18 +2100,20 @@ create_new_partitioning() {
         return 1
     fi
     ROOT_PART="${DISK}2"
+    print_success "Partition Root créée: $ROOT_PART"
     current_pos=$root_end
+    part_num=3
 
     sync
     sleep 1
 
     # Partition 3: Swap (optionnelle)
-    local part_num=3
     if [[ "$USE_SWAP" == true ]]; then
         local swap_end=$((current_pos + swap_mb))
         print_info "Création partition Swap (${current_pos}MiB-${swap_end}MiB)..."
         if parted -s "$DISK" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB; then
             SWAP_PART="${DISK}3"
+            print_success "Partition Swap créée: $SWAP_PART"
             current_pos=$swap_end
             part_num=4
         else
@@ -2123,6 +2131,7 @@ create_new_partitioning() {
             print_info "Création partition Home (reste de l'espace)..."
             if parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB 100%; then
                 HOME_PART="${DISK}${part_num}"
+                print_success "Partition Home créée: $HOME_PART"
             else
                 print_warning "Echec création partition Home, continuation sans home séparé"
                 USE_SEPARATE_HOME=false
@@ -2132,6 +2141,7 @@ create_new_partitioning() {
             print_info "Création partition Home (${current_pos}MiB-${home_end}MiB)..."
             if parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${home_end}MiB; then
                 HOME_PART="${DISK}${part_num}"
+                print_success "Partition Home créée: $HOME_PART"
             else
                 print_warning "Echec création partition Home, continuation sans home séparé"
                 USE_SEPARATE_HOME=false
@@ -2141,8 +2151,6 @@ create_new_partitioning() {
 
     # Synchronisation finale
     sync
-    sleep 3
-    partprobe "$DISK" 2>/dev/null || true
     sleep 3
 
     # Vérification que les partitions existent
@@ -2154,8 +2162,11 @@ create_new_partitioning() {
         partitions_ok=false
     fi
     
-    if [[ ! -b "$EFI_PART" ]]; then
-        print_error "Partition EFI/Boot non trouvée: $EFI_PART"
+    if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -b "$EFI_PART" ]]; then
+        print_error "Partition EFI non trouvée: $EFI_PART"
+        partitions_ok=false
+    elif [[ "$BOOT_MODE" == "bios" ]] && [[ ! -b "$BOOT_PART" ]]; then
+        print_error "Partition Boot non trouvée: $BOOT_PART"
         partitions_ok=false
     fi
     
@@ -2171,11 +2182,13 @@ create_new_partitioning() {
 
     if [[ "$partitions_ok" != true ]]; then
         print_error "Certaines partitions n'ont pas été créées correctement"
+        print_info "État actuel des partitions:"
         lsblk "$DISK"
         return 1
     fi
 
     print_success "Partitionnement terminé avec succès"
+    print_info "Résumé du partitionnement:"
     lsblk "$DISK"
     return 0
 }
@@ -2209,8 +2222,6 @@ format_partitions() {
     print_info "Attente de la disponibilité des partitions..."
     sleep 5
     sync
-    partprobe "$DISK" 2>/dev/null || true
-    sleep 3
     
     # Vérification que les partitions existent
     print_info "Vérification des partitions..."
@@ -2221,8 +2232,11 @@ format_partitions() {
         partitions_ok=false
     fi
     
-    if [[ ! -b "$EFI_PART" ]]; then
-        print_error "Partition EFI/Boot non trouvée: $EFI_PART"
+    if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -b "$EFI_PART" ]]; then
+        print_error "Partition EFI non trouvée: $EFI_PART"
+        partitions_ok=false
+    elif [[ "$BOOT_MODE" == "bios" ]] && [[ ! -b "$BOOT_PART" ]]; then
+        print_error "Partition Boot non trouvée: $BOOT_PART"
         partitions_ok=false
     fi
     
@@ -2233,11 +2247,11 @@ format_partitions() {
 
     # Démontage préventif
     print_info "Démontage préventif..."
-    umount -f "$EFI_PART" "$ROOT_PART" "$HOME_PART" 2>/dev/null || true
+    umount -f "$EFI_PART" "$BOOT_PART" "$ROOT_PART" "$HOME_PART" 2>/dev/null || true
     swapoff "$SWAP_PART" 2>/dev/null || true
     sleep 2
 
-    # Formatage EFI/Boot
+    # Formatage Boot/EFI selon le mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         print_info "Formatage partition EFI: $EFI_PART"
         if mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
@@ -2247,8 +2261,8 @@ format_partitions() {
             return 1
         fi
     else
-        print_info "Formatage partition Boot: $EFI_PART"
-        if mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
+        print_info "Formatage partition Boot: $BOOT_PART"
+        if mkfs.ext4 -F -L 'ArchBoot' "$BOOT_PART"; then
             print_success "Partition Boot formatée (ext4)"
         else
             print_error "Echec formatage Boot"
@@ -2316,7 +2330,7 @@ mount_partitions() {
         return 1
     fi
 
-    # Montage Boot/EFI
+    # Montage Boot/EFI selon le mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         mkdir -p /mnt/boot/efi
         print_info "Montage partition EFI: $EFI_PART sur /mnt/boot/efi"
@@ -2326,8 +2340,8 @@ mount_partitions() {
         fi
     else
         mkdir -p /mnt/boot
-        print_info "Montage partition Boot: $EFI_PART sur /mnt/boot"
-        if ! mount "$EFI_PART" /mnt/boot; then
+        print_info "Montage partition Boot: $BOOT_PART sur /mnt/boot"
+        if ! mount "$BOOT_PART" /mnt/boot; then
             print_error "Echec montage partition Boot"
             return 1
         fi
@@ -2347,15 +2361,30 @@ mount_partitions() {
 
     # Vérification du montage
     print_info "Vérification des points de montage..."
-    if mountpoint -q /mnt && mountpoint -q /mnt/boot; then
-        print_success "Partitions montées avec succès"
-        echo "Points de montage:"
-        mount | grep /mnt
-        return 0
-    else
-        print_error "Echec vérification des points de montage"
+    local mount_ok=true
+    
+    if ! mountpoint -q /mnt; then
+        print_error "Échec montage /mnt"
+        mount_ok=false
+    fi
+    
+    if [[ "$BOOT_MODE" == "uefi" ]] && ! mountpoint -q /mnt/boot/efi; then
+        print_error "Échec montage /mnt/boot/efi"
+        mount_ok=false
+    elif [[ "$BOOT_MODE" == "bios" ]] && ! mountpoint -q /mnt/boot; then
+        print_error "Échec montage /mnt/boot"
+        mount_ok=false
+    fi
+
+    if [[ "$mount_ok" != true ]]; then
+        print_error "Échec vérification des points de montage"
         return 1
     fi
+
+    print_success "Partitions montées avec succès"
+    echo "Points de montage:"
+    mount | grep /mnt
+    return 0
 }
 
 # Fonctions d'installation du système de base
@@ -5504,7 +5533,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V734.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V744.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
