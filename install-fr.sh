@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 714.4, correctif 4 de la version 714.4
-# Mise à jour : 08/10/2025 à 20:08
+# Version: 724.4, correctif 4 de la version 724.4
+# Mise à jour : 08/10/2025 à 20:51
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="714.4"
+readonly SCRIPT_VERSION="724.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1092,9 +1092,9 @@ convert_to_mb() {
     local number="${size%[MmGg]}"
     local unit="${size: -1}"
     
-    case "$unit" in
-        "M"|"m") echo "$number" ;;
-        "G"|"g") echo $((number * 1024)) ;;
+    case "${unit^^}" in
+        "M") echo "$number" ;;
+        "G") echo $((number * 1024)) ;;
         *) echo "0" ;;
     esac
 }
@@ -1399,7 +1399,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 714.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 724.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1639,11 +1639,17 @@ select_disk() {
     print_header "ETAPE 4/$TOTAL_STEPS: SELECTION DU DISQUE"
     CURRENT_STEP=4
     
+    # Attendre que les disques soient détectés
+    sleep 2
+    sync
+    
     local disks
-    mapfile -t disks < <(lsblk -dno NAME | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])')
+    mapfile -t disks < <(lsblk -dno NAME,SIZE,MODEL | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])' | awk '{print $1}')
     
     if [[ ${#disks[@]} -eq 0 ]]; then
         print_error "Aucun disque détecté !"
+        echo "Disques disponibles:"
+        lsblk
         return 1
     fi
     
@@ -1659,18 +1665,25 @@ select_disk() {
     
     local disk_choice
     while true; do
-        read -r -p "Sélectionnez le disque (numéro) :" disk_choice
+        read -r -p "Sélectionnez le disque (numéro) : " disk_choice
         
         if [[ "$disk_choice" =~ ^[0-9]+$ ]] && \
             [[ "$disk_choice" -ge 1 ]] && \
             [[ "$disk_choice" -le "${#disks[@]}" ]]; then
+            DISK="/dev/${disks[$((disk_choice - 1))]}"
             break
         fi
         print_warning "Sélection invalide !"
     done
     
-    DISK="/dev/${disks[$((disk_choice - 1))]}"
+    # Vérification finale du disque
+    if [[ ! -b "$DISK" ]]; then
+        print_error "Le disque $DISK n'existe pas !"
+        return 1
+    fi
+    
     print_success "Disque sélectionné : $DISK"
+    return 0
 }
 
 choose_partitioning() {
@@ -1969,271 +1982,163 @@ configure_existing_partitions() {
 }
 
 create_new_partitioning() {
+    print_header "CREATION DU PARTITIONNEMENT"
+    
     print_warning "ATTENTION : Toutes les données sur $DISK seront effacées !"
     
     if ! confirm_action "Confirmer l'effacement du disque ?"; then
         return 1
     fi
 
-    print_info "Vérification finale des partitions créées..."
-    sleep 3
-    sync
-    partprobe "$DISK" || true
-    sleep 3
+    # Nettoyage complet du disque
+    print_info "Nettoyage du disque..."
+    umount -f "${DISK}"* 2>/dev/null || true
+    swapoff "${DISK}"* 2>/dev/null || true
+    
+    # Nettoyage des signatures avec différentes méthodes
+    print_info "Effacement des signatures de partition..."
+    wipefs -af "$DISK" 2>/dev/null || true
+    dd if=/dev/zero of="$DISK" bs=1M count=10 status=none 2>/dev/null || true
+    
+    sleep 2
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 2
 
-    # Vérification visuelle
-    echo -e "${GREEN}Partitions créées:${NC}"
-    lsblk "$DISK"
-
-    # Validation que les partitions existent
-    if [[ ! -b "$ROOT_PART" ]]; then
-        print_error "ERREUR: La partition ROOT $ROOT_PART n'existe pas!"
-        print_info "Tentative de détection automatique..."
-        local parts=($(lsblk -rno NAME "$DISK" | grep "^${DISK##*/}" | head -5))
-        if [[ ${#parts[@]} -ge 2 ]]; then
-            ROOT_PART="/dev/${parts[1]}"
-            print_info "Partition ROOT redétectée: $ROOT_PART"
+    # Création de la table de partitions selon le mode
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        print_info "Création de la table GPT pour UEFI..."
+        if ! parted -s "$DISK" mklabel gpt; then
+            print_error "Echec de création de la table GPT"
+            return 1
+        fi
+    else
+        print_info "Création de la table MBR pour BIOS..."
+        if ! parted -s "$DISK" mklabel msdos; then
+            print_error "Echec de création de la table MBR"
+            return 1
         fi
     fi
-    
-    # Configuration automatique ou personnalisée
-    local disk_size_bytes
-    disk_size_bytes=$(lsblk -bno SIZE "$DISK" | head -1)
-    local disk_size_gb=$((disk_size_bytes / 1024 / 1024 / 1024))
-    
-    print_info "Espace disque total : ${disk_size_gb}GB"
-    print_info "Mode de boot : ${BOOT_MODE}"
-    
-    # Si pas de configuration personnalisée, utiliser les valeurs par défaut
-    if [[ "$CUSTOM_PARTITIONING" != true ]]; then
-        if [[ "$BOOT_MODE" == "uefi" ]]; then
-            PARTITION_EFI_SIZE="512M"
-        else
-            PARTITION_BOOT_SIZE="512M"
-        fi
-        PARTITION_ROOT_SIZE="60G"
-        
-        local ram_gb
-        ram_gb=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
-        PARTITION_SWAP_SIZE="8G"
-        
-        local remaining_gb=$((disk_size_gb - 1 - 60 - 8))
-        if [[ $remaining_gb -ge 20 ]]; then
-            USE_SEPARATE_HOME=true
-        else
-            USE_SEPARATE_HOME=false
-        fi
-    fi
-    
-    # Validation de l'espace disponible
-    local boot_mb=0
+
+    # Calcul des tailles en MB
+    local boot_mb root_mb swap_mb home_mb
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         boot_mb=$(convert_to_mb "$PARTITION_EFI_SIZE")
     else
         boot_mb=$(convert_to_mb "$PARTITION_BOOT_SIZE")
     fi
-    
-    local root_mb=$(convert_to_mb "$PARTITION_ROOT_SIZE")
-    local swap_mb=0
-    local home_mb=0
-    
-    [[ "$USE_SWAP" == true ]] && swap_mb=$(convert_to_mb "$PARTITION_SWAP_SIZE")
-    
-    if [[ "$USE_SEPARATE_HOME" == true && "$PARTITION_HOME_SIZE" != "remaining" ]]; then
-        home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE")
-    fi
-    
-    local total_required_mb=$((boot_mb + root_mb + swap_mb + home_mb))
-    local available_mb=$((disk_size_gb * 1024))
-    
-    if [[ $total_required_mb -gt $available_mb ]]; then
-        print_error "Espace insuffisant ! Requis : ${total_required_mb}MB, Disponible: ${available_mb}MB"
-        return 1
-    fi
-    
-    echo -e "${GREEN}CONFIGURATION FINALE${NC}"
-    echo -e "${WHITE}Disque :${NC} $DISK - ${disk_size_gb}GB"
-    echo -e "${WHITE}Mode boot :${NC} $BOOT_MODE"
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        echo -e "${WHITE}• EFI :${NC} $PARTITION_EFI_SIZE (FAT32)"
-    else
-        echo -e "${WHITE}• Boot :${NC} $PARTITION_BOOT_SIZE (ext4)"
-    fi
-    echo -e "${WHITE}• Root :${NC} $PARTITION_ROOT_SIZE (ext4)"
-    [[ "$USE_SWAP" == true ]] && echo -e "${WHITE}• Swap:${NC} $PARTITION_SWAP_SIZE (linux-swap)"
-    if [[ "$USE_SEPARATE_HOME" == true ]]; then
-        if [[ "$PARTITION_HOME_SIZE" == "remaining" ]]; then
-            echo -e "${WHITE}• Home :${NC} Reste de l'espace (ext4)"
-        else
-            echo -e "${WHITE}• Home :${NC} $PARTITION_HOME_SIZE (ext4)"
-        fi
-    else
-        echo -e "${WHITE}• Home :${NC} Intégrée dans Root"
-    fi
-    echo ""
-    
-    if ! confirm_action "Accepter cette configuration ?"; then
-        return 1
-    fi
-    
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation du partitionnement"
-        return 0
-    fi
-    
-    # Démontage préventif
-    print_info "Démontage des partitions..."
-    umount -f "${DISK}"* 2>/dev/null || true
-    swapoff "${DISK}"* 2>/dev/null || true
-    
-    # Nettoyage des signatures
-    print_info "Nettoyage des signatures existantes..."
-    wipefs -af "$DISK" || {
-        print_warning "Echec de wipefs, utilisation de dd"
-        dd if=/dev/zero of="$DISK" bs=1M count=10 status=none || true
-    }
-    
-    sleep 2
-    partprobe "$DISK" || true
-    sleep 2
-    
-    # Création de la table de partitions
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        print_info "Création de la table GPT pour UEFI..."
-        parted -s "$DISK" mklabel gpt || {
-            print_error "Echec de création de la table GPT"
-            return 1
-        }
-    else
-        print_info "Création de la table MBR pour BIOS..."
-        parted -s "$DISK" mklabel msdos || {
-            print_error "Echec de création de la table MBR"
-            return 1
-        }
-    fi
-    
+    root_mb=$(convert_to_mb "$PARTITION_ROOT_SIZE")
+    [[ "$USE_SWAP" == true ]] && swap_mb=$(convert_to_mb "$PARTITION_SWAP_SIZE") || swap_mb=0
+    [[ "$USE_SEPARATE_HOME" == true && "$PARTITION_HOME_SIZE" != "remaining" ]] && \
+        home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE") || home_mb=0
+
     local current_pos=1
-    
-    # Partition Boot/EFI
+
+    # Partition 1: Boot/EFI
     local boot_end=$((current_pos + boot_mb))
     if [[ "$BOOT_MODE" == "uefi" ]]; then
-        print_info "Création partition EFI : ${current_pos}MiB à ${boot_end}MiB"
-        parted -s "$DISK" mkpart primary fat32 ${current_pos}MiB ${boot_end}MiB || {
-            print_error "Echec de création de la partition EFI"
+        print_info "Création partition EFI (${current_pos}MiB-${boot_end}MiB)..."
+        if ! parted -s "$DISK" mkpart primary fat32 ${current_pos}MiB ${boot_end}MiB; then
+            print_error "Echec création partition EFI"
             return 1
-        }
-        parted -s "$DISK" set 1 esp on || {
-            print_error "Echec de configuration ESP"
-            return 1
-        }
+        fi
+        parted -s "$DISK" set 1 esp on
         EFI_PART="${DISK}1"
     else
-        print_info "Création partition Boot : ${current_pos}MiB à ${boot_end}MiB"
-        parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${boot_end}MiB || {
-            print_error "Echec de création de la partition Boot"
+        print_info "Création partition Boot (${current_pos}MiB-${boot_end}MiB)..."
+        if ! parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${boot_end}MiB; then
+            print_error "Echec création partition Boot"
             return 1
-        }
-        parted -s "$DISK" set 1 boot on || {
-            print_error "Echec de configuration boot"
-            return 1
-        }
-        EFI_PART="${DISK}1"  # Pour BIOS, on utilise la même variable pour la partition boot
+        fi
+        parted -s "$DISK" set 1 boot on
+        EFI_PART="${DISK}1"
     fi
     current_pos=$boot_end
-    
-    # Partition Root
+
+    # Partition 2: Root
     local root_end=$((current_pos + root_mb))
-    print_info "Création partition Root : ${current_pos}MiB à ${root_end}MiB"
-    parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${root_end}MiB || {
-        print_error "Echec de création de la partition Root"
+    print_info "Création partition Root (${current_pos}MiB-${root_end}MiB)..."
+    if ! parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${root_end}MiB; then
+        print_error "Echec création partition Root"
         return 1
-    }
+    fi
     ROOT_PART="${DISK}2"
     current_pos=$root_end
-    
-    # Partition Swap (si activée)
+
+    # Partition 3: Swap (optionnelle)
+    local part_num=3
     if [[ "$USE_SWAP" == true ]]; then
         local swap_end=$((current_pos + swap_mb))
-        print_info "Création partition Swap : ${current_pos}MiB à ${swap_end}MiB"
-        parted -s "$DISK" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB || {
-            print_warning "Echec de création de la partition Swap"
-            USE_SWAP=false
-        }
-        if [[ "$USE_SWAP" == true ]]; then
+        print_info "Création partition Swap (${current_pos}MiB-${swap_end}MiB)..."
+        if parted -s "$DISK" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB; then
             SWAP_PART="${DISK}3"
             current_pos=$swap_end
+            part_num=4
+        else
+            print_warning "Echec création partition Swap, continuation sans swap"
+            USE_SWAP=false
         fi
     fi
-    
-    # Partition Home (si activée)
+
+    # Partition 4: Home (optionnelle)
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
-        local part_num=4
-        if [[ "$USE_SWAP" != true ]]; then
-            part_num=3
-        fi
-        
         if [[ "$PARTITION_HOME_SIZE" == "remaining" ]]; then
-            print_info "Création partition Home : ${current_pos}MiB à 100%"
-            parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB 100% || {
-                print_warning "Echec de création de la partition Home"
+            print_info "Création partition Home (reste de l'espace)..."
+            if parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB 100%; then
+                HOME_PART="${DISK}${part_num}"
+            else
+                print_warning "Echec création partition Home, continuation sans home séparé"
                 USE_SEPARATE_HOME=false
-            }
+            fi
         else
             local home_end=$((current_pos + home_mb))
-            print_info "Création partition Home : ${current_pos}MiB à ${home_end}MiB"
-            parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${home_end}MiB || {
-                print_warning "Echec de création de la partition Home"
+            print_info "Création partition Home (${current_pos}MiB-${home_end}MiB)..."
+            if parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${home_end}MiB; then
+                HOME_PART="${DISK}${part_num}"
+            else
+                print_warning "Echec création partition Home, continuation sans home séparé"
                 USE_SEPARATE_HOME=false
-            }
-        fi
-        
-        if [[ "$USE_SEPARATE_HOME" == true ]]; then
-            HOME_PART="${DISK}${part_num}"
+            fi
         fi
     fi
-    
+
+    # Synchronisation et vérification
     sync
-    partprobe "$DISK" || true
-    sleep 5
-    
-    # Détection des partitions créées
+    sleep 3
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 3
+
+    # Vérification que les partitions existent
     print_info "Vérification des partitions créées..."
-    lsblk "$DISK"
+    local partitions_ok=true
     
-    local detected_parts
-    mapfile -t detected_parts < <(lsblk -rno NAME "$DISK" | grep -E "${DISK##*/}[0-9p]" | head -10)
+    if [[ ! -b "$ROOT_PART" ]]; then
+        print_error "Partition ROOT non trouvée: $ROOT_PART"
+        partitions_ok=false
+    fi
     
-    if [[ ${#detected_parts[@]} -lt 2 ]]; then
-        print_error "Pas assez de partitions détectées après création"
+    if [[ ! -b "$EFI_PART" ]]; then
+        print_error "Partition EFI/Boot non trouvée: $EFI_PART"
+        partitions_ok=false
+    fi
+    
+    if [[ "$USE_SWAP" == true ]] && [[ ! -b "$SWAP_PART" ]]; then
+        print_warning "Partition Swap non trouvée, désactivation..."
+        USE_SWAP=false
+    fi
+    
+    if [[ "$USE_SEPARATE_HOME" == true ]] && [[ ! -b "$HOME_PART" ]]; then
+        print_warning "Partition Home non trouvée, désactivation..."
+        USE_SEPARATE_HOME=false
+    fi
+
+    if [[ "$partitions_ok" != true ]]; then
+        print_error "Certaines partitions n'ont pas été créées correctement"
+        lsblk "$DISK"
         return 1
     fi
-    
-    # Attribution des partitions
-    EFI_PART="/dev/${detected_parts[0]}"
-    ROOT_PART="/dev/${detected_parts[1]}"
-    
-    local part_index=2
-    if [[ "$USE_SWAP" == true ]] && [[ ${#detected_parts[@]} -gt $part_index ]]; then
-        SWAP_PART="/dev/${detected_parts[$part_index]}"
-        part_index=$((part_index + 1))
-    fi
-    
-    if [[ "$USE_SEPARATE_HOME" == true ]] && [[ ${#detected_parts[@]} -gt $part_index ]]; then
-        HOME_PART="/dev/${detected_parts[$part_index]}"
-    fi
-    
-    print_success "Partitions créées avec succès pour le mode ${BOOT_MODE}"
-    echo ""
-    echo -e "${GREEN}Partitions finales :${NC}"
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        echo -e "${CYAN}EFI:${NC} $EFI_PART ($PARTITION_EFI_SIZE)"
-    else
-        echo -e "${CYAN}Boot:${NC} $EFI_PART ($PARTITION_BOOT_SIZE)"
-    fi
-    echo -e "${CYAN}Root:${NC} $ROOT_PART ($PARTITION_ROOT_SIZE)"
-    [[ -n "$SWAP_PART" ]] && echo -e "${CYAN}Swap:${NC} $SWAP_PART ($PARTITION_SWAP_SIZE)"
-    [[ -n "$HOME_PART" ]] && echo -e "${CYAN}Home:${NC} $HOME_PART ($PARTITION_HOME_SIZE)"
-    
+
+    print_success "Partitionnement terminé avec succès"
+    lsblk "$DISK"
     return 0
 }
 
@@ -2253,144 +2158,87 @@ format_partitions() {
     partprobe "$DISK" 2>/dev/null || true
     sleep 3
     
-    # Vérifier que les partitions existent
+    # Vérification que les partitions existent
     print_info "Vérification des partitions..."
+    local partitions_ok=true
+    
     if [[ ! -b "$ROOT_PART" ]]; then
         print_error "Partition ROOT non trouvée: $ROOT_PART"
-        print_info "Recherche automatique des partitions..."
-        
-        # Détection automatique d'urgence
-        local detected_parts
-        mapfile -t detected_parts < <(lsblk -rno NAME "$DISK" | grep -E "${DISK##*/}[0-9]" | head -10)
-        
-        if [[ ${#detected_parts[@]} -lt 2 ]]; then
-            print_error "Aucune partition détectée sur $DISK"
-            lsblk "$DISK"
-            return 1
-        fi
-        
-        # Réassignation automatique
-        if [[ "$BOOT_MODE" == "uefi" ]]; then
-            EFI_PART="/dev/${detected_parts[0]}"
-            ROOT_PART="/dev/${detected_parts[1]}"
-            print_info "Partitions détectées: EFI=$EFI_PART, ROOT=$ROOT_PART"
-        else
-            EFI_PART="/dev/${detected_parts[0]}"
-            ROOT_PART="/dev/${detected_parts[1]}" 
-            print_info "Partitions détectées: BOOT=$EFI_PART, ROOT=$ROOT_PART"
-        fi
-        
-        # Détection optionnelle SWAP et HOME
-        if [[ ${#detected_parts[@]} -gt 2 ]] && [[ "$USE_SWAP" == true ]]; then
-            SWAP_PART="/dev/${detected_parts[2]}"
-            print_info "SWAP détecté: $SWAP_PART"
-        fi
-        
-        if [[ ${#detected_parts[@]} -gt 3 ]] && [[ "$USE_SEPARATE_HOME" == true ]]; then
-            HOME_PART="/dev/${detected_parts[3]}"
-            print_info "HOME détecté: $HOME_PART"
-        fi
+        partitions_ok=false
     fi
     
-    # Vérification finale
-    if [[ ! -b "$ROOT_PART" ]]; then
-        print_error "Impossible de trouver la partition ROOT après détection automatique"
-        lsblk "$DISK"
+    if [[ ! -b "$EFI_PART" ]]; then
+        print_error "Partition EFI/Boot non trouvée: $EFI_PART"
+        partitions_ok=false
+    fi
+    
+    if [[ "$partitions_ok" != true ]]; then
+        print_error "Partitions manquantes, impossible de formater"
         return 1
     fi
 
     # Démontage préventif
-    print_info "Démontage préventif des partitions..."
-    umount -f "$EFI_PART" "$ROOT_PART" "$HOME_PART" "$SWAP_PART" 2>/dev/null || true
+    print_info "Démontage préventif..."
+    umount -f "$EFI_PART" "$ROOT_PART" "$HOME_PART" 2>/dev/null || true
     swapoff "$SWAP_PART" 2>/dev/null || true
     sleep 2
-    
-    # Formatage Boot/EFI
+
+    # Formatage EFI/Boot
     if [[ "$BOOT_MODE" == "uefi" ]]; then
-        print_info "Formatage partition EFI : $EFI_PART"
-        if [[ -b "$EFI_PART" ]]; then
-            if ! mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
-                print_warning "Echec formatage FAT32, tentative alternative..."
-                wipefs -af "$EFI_PART" || true
-                if ! mkfs.fat -F32 "$EFI_PART"; then
-                    print_error "Impossible de formater la partition EFI"
-                    return 1
-                fi
-            fi
+        print_info "Formatage partition EFI: $EFI_PART"
+        if mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
             print_success "Partition EFI formatée (FAT32)"
         else
-            print_error "Partition EFI non trouvée: $EFI_PART"
+            print_error "Echec formatage EFI"
             return 1
         fi
     else
-        print_info "Formatage partition Boot : $EFI_PART"
-        if [[ -b "$EFI_PART" ]]; then
-            if ! mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
-                print_warning "Echec formatage ext4, tentative avec nettoyage..."
-                wipefs -af "$EFI_PART" || true
-                if ! mkfs.ext4 -F "$EFI_PART"; then
-                    print_error "Impossible de formater la partition Boot"
-                    return 1
-                fi
-            fi
+        print_info "Formatage partition Boot: $EFI_PART"
+        if mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
             print_success "Partition Boot formatée (ext4)"
         else
-            print_error "Partition Boot non trouvée: $EFI_PART"
+            print_error "Echec formatage Boot"
             return 1
         fi
     fi
-    
+
     # Formatage Root
-    print_info "Formatage partition Root : $ROOT_PART"
-    if [[ -b "$ROOT_PART" ]]; then
-        if ! mkfs.ext4 -F -L 'ArchRoot' "$ROOT_PART"; then
-            print_warning "Echec formatage ext4, tentative avec nettoyage..."
-            wipefs -af "$ROOT_PART" || true
-            if ! mkfs.ext4 -F "$ROOT_PART"; then
-                print_error "Impossible de formater la partition Root"
-                return 1
-            fi
-        fi
-        print_success "Partition Root formatée"
+    print_info "Formatage partition Root: $ROOT_PART"
+    if mkfs.ext4 -F -L 'ArchRoot' "$ROOT_PART"; then
+        print_success "Partition Root formatée (ext4)"
     else
-        print_error "Partition Root non trouvée: $ROOT_PART"
+        print_error "Echec formatage Root"
         return 1
     fi
-    
+
     # Formatage Home (optionnel)
-    if [[ -n "$HOME_PART" ]] && [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
-        print_info "Formatage partition Home : $HOME_PART"
-        if ! mkfs.ext4 -F -L 'ArchHome' "$HOME_PART"; then
+    if [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
+        print_info "Formatage partition Home: $HOME_PART"
+        if mkfs.ext4 -F -L 'ArchHome' "$HOME_PART"; then
+            print_success "Partition Home formatée (ext4)"
+        else
             print_warning "Echec formatage Home, désactivation..."
             USE_SEPARATE_HOME=false
-            HOME_PART=""
-        else
-            print_success "Partition Home formatée"
         fi
-    elif [[ "$USE_SEPARATE_HOME" == true ]] && [[ ! -b "$HOME_PART" ]]; then
-        print_warning "Partition Home non trouvée, désactivation..."
-        USE_SEPARATE_HOME=false
-        HOME_PART=""
     fi
-    
+
     # Configuration Swap (optionnel)
-    if [[ -n "$SWAP_PART" ]] && [[ "$USE_SWAP" == true ]] && [[ -b "$SWAP_PART" ]]; then
-        print_info "Configuration partition Swap : $SWAP_PART"
-        if ! mkswap -L 'ArchSwap' "$SWAP_PART"; then
+    if [[ "$USE_SWAP" == true ]] && [[ -b "$SWAP_PART" ]]; then
+        print_info "Configuration partition Swap: $SWAP_PART"
+        if mkswap -L 'ArchSwap' "$SWAP_PART"; then
+            if swapon "$SWAP_PART"; then
+                print_success "Partition Swap configurée et activée"
+            else
+                print_warning "Impossible d'activer le swap"
+            fi
+        else
             print_warning "Echec configuration Swap, désactivation..."
             USE_SWAP=false
-            SWAP_PART=""
-        else
-            swapon "$SWAP_PART" && print_success "Partition Swap configurée et activée"
         fi
-    elif [[ "$USE_SWAP" == true ]] && [[ ! -b "$SWAP_PART" ]]; then
-        print_warning "Partition Swap non trouvée, désactivation..."
-        USE_SWAP=false
-        SWAP_PART=""
     fi
-    
-    sleep 2
-    print_success "Formatage terminé pour le mode ${BOOT_MODE}"
+
+    print_success "Formatage terminé avec succès"
+    return 0
 }
 
 mount_partitions() {
@@ -2402,51 +2250,58 @@ mount_partitions() {
         return 0
     fi
     
-    # Démontage
-    if mountpoint -q /mnt; then
-        umount -R /mnt || true
-    fi
-    
+    # Démontage préventif
+    print_info "Démontage préventif..."
+    umount -R /mnt 2>/dev/null || true
     mkdir -p /mnt
-    
+
     # Montage Root
-    print_info "Montage partition Root : $ROOT_PART sur /mnt"
+    print_info "Montage partition Root: $ROOT_PART sur /mnt"
     if ! mount "$ROOT_PART" /mnt; then
-        print_error "Impossible de monter la partition Root"
+        print_error "Echec montage partition Root"
         return 1
     fi
-    
+
     # Montage Boot/EFI
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         mkdir -p /mnt/boot/efi
-        print_info "Montage partition EFI : $EFI_PART sur /mnt/boot/efi"
+        print_info "Montage partition EFI: $EFI_PART sur /mnt/boot/efi"
         if ! mount "$EFI_PART" /mnt/boot/efi; then
-            print_error "Impossible de monter la partition EFI"
+            print_error "Echec montage partition EFI"
             return 1
         fi
     else
         mkdir -p /mnt/boot
-        print_info "Montage partition Boot : $EFI_PART sur /mnt/boot"
+        print_info "Montage partition Boot: $EFI_PART sur /mnt/boot"
         if ! mount "$EFI_PART" /mnt/boot; then
-            print_error "Impossible de monter la partition Boot"
+            print_error "Echec montage partition Boot"
             return 1
         fi
     fi
-    
+
     # Montage Home (optionnel)
-    if [[ -n "$HOME_PART" ]] && [[ "$USE_SEPARATE_HOME" == true ]]; then
+    if [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
         mkdir -p /mnt/home
-        print_info "Montage partition Home : $HOME_PART sur /mnt/home"
+        print_info "Montage partition Home: $HOME_PART sur /mnt/home"
         if ! mount "$HOME_PART" /mnt/home; then
-            print_warning "Impossible de monter la partition Home, désactivation..."
+            print_warning "Echec montage partition Home, continuation sans home séparé"
             USE_SEPARATE_HOME=false
-            HOME_PART=""
         else
             print_success "Partition Home montée"
         fi
     fi
-    
-    print_success "Partitions montées pour le mode ${BOOT_MODE}"
+
+    # Vérification du montage
+    print_info "Vérification des points de montage..."
+    if mountpoint -q /mnt && mountpoint -q /mnt/boot; then
+        print_success "Partitions montées avec succès"
+        echo "Points de montage:"
+        mount | grep /mnt
+        return 0
+    else
+        print_error "Echec vérification des points de montage"
+        return 1
+    fi
 }
 
 # Fonctions d'installation du système de base
@@ -5595,7 +5450,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V714.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V724.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
