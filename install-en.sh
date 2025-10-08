@@ -9,8 +9,8 @@ if ! command -v arch-chroot &>/dev/null; then
 fi
 # Arch Linux automated installation script
 # Made by PapaOursPolaire - available on GitHub
-# Version: 704.4, patch 4 of version 704.4
-# Updated: 08/10/2025 at 7:55 p.m.
+# Version: 714.4, patch 4 of version 714.4
+# Updated: 08/10/2025 at 8:08 p.m.
 # GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
 # Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
 # Errors in step 17: do not install paru in the temp
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="704.4"
+readonly SCRIPT_VERSION="714.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1398,7 +1398,7 @@ Options:
     • Progress bars with real time estimates
     • Robust error handling with automatic fallbacks
 
-    NEW FEATURES OF VERSION 704.4:
+    NEW FEATURES OF VERSION 714.4:
 
     • Custom partition size configuration
     • Optional separate /home partition with Y/N interface
@@ -1968,6 +1968,27 @@ create_new_partitioning() {
     if ! confirm_action "Confirm disk erasure?"; then
         return 1
     fi
+
+    print_info "Final verification of created partitions..."
+    sleep 3
+    sync
+    partprobe "$DISK" || true
+    sleep 3
+
+    # Visual verification
+    echo -e "${GREEN}Created partitions:${NC}"
+    lsblk "$DISK"
+
+    # Validate that partitions exist
+    if [[ ! -b "$ROOT_PART" ]]; then
+        print_error "ERROR: ROOT partition $ROOT_PART doesn't exist!"
+        print_info "Attempting automatic detection..."
+        local parts=($(lsblk -rno NAME "$DISK" | grep "^${DISK##*/}" | head -5))
+        if [[ ${#parts[@]} -ge 2 ]]; then
+            ROOT_PART="/dev/${parts[1]}"
+            print_info "ROOT partition re-detected: $ROOT_PART"
+        fi
+    fi
     
     # Automatic or custom configuration
     local disk_size_bytes
@@ -2211,59 +2232,127 @@ create_new_partitioning() {
 }
 
 format_partitions() {
-    print_header "STEP 6/$TOTAL_STEPS: PARTITION FORMATTING"
+    print_header "STEP 6/$TOTAL_STEPS: FORMATTING PARTITIONS"
     CURRENT_STEP=6
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Formatting simulation"
+        print_info "[DRY RUN] Simulating formatting"
         return 0
     fi
     
-    # Preventive unmounting
-    umount -f "$EFI_PART" "$ROOT_PART" "$HOME_PART" "$SWAP_PART" 2>/dev/null || true
-    swapoff "$SWAP_PART" 2>/dev/null || true
+    # Wait for partitions to be available
+    print_info "Waiting for partitions to be available..."
+    sleep 5
+    sync
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 3
     
-    sleep 2
-    
-    # Boot/EFI Formatting
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        print_info "Formatting EFI partition: $EFI_PART"
-        if ! mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
-            print_warning "FAT32 formatting failed, trying alternative..."
-            wipefs -af "$EFI_PART" || true
-            if ! mkfs.fat -F32 "$EFI_PART"; then
-                print_error "Unable to format EFI partition"
-                return 1
-            fi
+    # Verify partitions exist
+    print_info "Verifying partitions..."
+    if [[ ! -b "$ROOT_PART" ]]; then
+        print_error "ROOT partition not found: $ROOT_PART"
+        print_info "Performing automatic partition detection..."
+        
+        # Emergency automatic detection
+        local detected_parts
+        mapfile -t detected_parts < <(lsblk -rno NAME "$DISK" | grep -E "${DISK##*/}[0-9]" | head -10)
+        
+        if [[ ${#detected_parts[@]} -lt 2 ]]; then
+            print_error "No partitions detected on $DISK"
+            lsblk "$DISK"
+            return 1
         fi
-        print_success "EFI partition formatted (FAT32)"
-    else
-        print_info "Formatting Boot partition: $EFI_PART"
-        if ! mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
-            print_warning "ext4 formatting failed, trying with cleanup..."
-            wipefs -af "$EFI_PART" || true
-            if ! mkfs.ext4 -F "$EFI_PART"; then
-                print_error "Unable to format Boot partition"
-                return 1
-            fi
+        
+        # Automatic reassignment
+        if [[ "$BOOT_MODE" == "uefi" ]]; then
+            EFI_PART="/dev/${detected_parts[0]}"
+            ROOT_PART="/dev/${detected_parts[1]}"
+            print_info "Detected partitions: EFI=$EFI_PART, ROOT=$ROOT_PART"
+        else
+            EFI_PART="/dev/${detected_parts[0]}"
+            ROOT_PART="/dev/${detected_parts[1]}" 
+            print_info "Detected partitions: BOOT=$EFI_PART, ROOT=$ROOT_PART"
         fi
-        print_success "Boot partition formatted (ext4)"
+        
+        # Optional SWAP and HOME detection
+        if [[ ${#detected_parts[@]} -gt 2 ]] && [[ "$USE_SWAP" == true ]]; then
+            SWAP_PART="/dev/${detected_parts[2]}"
+            print_info "SWAP detected: $SWAP_PART"
+        fi
+        
+        if [[ ${#detected_parts[@]} -gt 3 ]] && [[ "$USE_SEPARATE_HOME" == true ]]; then
+            HOME_PART="/dev/${detected_parts[3]}"
+            print_info "HOME detected: $HOME_PART"
+        fi
     fi
     
-    # Root Formatting
-    print_info "Formatting Root partition: $ROOT_PART"
-    if ! mkfs.ext4 -F -L 'ArchRoot' "$ROOT_PART"; then
-        print_warning "ext4 formatting failed, trying with cleanup..."
-        wipefs -af "$ROOT_PART" || true
-        if ! mkfs.ext4 -F "$ROOT_PART"; then
-            print_error "Unable to format Root partition"
+    # Final verification
+    if [[ ! -b "$ROOT_PART" ]]; then
+        print_error "Unable to find ROOT partition after automatic detection"
+        lsblk "$DISK"
+        return 1
+    fi
+
+    # Preventive unmounting
+    print_info "Preventive unmounting of partitions..."
+    umount -f "$EFI_PART" "$ROOT_PART" "$HOME_PART" "$SWAP_PART" 2>/dev/null || true
+    swapoff "$SWAP_PART" 2>/dev/null || true
+    sleep 2
+    
+    # Format Boot/EFI
+    if [[ "$BOOT_MODE" == "uefi" ]]; then
+        print_info "Formatting EFI partition: $EFI_PART"
+        if [[ -b "$EFI_PART" ]]; then
+            if ! mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
+                print_warning "FAT32 formatting failed, trying alternative..."
+                wipefs -af "$EFI_PART" || true
+                if ! mkfs.fat -F32 "$EFI_PART"; then
+                    print_error "Unable to format EFI partition"
+                    return 1
+                fi
+            fi
+            print_success "EFI partition formatted (FAT32)"
+        else
+            print_error "EFI partition not found: $EFI_PART"
+            return 1
+        fi
+    else
+        print_info "Formatting Boot partition: $EFI_PART"
+        if [[ -b "$EFI_PART" ]]; then
+            if ! mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
+                print_warning "ext4 formatting failed, trying with cleanup..."
+                wipefs -af "$EFI_PART" || true
+                if ! mkfs.ext4 -F "$EFI_PART"; then
+                    print_error "Unable to format Boot partition"
+                    return 1
+                fi
+            fi
+            print_success "Boot partition formatted (ext4)"
+        else
+            print_error "Boot partition not found: $EFI_PART"
             return 1
         fi
     fi
-    print_success "Root partition formatted"
     
-    # Home Formatting (optional)
-    if [[ -n "$HOME_PART" ]] && [[ "$USE_SEPARATE_HOME" == true ]]; then
+    # Format Root
+    print_info "Formatting Root partition: $ROOT_PART"
+    if [[ -b "$ROOT_PART" ]]; then
+        if ! mkfs.ext4 -F -L 'ArchRoot' "$ROOT_PART"; then
+            print_warning "ext4 formatting failed, trying with cleanup..."
+            wipefs -af "$ROOT_PART" || true
+            if ! mkfs.ext4 -F "$ROOT_PART"; then
+                print_error "Unable to format Root partition"
+                return 1
+            fi
+        fi
+        print_success "Root partition formatted"
+    else
+        print_error "Root partition not found: $ROOT_PART"
+        return 1
+    fi
+    
+    # Format Home (optional)
+    if [[ -n "$HOME_PART" ]] && [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
         print_info "Formatting Home partition: $HOME_PART"
         if ! mkfs.ext4 -F -L 'ArchHome' "$HOME_PART"; then
             print_warning "Home formatting failed, disabling..."
@@ -2272,10 +2361,14 @@ format_partitions() {
         else
             print_success "Home partition formatted"
         fi
+    elif [[ "$USE_SEPARATE_HOME" == true ]] && [[ ! -b "$HOME_PART" ]]; then
+        print_warning "Home partition not found, disabling..."
+        USE_SEPARATE_HOME=false
+        HOME_PART=""
     fi
     
-    # Swap Configuration (optional)
-    if [[ -n "$SWAP_PART" ]] && [[ "$USE_SWAP" == true ]]; then
+    # Configure Swap (optional)
+    if [[ -n "$SWAP_PART" ]] && [[ "$USE_SWAP" == true ]] && [[ -b "$SWAP_PART" ]]; then
         print_info "Configuring Swap partition: $SWAP_PART"
         if ! mkswap -L 'ArchSwap' "$SWAP_PART"; then
             print_warning "Swap configuration failed, disabling..."
@@ -2284,6 +2377,10 @@ format_partitions() {
         else
             swapon "$SWAP_PART" && print_success "Swap partition configured and activated"
         fi
+    elif [[ "$USE_SWAP" == true ]] && [[ ! -b "$SWAP_PART" ]]; then
+        print_warning "Swap partition not found, disabling..."
+        USE_SWAP=false
+        SWAP_PART=""
     fi
     
     sleep 2
@@ -5495,7 +5592,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Complete V704.4-BIOS installation! Your Arch Linux system is ready.${NC}"
+        echo -e "${GREEN} Complete V714.4-BIOS installation! Your Arch Linux system is ready.${NC}"
         echo ""
     fi
 }
