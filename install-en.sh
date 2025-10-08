@@ -9,8 +9,8 @@ if ! command -v arch-chroot &>/dev/null; then
 fi
 # Arch Linux automated installation script
 # Made by PapaOursPolaire - available on GitHub
-# Version: 694.4, patch 4 of version 694.4
-# Updated: 07/10/2025 at 9:14 p.m.
+# Version: 704.4, patch 4 of version 704.4
+# Updated: 08/10/2025 at 7:55 p.m.
 # GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
 # Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
 # Errors in step 17: do not install paru in the temp
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="694.4"
+readonly SCRIPT_VERSION="704.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -128,7 +128,7 @@ main() {
     echo ""
 
     # PHASE 1: SYSTEM PREPARATION
-    echo -e "${PURPLE}=== PHASE 1: SYSTEM PREPARATION ===${NC}"
+    echo -e "${PURPLE}PHASE 1: SYSTEM PREPARATION${NC}"
     
     check_requirements || {
         print_error "Requirements check failed"
@@ -144,10 +144,7 @@ main() {
         print_warning "Partial Pacman optimization"
     }
 
-
-    # PHASE 2: DISK AND PARTITION CONFIGURATION
-
-    echo -e "${PURPLE}=== PHASE 2: DISK AND PARTITION CONFIGURATION ===${NC}"
+    echo -e "${PURPLE}PHASE 2: DISK AND PARTITION CONFIGURATION${NC}"
     
     select_disk || {
         print_error "Disk selection failed"
@@ -169,10 +166,7 @@ main() {
         return 1
     }
 
-
-    # PHASE 3: BASE SYSTEM INSTALLATION
-
-    echo -e "${PURPLE}=== PHASE 3: BASE SYSTEM INSTALLATION ===${NC}"
+    echo -e "${PURPLE}PHASE 3: BASE SYSTEM INSTALLATION${NC}"
     
     install_system || {
         print_error "Base system installation failed"
@@ -189,10 +183,7 @@ main() {
         return 1
     }
 
-
-    # PHASE 4: GRAPHICAL INTERFACE
-
-    echo -e "${PURPLE}=== PHASE 4: GRAPHICAL INTERFACE ===${NC}"
+    echo -e "${PURPLE}PHASE 4: GRAPHICAL INTERFACE${NC}"
     
     select_desktop || {
         print_warning "No desktop environment selected"
@@ -207,10 +198,7 @@ main() {
         print_info "Console/server mode - no graphical interface"
     fi
 
-
-    # PHASE 5: BOOTLOADER AND THEMES
-
-    echo -e "${PURPLE}=== PHASE 5: BOOTLOADER AND THEMES ===${NC}"
+    echo -e "${PURPLE}PHASE 5: BOOTLOADER AND THEMES${NC}"
     
     # Bootloader configuration adapted to mode
     configure_bootloader || {
@@ -229,10 +217,7 @@ main() {
         }
     fi
 
-
-    # PHASE 6: AUDIO AND MULTIMEDIA
-
-    echo -e "${PURPLE}=== PHASE 6: AUDIO AND MULTIMEDIA ===${NC}"
+    echo -e "${PURPLE}PHASE 6: AUDIO AND MULTIMEDIA${NC}"
     
     install_audio_system || {
         print_warning "Audio system installation failed"
@@ -256,10 +241,7 @@ main() {
         }
     fi
 
-
-    # PHASE 7: APPLICATIONS AND SOFTWARE
-
-    echo -e "${PURPLE}=== PHASE 7: APPLICATIONS AND SOFTWARE ===${NC}"
+    echo -e "${PURPLE}PHASE 7: APPLICATIONS AND SOFTWARE${NC}"
     
     install_software || {
         print_warning "Partial software installation failure"
@@ -277,10 +259,7 @@ main() {
         print_warning "Wine installation failed"
     }
 
-
-    # PHASE 8: TOOLS AND DEVELOPMENT
-
-    echo -e "${PURPLE}=== PHASE 8: TOOLS AND DEVELOPMENT ===${NC}"
+    echo -e "${PURPLE}PHASE 8: TOOLS AND DEVELOPMENT${NC}"
     
     install_paru || {
         print_warning "Paru installation failed"
@@ -297,10 +276,7 @@ main() {
         }
     fi
 
-
-    # PHASE 9: THEMES AND CUSTOMIZATION
-
-    echo -e "${PURPLE}=== PHASE 9: THEMES AND CUSTOMIZATION ===${NC}"
+    echo -e "${PURPLE}PHASE 9: THEMES AND CUSTOMIZATION${NC}"
     
     # Themes only for graphical environments
     if [[ "$DE_CHOICE" != "none" ]]; then
@@ -313,10 +289,7 @@ main() {
         print_warning "Fastfetch installation failed"
     }
 
-
-    # PHASE 10: FINAL CONFIGURATION
-
-    echo -e "${PURPLE}=== PHASE 10: FINAL CONFIGURATION ===${NC}"
+    echo -e "${PURPLE}PHASE 10: FINAL CONFIGURATION${NC}"
     
     final_config || {
         print_warning "Partial final configuration failure"
@@ -336,10 +309,7 @@ main() {
         return 1
     }
 
-
-    # FINAL REPORT
-
-    echo -e "${GREEN}=== INSTALLATION REPORT COMPLETED ===${NC}"
+    echo -e "${GREEN}INSTALLATION REPORT COMPLETED${NC}"
     echo ""
     
     # Mode-specific summary display
@@ -1428,7 +1398,7 @@ Options:
     • Progress bars with real time estimates
     • Robust error handling with automatic fallbacks
 
-    NEW FEATURES OF VERSION 694.4:
+    NEW FEATURES OF VERSION 704.4:
 
     • Custom partition size configuration
     • Optional separate /home partition with Y/N interface
@@ -5525,7 +5495,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Complete V694.4-BIOS installation! Your Arch Linux system is ready.${NC}"
+        echo -e "${GREEN} Complete V704.4-BIOS installation! Your Arch Linux system is ready.${NC}"
         echo ""
     fi
 }
