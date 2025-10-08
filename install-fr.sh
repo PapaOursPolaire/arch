@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub
-# Version: 724.4, correctif 4 de la version 724.4
-# Mise à jour : 08/10/2025 à 20:51
+# Version: 734.4, correctif 4 de la version 734.4
+# Mise à jour : 08/10/2025 à 21:00
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="724.4"
+readonly SCRIPT_VERSION="734.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1399,7 +1399,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 724.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 734.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -1979,6 +1979,19 @@ configure_existing_partitions() {
     else
         USE_SWAP=false
     fi
+
+    # Vérifier que le disque n'est pas utilisé
+    if lsof "$DISK" 2>/dev/null; then
+        print_error "Le disque $DISK est encore utilisé par des processus"
+        lsof "$DISK" | head -10
+        return 1
+    fi
+
+    # Vérifier l'état du disque
+    if ! lsblk "$DISK" >/dev/null 2>&1; then
+        print_error "Le disque $DISK n'est pas accessible"
+        return 1
+    fi
 }
 
 create_new_partitioning() {
@@ -1990,19 +2003,23 @@ create_new_partitioning() {
         return 1
     fi
 
-    # Nettoyage complet du disque
-    print_info "Nettoyage du disque..."
+    # Nettoyage complet et forcé du disque
+    print_info "Nettoyage complet du disque..."
+    
+    # Démontage forcé de toutes les partitions
     umount -f "${DISK}"* 2>/dev/null || true
     swapoff "${DISK}"* 2>/dev/null || true
     
-    # Nettoyage des signatures avec différentes méthodes
+    # Nettoyage des signatures avec méthodes multiples
     print_info "Effacement des signatures de partition..."
     wipefs -af "$DISK" 2>/dev/null || true
     dd if=/dev/zero of="$DISK" bs=1M count=10 status=none 2>/dev/null || true
     
-    sleep 2
+    # Synchronisation et attente
+    sync
+    sleep 3
     partprobe "$DISK" 2>/dev/null || true
-    sleep 2
+    sleep 3
 
     # Création de la table de partitions selon le mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
@@ -2013,11 +2030,22 @@ create_new_partitioning() {
         fi
     else
         print_info "Création de la table MBR pour BIOS..."
-        if ! parted -s "$DISK" mklabel msdos; then
-            print_error "Echec de création de la table MBR"
-            return 1
-        fi
+        
+        # Méthode plus robuste pour MBR
+        echo "o\nw\n" | fdisk "$DISK" >/dev/null 2>&1 || {
+            # Fallback avec parted
+            if ! parted -s "$DISK" mklabel msdos; then
+                print_error "Echec de création de la table MBR avec toutes les méthodes"
+                return 1
+            fi
+        }
     fi
+
+    # Synchronisation après création table
+    sync
+    sleep 2
+    partprobe "$DISK" 2>/dev/null || true
+    sleep 2
 
     # Calcul des tailles en MB
     local boot_mb root_mb swap_mb home_mb
@@ -2054,6 +2082,10 @@ create_new_partitioning() {
     fi
     current_pos=$boot_end
 
+    # Synchronisation après première partition
+    sync
+    sleep 1
+
     # Partition 2: Root
     local root_end=$((current_pos + root_mb))
     print_info "Création partition Root (${current_pos}MiB-${root_end}MiB)..."
@@ -2063,6 +2095,9 @@ create_new_partitioning() {
     fi
     ROOT_PART="${DISK}2"
     current_pos=$root_end
+
+    sync
+    sleep 1
 
     # Partition 3: Swap (optionnelle)
     local part_num=3
@@ -2078,6 +2113,9 @@ create_new_partitioning() {
             USE_SWAP=false
         fi
     fi
+
+    sync
+    sleep 1
 
     # Partition 4: Home (optionnelle)
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
@@ -2101,7 +2139,7 @@ create_new_partitioning() {
         fi
     fi
 
-    # Synchronisation et vérification
+    # Synchronisation finale
     sync
     sleep 3
     partprobe "$DISK" 2>/dev/null || true
@@ -2139,6 +2177,22 @@ create_new_partitioning() {
 
     print_success "Partitionnement terminé avec succès"
     lsblk "$DISK"
+    return 0
+}
+
+create_mbr_with_fdisk() {
+    print_info "Création table MBR avec fdisk..."
+    
+    # Création de la table MBR avec fdisk
+    echo "o\nw\n" | fdisk "$DISK" >/dev/null 2>&1
+    
+    # Vérification
+    if ! parted -s "$DISK" print | grep -q "msdos"; then
+        print_error "Échec création MBR avec fdisk"
+        return 1
+    fi
+    
+    print_success "Table MBR créée avec fdisk"
     return 0
 }
 
@@ -5450,7 +5504,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V724.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V734.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
