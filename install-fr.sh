@@ -8,10 +8,14 @@ if ! command -v arch-chroot &>/dev/null; then
     }
 fi
 
+#
+# MENU GRUB DISFONCTIONNEL -VERIFIER SOURCES DEMAIN & REFAIRE CELUI EN ANGLAIS
+#
+
 # Script d'installation automatisée Arch Linux
-# Made by PapaOursPolaire - available on GitHub
-# Version: 744.4, correctif 4 de la version 744.4
-# Mise à jour : 08/10/2025 à 21:20
+# Made by PapaOursPolaire - available on GitHub PapaOursPolaire
+# Version: 754.4, correctif 4 de la version 754.4
+# Mise à jour : 09/10/2025 à 22:20
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -34,7 +38,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="744.4"
+readonly SCRIPT_VERSION="754.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -47,10 +51,7 @@ readonly PURPLE='\033[0;35m'
 readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
-
-# Variables supplémentaires
 readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip"
-readonly SDDM_THEME_URL="https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip"
 readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk"
 readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme"
 readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
@@ -396,13 +397,14 @@ configure_bootloader() {
 }
 
 configure_grub_bios() {
-    print_info "Installation et configuration GRUB pour BIOS..."
-    
-    # Installation de GRUB pour BIOS
+    print_header "ETAPE 14/$TOTAL_STEPS: CONFIGURATION GRUB BIOS"
+    CURRENT_STEP=14
+    print_info "Installation et configuration du bootloader GRUB pour BIOS..."
+
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-echo "Installation de GRUB pour BIOS sur $DISK"
-grub-install --target=i386-pc --recheck "$DISK"
+echo "[INFO] Installation de GRUB pour BIOS sur ${DISK}"
+grub-install --target=i386-pc --recheck "${DISK}"
 EOF
 
     if [[ $? -ne 0 ]]; then
@@ -410,42 +412,51 @@ EOF
         return 1
     fi
 
-    # Configuration GRUB commune
+    print_info "Téléchargement du thème Fallout depuis GitHub..."
+    /usr/bin/arch-chroot /mnt bash -c '
+set -e
+THEME_DIR="/boot/grub/themes/fallout"
+TMP_DIR="/tmp/fallout-grub-theme"
+rm -rf "$THEME_DIR" "$TMP_DIR"
+git clone --depth=1 https://github.com/shvchk/fallout-grub-theme.git "$TMP_DIR"
+mkdir -p "$THEME_DIR"
+cp -r "$TMP_DIR"/* "$THEME_DIR"/
+rm -rf "$TMP_DIR"
+'
+
+    print_info "Configuration de /etc/default/grub avec le thème Fallout..."
     cat > /mnt/etc/default/grub <<'EOF'
-# Configuration GRUB
+# Configuration GRUB BIOS avec thème Fallout
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=15
-GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
+GRUB_TIMEOUT=10
+GRUB_DISTRIBUTOR="Arch Linux Fallout Edition"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
-
-# Forcer l'affichage du menu
 GRUB_TIMEOUT_STYLE=menu
-GRUB_TERMINAL_OUTPUT=console
-
-# Désactiver le menu caché
-GRUB_HIDDEN_TIMEOUT=0
-GRUB_HIDDEN_TIMEOUT_QUIET=false
-
+GRUB_TERMINAL_OUTPUT=gfxterm
+GRUB_GFXMODE=1920x1080,auto
 GRUB_DISABLE_RECOVERY=true
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 EOF
 
-    # Génération de la configuration GRUB
+    print_info "Génération du fichier grub.cfg..."
     /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
-        print_error "Echec de génération de la configuration GRUB"
+        print_error "Échec de génération du fichier grub.cfg"
         return 1
     }
 
-    print_success "GRUB configuré et installé pour BIOS sur $DISK"
+    print_success "GRUB BIOS installé et thème Fallout appliqué !"
 }
 
 configure_grub_uefi() {
-    print_info "Installation et configuration GRUB pour UEFI..."
-    
+    print_header "ETAPE 14/$TOTAL_STEPS: CONFIGURATION GRUB UEFI"
+    CURRENT_STEP=14
+    print_info "Installation et configuration du bootloader GRUB pour UEFI..."
+
+    # Installation de GRUB pour UEFI
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-echo "Installation de GRUB pour UEFI"
+echo "[INFO] Installation de GRUB pour UEFI..."
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ArchLinux --recheck
 EOF
 
@@ -454,33 +465,40 @@ EOF
         return 1
     fi
 
-    # Configuration GRUB identique à la version BIOS
+    print_info "Téléchargement du thème Fallout depuis GitHub..."
+    /usr/bin/arch-chroot /mnt bash -c '
+set -e
+THEME_DIR="/boot/grub/themes/fallout"
+TMP_DIR="/tmp/fallout-grub-theme"
+rm -rf "$THEME_DIR" "$TMP_DIR"
+git clone --depth=1 https://github.com/shvchk/fallout-grub-theme.git "$TMP_DIR"
+mkdir -p "$THEME_DIR"
+cp -r "$TMP_DIR"/* "$THEME_DIR"/
+rm -rf "$TMP_DIR"
+'
+
+    print_info "Configuration de /etc/default/grub avec le thème Fallout..."
     cat > /mnt/etc/default/grub <<'EOF'
-# Configuration GRUB
+# Configuration GRUB UEFI avec thème Fallout
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=15
-GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
+GRUB_TIMEOUT=10
+GRUB_DISTRIBUTOR="Arch Linux Fallout Edition"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
-
-# Forcer l'affichage du menu
 GRUB_TIMEOUT_STYLE=menu
-GRUB_TERMINAL_OUTPUT=console
-
-# Désactiver le menu caché
-GRUB_HIDDEN_TIMEOUT=0
-GRUB_HIDDEN_TIMEOUT_QUIET=false
-
+GRUB_TERMINAL_OUTPUT=gfxterm
+GRUB_GFXMODE=1920x1080,auto
 GRUB_DISABLE_RECOVERY=true
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 EOF
 
+    print_info "Génération du fichier grub.cfg..."
     /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
-        print_error "Echec de génération de la configuration GRUB"
+        print_error "Échec de génération du fichier grub.cfg"
         return 1
     }
 
-    print_success "GRUB configuré et installé pour UEFI"
+    print_success "GRUB UEFI installé et thème Fallout appliqué !"
 }
 
 install_web() {
@@ -1410,7 +1428,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 744.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 754.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -2705,102 +2723,42 @@ install_desktop() {
     print_success "Environnement de bureau installé"
 }
 
-# Fonctions de bootloader et thèmes
-configure_grub() {
-    print_header "ETAPE 13/$TOTAL_STEPS: CONFIGURATION GRUB"
-    CURRENT_STEP=13
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation de la configuration GRUB"
-        return 0
-    fi
-
-    print_info "Installation et configuration GRUB..."
-
-    /usr/bin/arch-chroot /mnt /bin/bash <<EOF
-set -e
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ArchLinux --recheck
-EOF
-
-    cat > /mnt/etc/default/grub <<'EOF'
-# Configuration GRUB
-GRUB_DEFAULT=0
-GRUB_TIMEOUT=15
-GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
-GRUB_CMDLINE_LINUX=""
-
-# Forcer l'affichage du menu
-GRUB_TIMEOUT_STYLE=menu
-GRUB_TERMINAL_OUTPUT=gfxterm
-GRUB_GFXMODE=auto
-GRUB_GFXPAYLOAD_LINUX=keep
-
-# Désactiver le menu caché
-# GRUB_HIDDEN_TIMEOUT=0
-# GRUB_HIDDEN_TIMEOUT_QUIET=false
-
-GRUB_DISABLE_RECOVERY=true
-GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
-EOF
-
-#    /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
-#       print_error "Echec de génération de la configuration GRUB"
-#        return 1
-#    } -> Commenté car empeche l'installation du thème Fallout
-
-    print_success "GRUB configuré et installé"
-}
-
 install_fallout_theme() {
-    print_header "ETAPE 14/$TOTAL_STEPS: INSTALLATION DU THEME GRUB FALLOUT"
-    CURRENT_STEP=14
+    local REPO="${1:-https://github.com/shvchk/fallout-grub-theme.git}"
+    local TMPDIR="/tmp/fallout-grub-theme"
+    local THEME_TARGET="/mnt/boot/grub/themes/fallout"
 
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation de l'installation du thème Fallout"
-        return 0
+    if [[ ! -d /mnt ]]; then
+        echo "[ERREUR] /mnt non trouvé — monte la racine cible sur /mnt."
+        return 1
     fi
 
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-set -euo pipefail
+    rm -rf "$TMPDIR"
+    mkdir -p "$TMPDIR"
 
-echo "[INFO] Installation de Git si nécessaire..."
-pacman -Sy --noconfirm --needed git
+    echo "[INFO] Clonage du dépôt $REPO ..."
+    git clone --depth=1 "$REPO" "$TMPDIR" || { echo "[ERREUR] git clone a échoué"; return 2; }
 
-cd /tmp
-echo "[INFO] Nettoyage des dépots temporaires..."
-rm -rf fallout-grub-theme
+    # Cherche le répertoire contenant theme.txt (compatible avec plusieurs structures)
+    local THEMEDIR
+    THEMEDIR=$(find "$TMPDIR" -type f -name "theme.txt" -printf '%h\n' | head -n1)
+    if [[ -z "$THEMEDIR" ]]; then
+        echo "[ERREUR] theme.txt introuvable dans le dépôt cloné ($TMPDIR)."
+        ls -la "$TMPDIR"
+        return 3
+    fi
+    echo "[INFO] theme.txt trouvé dans : $THEMEDIR"
 
-echo "[INFO] Clonage du dépot Fallout GRUB..."
-git clone --depth=1 https://github.com/shvchk/fallout-grub-theme.git
+    # Copier dans la racine cible
+    echo "[INFO] Installation du thème dans $THEME_TARGET ..."
+    rm -rf "$THEME_TARGET"
+    mkdir -p "$(dirname "$THEME_TARGET")"
+    cp -a "$THEMEDIR" "$THEME_TARGET" || { echo "[ERREUR] copie vers $THEME_TARGET a échoué"; return 4; }
+    chown -R root:root "$THEME_TARGET"
+    chmod -R 755 "$THEME_TARGET"
 
-echo "[INFO] Recherche automatique du dossier contenant theme.txt..."
-THEME_DIR=$(find fallout-grub-theme -type f -name "theme.txt" -printf '%h\n' | head -n1)
-
-if [[ -z "$THEME_DIR" ]]; then
-    echo "[ERREUR] Impossible de trouver theme.txt dans le dépot."
-    echo "[DEBUG] Structure du dépot :"
-    ls -R fallout-grub-theme || true
-    exit 1
-fi
-
-echo "[INFO] Dossier du thème détecté : $THEME_DIR"
-install -d -m 0755 /boot/grub/themes
-rm -rf /boot/grub/themes/fallout
-cp -a "$THEME_DIR" /boot/grub/themes/fallout
-
-echo "[INFO] Configuration de GRUB_THEME dans /etc/default/grub..."
-if grep -q "^#*GRUB_THEME=" /etc/default/grub; then
-    sed -i 's|^#*GRUB_THEME=.*|GRUB_THEME="/boot/grub/themes/fallout/theme.txt"|' /etc/default/grub
-else
-    echo 'GRUB_THEME="/boot/grub/themes/fallout/theme.txt"' >> /etc/default/grub
-fi
-
-echo "[INFO] Régénération de la configuration GRUB..."
-grub-mkconfig -o /boot/grub/grub.cfg
-
-echo "[SUCCÈS] Thème Fallout installé et configuré."
-EOF
+    echo "[SUCCÈS] Thème copié dans $THEME_TARGET"
+    return 0
 }
 
 # Fonctions audia et multimedia
@@ -5533,7 +5491,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V744.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V754.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
