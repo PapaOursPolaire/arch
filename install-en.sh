@@ -9,8 +9,8 @@ if ! command -v arch-chroot &>/dev/null; then
 fi
 # Arch Linux automated installation script
 # Made by PapaOursPolaire - available on GitHub
-# Version: 734.4, patch 4 of version 734.4
-# Updated: 08/10/2025 at 9:00 p.m.
+# Version: 754.4, patch 4 of version 754.4
+# Updated: 10/10/2025 at 3:42 p.m.
 # GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
 # Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
 # Errors in step 17: do not install paru in the temp
@@ -35,7 +35,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="734.4"
+readonly SCRIPT_VERSION="754.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1398,7 +1398,7 @@ Options:
     • Progress bars with real time estimates
     • Robust error handling with automatic fallbacks
 
-    NEW FEATURES OF VERSION 734.4:
+    NEW FEATURES OF VERSION 754.4:
 
     • Custom partition size configuration
     • Optional separate /home partition with Y/N interface
@@ -5527,7 +5527,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Complete V734.4-BIOS installation! Your Arch Linux system is ready.${NC}"
+        echo -e "${GREEN} Complete V754.4-BIOS installation! Your Arch Linux system is ready.${NC}"
         echo ""
     fi
 }
