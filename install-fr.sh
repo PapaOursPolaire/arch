@@ -8,14 +8,10 @@ if ! command -v arch-chroot &>/dev/null; then
     }
 fi
 
-#
-# MENU GRUB DISFONCTIONNEL -VERIFIER SOURCES DEMAIN & REFAIRE CELUI EN ANGLAIS
-#
-
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub PapaOursPolaire
-# Version: 754.4, correctif 4 de la version 754.4
-# Mise à jour : 10/10/2025 à 15:42
+# Version: 764.4, correctif 4 de la version 764.4
+# Mise à jour : 14/10/2025 à 17:14
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreurs à l'étape 17  : ne paas installer paru dans le temp
@@ -38,7 +34,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="754.4"
+readonly SCRIPT_VERSION="764.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -1428,7 +1424,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 754.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 764.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -3024,7 +3020,6 @@ EOF"
 }
 
 configure_kde_lockscreen() {
-    # Configuration du lockscreen pour KDE uniquement (via KSplash QML)
     print_header "ETAPE 15/$TOTAL_STEPS: CONFIGURATION KDE SPLASH"
     CURRENT_STEP=15
     
@@ -3038,274 +3033,207 @@ configure_kde_lockscreen() {
         return 0
     fi
 
-    print_info "Configuration automatique du lockscreen KDE Fallout..."
+    print_info "Configuration du splash screen KDE Fallout..."
     
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 set -euo pipefail
 
-# Variables
-THEME_ID="org.kde.falloutlock"
-THEME_DIR="/usr/share/plasma/look-and-feel/$THEME_ID"
-TEMP_DIR="/tmp/fallout-lockscreen"
-LOG_FILE="/var/log/fallout-lockscreen-install.log"
+echo "[INFO] Installation composants KDE Splash..."
+pacman -S --noconfirm --needed ksplash
 
-echo "[$(date)] Début configuration lockscreen Fallout" > "$LOG_FILE"
+# Créer le répertoire du thème
+THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.fallout.desktop"
+mkdir -p "$THEME_DIR/contents/componentsets"
+mkdir -p "$THEME_DIR/contents/plasmacolorschemes"
 
-# Fonctions de logging
-log_info() { echo "[INFO] $1" | tee -a "$LOG_FILE"; }
-log_error() { echo "[ERROR] $1" | tee -a "$LOG_FILE"; exit 1; }
-log_warning() { echo "[WARNING] $1" | tee -a "$LOG_FILE"; }
-
-# Nettoyage précédent
-rm -rf "$TEMP_DIR" "$THEME_DIR"
-mkdir -p "$TEMP_DIR"
-
-# Téléchargement du thème lockscreen Fallout
-log_info "Téléchargement du thème lockscreen Fallout..."
-if ! curl -fL -o "$TEMP_DIR/fallout-splashscreen4k.zip" "https://github.com/PapaOursPolaire/arch/blob/Projets/fallout-splashscreen4k.zip"; then
-    log_warning "Échec téléchargement, création thème basique Fallout"
-    
-    # Création d'un thème basique Fallout
-    mkdir -p "$THEME_DIR/contents/components"
-    mkdir -p "$THEME_DIR/contents/lockscreen"
-    
-    # Fichier metadata principal
-    cat > "$THEME_DIR/metadata.desktop" <<'META_EOF'
+# Fichier metadata.desktop principal
+cat > "$THEME_DIR/metadata.desktop" <<'METADATA_EOF'
 [Desktop Entry]
-Name=Fallout Lock Screen
-Comment=Fallout-themed lock screen for KDE Plasma
-X-KDE-PluginInfo-Author=PapaOursPolaire
-X-KDE-PluginInfo-Email=contact@example.com
-X-KDE-PluginInfo-Name=org.kde.falloutlock
-X-KDE-PluginInfo-Version=1.0
-X-KDE-PluginInfo-Website=https://github.com/PapaOursPolaire
-X-KDE-PluginInfo-License=GPLv3
-X-KDE-PluginInfo-EnabledByDefault=true
-X-KDE-PlasmaLookAndFeel-Title=Fallout Lock Screen
-X-KDE-PlasmaLookAndFeel-Description=Fallout-themed lock screen with Pip-Boy style
-META_EOF
-
-    # Configuration du composant lockscreen
-    cat > "$THEME_DIR/contents/components/falloutlockscreen/metadata.desktop" <<'COMP_META_EOF'
-[Desktop Entry]
-Name=Fallout Lock Screen
+Name=Fallout
+Comment=Fallout-themed Plasma Look and Feel
 Type=Service
-X-KDE-ServiceTypes=Plasma/LockScreen
+
 X-KDE-PluginInfo-Author=PapaOursPolaire
 X-KDE-PluginInfo-Email=contact@example.com
-X-KDE-PluginInfo-Name=falloutlockscreen
+X-KDE-PluginInfo-Name=org.kde.fallout
 X-KDE-PluginInfo-Version=1.0
 X-KDE-PluginInfo-Website=https://github.com/PapaOursPolaire
 X-KDE-PluginInfo-License=GPLv3
-X-KDE-PluginInfo-EnabledByDefault=true
-COMP_META_EOF
+X-KDE-ServiceTypes=Plasma/LookAndFeel
 
-    # Fichier QML principal du lockscreen
-    mkdir -p "$THEME_DIR/contents/components/falloutlockscreen/contents/ui"
-    cat > "$THEME_DIR/contents/components/falloutlockscreen/contents/ui/main.qml" <<'QML_EOF'
-import QtQuick 2.12
-import QtQuick.Controls 2.12
-import QtQuick.Layouts 1.12
-import org.kde.plasma.components 3.0 as PlasmaComponents
-import org.kde.plasma.core 2.0 as PlasmaCore
+X-KDE-Plasma-MainScript=plasmoidsetupscripts/main.js
+METADATA_EOF
 
-PlasmaCore.FrameSvgItem {
-    id: root
-    imagePath: "widgets/background"
-    
-    width: 1920
-    height: 1080
-    
-    Rectangle {
+# Configuration du splash screen
+cat > "$THEME_DIR/contents/splash/Splash.qml" <<'SPLASH_EOF'
+import QtQuick 2.5
+import QtGraphicalEffects 1.0
+
+Rectangle {
+    width: 800
+    height: 600
+    color: "#002b36"
+
+    Image {
         anchors.fill: parent
-        color: "#002b36" // Fond vert foncé style Fallout
-        
-        // Background image ou couleur
-        Image {
-            anchors.fill: parent
-            source: "file:///usr/share/wallpapers/fallout-background.jpg"
-            fillMode: Image.PreserveAspectCrop
-            opacity: 0.3
-        }
-        
-        ColumnLayout {
-            anchors.centerIn: parent
-            spacing: 30
-            
-            // Logo/texte Fallout
-            Text {
-                text: "ARCH LINUX\nFALLOUT EDITION"
-                color: "#00ff00" // Vert fluo Fallout
-                font.pixelSize: 32
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                Layout.alignment: Qt.AlignHCenter
-            }
-            
-            // Champ de mot de passe
-            PlasmaComponents.TextField {
-                id: passwordField
-                placeholderText: "Password"
-                echoMode: TextInput.Password
-                focus: true
-                Layout.preferredWidth: 300
-                Layout.alignment: Qt.AlignHCenter
-                
-                background: Rectangle {
-                    color: "#073642"
-                    border.color: "#00ff00"
-                    border.width: 2
-                    radius: 5
-                }
-                
-                onAccepted: {
-                    // Logique d'authentification
-                    authenticator.tryUnlock(passwordField.text)
-                }
-            }
-            
-            // Bouton de déverrouillage
-            PlasmaComponents.Button {
-                text: "UNLOCK"
-                Layout.alignment: Qt.AlignHCenter
-                
-                background: Rectangle {
-                    color: "#00ff00"
-                    radius: 5
-                }
-                
-                onClicked: {
-                    authenticator.tryUnlock(passwordField.text)
-                }
-            }
-            
-            // Date et heure
-            Text {
-                text: Qt.formatDateTime(new Date(), "dddd, MMMM dd yyyy\nhh:mm:ss AP")
-                color: "#00ff00"
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
-                Layout.alignment: Qt.AlignHCenter
+        source: "fallout-bg.png"
+        fillMode: Image.PreserveAspectCrop
+        opacity: 0.3
+    }
+
+    Text {
+        anchors.centerIn: parent
+        text: "ARCH LINUX\nFALLOUT EDITION"
+        color: "#00ff00"
+        font.pixelSize: 48
+        font.bold: true
+        horizontalAlignment: Text.AlignHCenter
+        style: Text.Outline
+        styleColor: "#000000"
+    }
+
+    BusyIndicator {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 50
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 80
+        height: 80
+        running: true
+
+        contentItem: Canvas {
+            width: parent.width
+            height: parent.height
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                ctx.strokeStyle = "#00ff00"
+                ctx.lineWidth = 3
+                ctx.beginPath()
+                ctx.arc(width/2, height/2, width/3, 0, Math.PI * 2)
+                ctx.stroke()
             }
         }
     }
+
+    ProgressBar {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 400
+        value: scaleY
+    }
+
+    Component.onCompleted: {
+        console.log("Splash screen Fallout chargé")
+    }
 }
-QML_EOF
+SPLASH_EOF
 
-else
-    # Extraction du thème téléchargé
-    log_info "Extraction du thème lockscreen..."
-    if ! unzip -o "$TEMP_DIR/fallout-splashscreen4k.zip" -d "$TEMP_DIR"; then
-        log_error "Échec extraction de l'archive"
-    fi
-    
-    # Trouver le dossier du thème
-    THEME_SOURCE=$(find "$TEMP_DIR" -name "metadata.desktop" -exec dirname {} \; | head -1)
-    if [[ -z "$THEME_SOURCE" ]]; then
-        log_error "Structure de thème invalide - metadata.desktop introuvable"
-    fi
-    
-    # Copier le thème
-    mkdir -p "$THEME_DIR"
-    cp -r "$THEME_SOURCE"/* "$THEME_DIR/" || log_error "Échec copie du thème"
-fi
+# Créer une image de fond simple (pixel vert Fallout)
+cat > "$THEME_DIR/contents/splash/fallout-bg.png" << 'PNG_EOF'
+# Création simplifiée - utiliser une couleur unie
+PNG_EOF
 
-# Définir les permissions
+# Configuration du schéma de couleur Fallout
+cat > "$THEME_DIR/contents/plasmacolorschemes/FalloutDark.colors" <<'COLORS_EOF'
+[ColorScheme]
+Name=Fallout Dark
+Description=Fallout-inspired dark color scheme
+
+[Colors:Window]
+BackgroundNormal=0,43,54
+BackgroundAlternate=7,54,66
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+ForegroundLink=42,161,152
+ForegroundVisited=108,113,196
+ForegroundNegative=220,50,47
+ForegroundNeutral=181,137,0
+ForegroundPositive=133,153,0
+
+[Colors:Button]
+BackgroundNormal=7,54,66
+BackgroundAlternate=0,43,54
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+
+[Colors:Selection]
+BackgroundNormal=42,161,152
+BackgroundAlternate=0,255,0
+ForegroundNormal=0,43,54
+ForegroundActive=255,255,255
+
+[Colors:Tooltip]
+BackgroundNormal=0,43,54
+BackgroundAlternate=7,54,66
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+
+[Colors:View]
+BackgroundNormal=0,43,54
+BackgroundAlternate=7,54,66
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+COLORS_EOF
+
+# Configuration lookandfeel
+cat > "$THEME_DIR/contents/defaults" <<'DEFAULTS_EOF'
+[kdeglobals]
+[General]
+ColorScheme=FalloutDark
+widgetStyle=Breeze
+
+[Icons]
+Theme=Tela
+
+[KDE]
+SingleClick=false
+
+[Wallpaper]
+Image=file:///usr/share/wallpapers/fallout-wallpaper.jpg
+DEFAULTS_EOF
+
+# Permissions
 chmod -R 755 "$THEME_DIR"
 chown -R root:root "$THEME_DIR"
 
-# Configuration pour forcer le thème lockscreen
-log_info "Configuration système pour forcer le lockscreen Fallout..."
-
-# Configuration SDDM pour utiliser le thème
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/fallout-theme.conf <<'SDDM_EOF'
-[Theme]
-Current=fallout
-CursorTheme=Breeze
-Font=Noto Sans
-SDDM_EOF
-
-# Configuration Plasma pour forcer le thème lockscreen
-mkdir -p /etc/xdg/plasma-workspace/env
-cat > /etc/xdg/plasma-workspace/env/fallout-lockscreen.sh <<'ENV_EOF'
-#!/bin/bash
-export KSCREENLOCKER_THEME="org.kde.falloutlock"
-ENV_EOF
-chmod +x /etc/xdg/plasma-workspace/env/fallout-lockscreen.sh
-
-# Configuration KScreenLocker
-mkdir -p /etc/xdg/kscreenlockerrc
-cat > /etc/xdg/kscreenlockerrc <<'LOCKER_EOF'
-[Daemon]
-Theme=org.kde.falloutlock
-Timeout=60
-LockOnResume=true
-LockOnSuspend=true
-
-[Greeter]
-Theme=org.kde.falloutlock
-LOCKER_EOF
-
-# Configuration pour tous les utilisateurs
-mkdir -p /etc/skel/.config
-cat > /etc/skel/.config/kscreenlockerrc <<'USER_LOCKER_EOF'
-[Daemon]
-Theme=org.kde.falloutlock
-Timeout=60
-LockOnResume=true
-LockOnSuspend=true
-
-[Greeter]
-Theme=org.kde.falloutlock
-USER_LOCKER_EOF
-
-# Forcer le thème via lookandfeeltool
-if command -v lookandfeeltool >/dev/null; then
-    log_info "Application du thème lookandfeel..."
-    lookandfeeltool -a org.kde.breeze.desktop 2>/dev/null || true
-    # Le thème lockscreen sera appliqué via la configuration système
-fi
-
-# Script de fallback pour s'assurer que le thème est appliqué au démarrage
-mkdir -p /etc/xdg/autostart
-cat > /etc/xdg/autostart/fallout-lockscreen-helper.desktop <<'AUTO_EOF'
-[Desktop Entry]
-Type=Application
-Name=Fallout Lock Screen Helper
-Exec=bash -c "sleep 5 && dbus-send --session --dest=org.kde.ksmserver --type=method_call /KSMServer org.kde.KSMServerInterface.setLockScreenTheme string:org.kde.falloutlock"
-Hidden=false
-NoDisplay=true
-X-KDE-autostart-phase=1
-AUTO_EOF
-
-log_info "Configuration lockscreen Fallout terminée avec succès"
+echo "[SUCCESS] Thème KDE Splash créé"
 EOF
 
-    # Appliquer la configuration pour l'utilisateur existant
-    if [[ -n "$USERNAME" ]]; then
-        print_info "Application de la configuration pour l'utilisateur $USERNAME..."
-        
-        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -c '
-            # Copier la configuration lockscreen
-            mkdir -p ~/.config
-            cp /etc/skel/.config/kscreenlockerrc ~/.config/ 2>/dev/null || true
-            
-            # Forcer le thème via DBUS (méthode immédiate)
-            if command -v dbus-send >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
-                dbus-send --session --dest=org.kde.ksmserver --type=method_call /KSMServer org.kde.KSMServerInterface.setLockScreenTheme string:org.kde.falloutlock 2>/dev/null || true
-            fi
-            
-            echo "Lockscreen Fallout configuré pour l utilisateur"
-        ' || print_warning "Impossible de configurer lockscreen pour l'utilisateur"
-    fi
+    # Configuration pour forcer l'utilisation du thème
+    /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Configuration partielle KDE"
+# Configuration SDDM pour le splash
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/kde-splash.conf <<'SDDM_EOF'
+[General]
+Session=plasmaX11
+Locale=fr_FR
+Session=KDE
+SDDM_EOF
 
-    # Redémarrer les services concernés
-    print_info "Redémarrage des services..."
-    /usr/bin/arch-chroot /mnt systemctl restart sddm 2>/dev/null || true
-    
-    print_success "Lockscreen KDE Fallout configuré et activé automatiquement"
-    print_info "Le thème sera appliqué au prochain verrouillage ou redémarrage"
+# Configuration Plasma pour tous les utilisateurs
+mkdir -p /etc/skel/.config
+cat > /etc/skel/.config/plasmarc <<'PLASMA_EOF'
+[Theme]
+name=breeze-dark
+
+[Splash]
+Engine=KSplash
+Theme=org.kde.fallout
+PLASMA_EOF
+
+# Copier pour utilisateur existant si présent
+if [[ -n "$USERNAME" && -d "/mnt/home/$USERNAME" ]]; then
+    mkdir -p "/mnt/home/$USERNAME/.config"
+    cp /etc/skel/.config/plasmarc "/mnt/home/$USERNAME/.config/" 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/plasmarc" 2>/dev/null || true
+fi
+
+# Force le thème à charger via lookandfeel
+lookandfeeltool -a org.kde.fallout.desktop 2>/dev/null || true
+EOF
+
+    print_success "KDE Splash Fallout configuré"
 }
 
 # Fonctions d'installation des applications, n'a jamais marché - PENSER A LE SUPPRIMER DANS LA VERSION DEF
@@ -3675,7 +3603,7 @@ install_spotify() {
 
 # Nettoyage sûr de /tmp avant installation des polices (pour éviter "No space left on device")
 clean_tmp() { # Plus efficace depuis la version 238.0, à enelver dans la version définitive
-    print_header "NETTOYAGE /tmp — Avant installation des polices"
+    print_header "NETTOYAGE /tmp"
     local CLEAN_TMP_MINUTES="${CLEAN_TMP_MINUTES:-120}"  # fichiers inactifs plus vieux que X minutes seront supprimés
     local LARGE_FILE_MB="${LARGE_FILE_MB:-100}"         # fichiers > X Mo seront supprimés
     local DRY="${DRY_RUN:-false}"
@@ -4278,34 +4206,80 @@ EOF
 }
 
 install_vscode() {
-    print_header "ETAPE 30/$TOTAL_STEPS: INSTALLATION DE VISUAL STUDIO CODE / VSCODIUM"
+    print_header "ETAPE 30/$TOTAL_STEPS: INSTALLATION VISUAL STUDIO CODE"
     CURRENT_STEP=30
 
-    # Vérifie Flatpak
-    if ! command -v flatpak &>/dev/null; then
-        print_info "Flatpak absent — installation..."
-        pacman -S --noconfirm --needed flatpak || {
-            print_error "Impossible d’installer Flatpak"
-            return 1
-        }
-        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+    if [[ "$DRY_RUN" == true ]]; then
+        print_info "[DRY RUN] Simulation installation VSCode"
+        return 0
     fi
 
-    # VS Code
-    if flatpak install -y flathub com.visualstudio.code; then
-        print_success "Visual Studio Code installé via Flatpak"
-    else
-        print_warning "Échec installation VS Code (com.visualstudio.code)"
+    print_info "Installation de Visual Studio Code..."
+
+    # Tentative 1 : via pacman directement
+    if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code 2>/dev/null; then
+        print_success "Visual Studio Code installé via pacman"
+        
+        # Créer raccourci bureau
+        /usr/bin/arch-chroot /mnt /bin/bash <<EOF
+mkdir -p /usr/share/applications
+cat > /usr/share/applications/code-fallout.desktop <<'DESK_EOF'
+[Desktop Entry]
+Name=Visual Studio Code
+Exec=code %U
+Icon=visual-studio-code
+Terminal=false
+Type=Application
+Categories=Development;
+MimeType=text/plain;inode/directory;
+DESK_EOF
+EOF
+        return 0
     fi
 
-    # VSCodium
-    if flatpak install -y flathub com.vscodium.codium; then
-        print_success "VSCodium installé via Flatpak"
-    else
-        print_warning "Échec installation VSCodium (com.vscodium.codium)"
+    print_warning "VSCode non disponible via pacman, tentative AUR..."
+
+    # Tentative 2 : via AUR avec paru
+    if /usr/bin/arch-chroot /mnt command -v paru &>/dev/null; then
+        if /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm visual-studio-code-bin 2>/dev/null; then
+            print_success "Visual Studio Code installé via AUR (paru)"
+            return 0
+        fi
     fi
+
+    # Tentative 3 : via Flatpak
+    if /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
+        /usr/bin/arch-chroot /mnt flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+        
+        if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.visualstudio.code 2>/dev/null; then
+            print_success "Visual Studio Code installé via Flatpak"
+            return 0
+        fi
+    fi
+
+    # Tentative 4 : VSCodium (alternative open-source)
+    print_warning "VSCode officiel indisponible, tentative VSCodium..."
+    if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed vscodium 2>/dev/null; then
+        print_success "VSCodium (alternative open-source) installé"
+        return 0
+    fi
+
+    # Tentative 5 : VSCodium via Flatpak
+    if /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
+        if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.vscodium.codium 2>/dev/null; then
+            print_success "VSCodium installé via Flatpak"
+            return 0
+        fi
+    fi
+
+    print_error "Impossible d'installer Visual Studio Code ou VSCodium"
+    print_info "Installation manuelle possible après reboot via:"
+    echo "  • pacman -S code"
+    echo "  • paru -S visual-studio-code-bin"
+    echo "  • flatpak install flathub com.visualstudio.code"
+    
+    return 1
 }
-
 
 generate_postinstall() {
     print_header "ETAPE 31/$TOTAL_STEPS: GENERATION SCRIPT POST-INSTALLATION"
@@ -4717,7 +4691,7 @@ POST_EOF
 }
 
 install_fastfetch() {
-    print_header "ETAPE 28/$TOTAL_STEPS: INSTALLATION ET CONFIGURATION DE FASTFETCH"
+    print_header "ETAPE 28/$TOTAL_STEPS: INSTALLATION ET CONFIGURATION FASTFETCH"
     CURRENT_STEP=28
 
     if [[ -z "${USERNAME:-}" ]]; then
@@ -4730,319 +4704,140 @@ install_fastfetch() {
         return 0
     fi
 
-    local USER_HOME="/home/${USERNAME}"
-    local CHROOT_USER_HOME="/mnt${USER_HOME}"
-    local CONFIG_DIR="${CHROOT_USER_HOME}/.config/fastfetch"
-    local PROFILE_FILE="${CHROOT_USER_HOME}/.bashrc"
-    local INVOKE_MARKER="# fastfetch autostart entry - added by install script"
-    local installed_in_chroot=false
-
-    # 1) Installation de fastfetch
     print_info "Installation de fastfetch..."
-    
-    if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch 2>/dev/null; then
-        print_success "fastfetch installé via pacman"
-        installed_in_chroot=true
-    else
-        print_warning "Échec de l'installation via pacman, tentative Flatpak..."
-        
-        # Installation via Flatpak
-        if /usr/bin/arch-chroot /mnt flatpak install -y flathub io.github.fastfetch_cli 2>/dev/null; then
-            print_success "fastfetch installé via Flatpak"
-            installed_in_chroot=true
-        else
-            print_warning "Échec de l'installation via Flatpak"
+
+    # Installation du paquet
+    if ! /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch; then
+        print_warning "Ã‰chec pacman, tentative Flatpak..."
+        if ! /usr/bin/arch-chroot /mnt flatpak install -y flathub io.github.fastfetch_cli 2>/dev/null; then
+            print_error "Impossible d'installer fastfetch"
+            return 1
         fi
     fi
 
-    # 2) Configuration avancée avec tous les modules
-    print_info "Configuration de fastfetch avec modules complets..."
-    
-    mkdir -p "$CONFIG_DIR" || {
-        print_error "Impossible de créer $CONFIG_DIR"
-        return 1
-    }
+    local USER_HOME="/home/${USERNAME}"
+    local CONFIG_DIR="${USER_HOME}/.config/fastfetch"
 
-    # Configuration complète avec tous les modules disponibles
-    cat > "${CONFIG_DIR}/config.jsonc" <<'FFCFG'
+    print_info "Création de la configuration fastfetch..."
+
+    # Créer répertoire config
+    /usr/bin/arch-chroot /mnt mkdir -p "$CONFIG_DIR"
+
+    # Configuration fastfetch
+    /usr/bin/arch-chroot /mnt bash -c "cat > '$CONFIG_DIR/config.json' <<'FFCONFIG'
 {
-    "display": {
-        "separator": " : ",
-        "keyWidth": 20,
-        "keyColor": "#00ff00",
-        "valueColor": "#ffffff",
-        "showColors": true,
-        "barChar": "█",
-        "barWidth": 15,
-        "barStyle": "gradient"
+    \"logo\": {
+        \"type\": \"ascii\",
+        \"source\": \"arch\",
+        \"width\": 30,
+        \"height\": 20,
+        \"color\": {
+            \"foreground\": \"green\"
+        }
     },
-    "modules": [
-        {
-            "type": "title",
-            "format": "Arch Linux - {user}@{host}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "separator",
-            "color": "#00ff00"
-        },
-        {
-            "type": "os",
-            "key": "Système",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "host",
-            "key": "Hôte",
-            "format": "{product} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "kernel",
-            "key": "Kernel",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "uptime",
-            "key": "Uptime",
-            "format": "{days}j {hours}h {minutes}m",
-            "color": "#00ff00"
-        },
-        {
-            "type": "shell",
-            "key": "Shell",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "de",
-            "key": "Environnement",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "wm",
-            "key": "Window Manager",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "terminal",
-            "key": "Terminal",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "packages",
-            "key": "Paquets",
-            "format": "{count}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "cpu",
-            "key": "CPU",
-            "format": "{name} @ {frequency}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "gpu",
-            "key": "GPU",
-            "format": "{name}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "memory",
-            "key": "Mémoire",
-            "format": "{used} / {total}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "swap",
-            "key": "Swap",
-            "format": "{used} / {total}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "disk",
-            "key": "Disque",
-            "format": "{used} / {total} ({percent}%)",
-            "color": "#00ff00"
-        },
-        {
-            "type": "battery",
-            "key": "Batterie",
-            "format": "{percentage}% ({status})",
-            "color": "#00ff00"
-        },
-        {
-            "type": "locale",
-            "key": "Locale",
-            "format": "{name}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "datetime",
-            "key": "Date/Heure",
-            "format": "{date} {time}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "publicip",
-            "key": "IP Publique",
-            "format": "{address}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "localip",
-            "key": "IP Locale",
-            "format": "{address}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "weather",
-            "key": "Météo",
-            "format": "{location}: {temperature}°C {condition}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "processes",
-            "key": "Processus",
-            "format": "{count}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "break",
-            "color": "#00ff00"
-        },
-        {
-            "type": "colors",
-            "key": "Palette Couleurs",
-            "blockStyle": "vertical",
-            "color": "#00ff00"
-        }
-    ],
-    "logo": {
-        "type": "ascii",
-        "source": "arch",
-        "color": "#00ff00",
-        "padding": {
-            "top": 1,
-            "right": 2,
-            "bottom": 0,
-            "left": 0
-        }
-    }
+    \"display\": {
+        \"separator\": \" : \",
+        \"keyWidth\": 20,
+        \"keyColor\": \"green\",
+        \"valueColor\": \"white\",
+        \"barsColor\": \"green\",
+        \"barChar\": \"█\",
+        \"barWidth\": 20
+    },
+    \"modules\": [
+        \"os\",
+        \"host\",
+        \"kernel\",
+        \"uptime\",
+        \"packages\",
+        \"shell\",
+        \"de\",
+        \"wm\",
+        \"cpu\",
+        \"gpu\",
+        \"memory\",
+        \"swap\",
+        \"disk\",
+        \"battery\",
+        \"localip\",
+        \"publicip\"
+    ]
 }
-FFCFG
+FFCONFIG
+"
 
-    # 3) Configuration de l'autorun dans .bashrc
-    print_info "Configuration de l'autorun dans .bashrc..."
+    # Configuration bashrc pour l'autostart GARANTIE
+    print_info "Configuration autostart dans bashrc..."
     
-    if ! grep -q "$INVOKE_MARKER" "$PROFILE_FILE" 2>/dev/null; then
-        cat >> "$PROFILE_FILE" <<'BASHRC_FF'
-# fastfetch autostart - affiche les informations système à chaque shell
-# Ne s'exécute que dans les shells interactifs
-$INVOKE_MARKER
-if [[ $- == *i* ]] && command -v fastfetch >/dev/null 2>&1; then
-    # Vérifier si nous sommes dans un terminal graphique ou TTY
-    if [[ -n "$DISPLAY" ]] || [[ "$TERM" =~ ^xterm|^rxvt|^screen|^tmux|^linux|^vt ]]; then
-        # Utiliser la configuration personnalisée si disponible
-        if [[ -f ~/.config/fastfetch/config.jsonc ]]; then
-            fastfetch --load-config ~/.config/fastfetch/config.jsonc 2>/dev/null || \
-            fastfetch 2>/dev/null
-        else
-            fastfetch 2>/dev/null
-        fi
-        echo ""
-    fi
-fi
-BASHRC_FF
-    fi
+    /usr/bin/arch-chroot /mnt /bin/bash <<'BASHRC_CONFIG'
+USERNAME='$USERNAME'
+BASHRC="/home/${USERNAME}/.bashrc"
+MARKER="### FASTFETCH AUTOSTART - Installation Arch"
 
-    # 4) Configuration supplémentaire pour les shells de login
-    local BASHRC_LOGIN="${CHROOT_USER_HOME}/.profile"
-    if [[ ! -f "$BASHRC_LOGIN" ]]; then
-        touch "$BASHRC_LOGIN"
-    fi
-    
-    if ! grep -q "fastfetch" "$BASHRC_LOGIN" 2>/dev/null; then
-        cat >> "$BASHRC_LOGIN" <<'PROFILE_FF'
-# Exécuter fastfetch pour les shells de login
-if [ -n "$BASH_VERSION" ] && [ -n "$PS1" ] && command -v fastfetch >/dev/null 2>&1; then
-    if [[ -f ~/.config/fastfetch/config.jsonc ]]; then
-        fastfetch --load-config ~/.config/fastfetch/config.jsonc 2>/dev/null || true
-    else
-        fastfetch 2>/dev/null || true
-    fi
-    echo ""
-fi
-PROFILE_FF
-    fi
-
-    # 5) Configuration pour Zsh (si installé)
-    local ZSHRC="${CHROOT_USER_HOME}/.zshrc"
-    if [[ -f "$ZSHRC" ]] || /usr/bin/arch-chroot /mnt command -v zsh >/dev/null 2>&1; then
-        if [[ ! -f "$ZSHRC" ]]; then
-            touch "$ZSHRC"
-        fi
+# Si le marker n'existe pas, ajouter la config
+if ! grep -q "$MARKER" "$BASHRC" 2>/dev/null; then
+    cat >> "$BASHRC" <<'FASTFETCH_EOF'
+### FASTFETCH AUTOSTART - Installation Arch
+if [[ $- == *i* ]]; then
+    # Exécuter uniquement une fois par session shell
+    if [[ -z "$FASTFETCH_RUN" ]]; then
+        export FASTFETCH_RUN=1
         
-        if ! grep -q "fastfetch" "$ZSHRC" 2>/dev/null; then
-            cat >> "$ZSHRC" <<'ZSHRC_FF'
-# fastfetch pour Zsh
-if command -v fastfetch >/dev/null 2>&1 && [[ -o interactive ]]; then
-    if [[ -f ~/.config/fastfetch/config.jsonc ]]; then
-        fastfetch --load-config ~/.config/fastfetch/config.jsonc 2>/dev/null || \
-        fastfetch 2>/dev/null
-    else
-        fastfetch 2>/dev/null
-    fi
-    echo ""
-fi
-ZSHRC_FF
+        if command -v fastfetch >/dev/null 2>&1; then
+            fastfetch --config ~/.config/fastfetch/config.json 2>/dev/null || fastfetch
         fi
     fi
+fi
+FASTFETCH_EOF
+fi
+BASHRC_CONFIG
 
-    # 6) Fixer les permissions
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R ${USERNAME}:${USERNAME} '/home/${USERNAME}/.config/fastfetch' >/dev/null 2>&1 || true"
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.bashrc' '/home/${USERNAME}/.profile' >/dev/null 2>&1 || true"
-    
-    if [[ -f "$ZSHRC" ]]; then
-        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.zshrc' >/dev/null 2>&1 || true"
-    fi
-
-    # 7) Création d'un alias pratique
-    local BASHRC_ALIAS="${CHROOT_USER_HOME}/.bash_aliases"
-    if [[ ! -f "$BASHRC_ALIAS" ]]; then
-        touch "$BASHRC_ALIAS"
+    # Configuration zshrc si installé
+    /usr/bin/arch-chroot /mnt /bin/bash <<'ZSHRC_CONFIG'
+if /usr/bin/arch-chroot /mnt command -v zsh >/dev/null 2>&1; then
+    ZSHRC="/home/${USERNAME}/.zshrc"
+    if [[ ! -f "$ZSHRC" ]]; then
+        touch "$ZSHRC"
     fi
     
-    if ! grep -q "alias ff=" "$BASHRC_ALIAS" 2>/dev/null; then
-        echo "alias ff='fastfetch --load-config ~/.config/fastfetch/config.jsonc'" >> "$BASHRC_ALIAS"
+    if ! grep -q "FASTFETCH AUTOSTART" "$ZSHRC" 2>/dev/null; then
+        cat >> "$ZSHRC" <<'ZSHFETCH_EOF'
+### FASTFETCH AUTOSTART - Installation Arch
+if [[ -o interactive ]]; then
+    if [[ -z "$FASTFETCH_RUN" ]]; then
+        export FASTFETCH_RUN=1
+        
+        if command -v fastfetch >/dev/null 2>&1; then
+            fastfetch --config ~/.config/fastfetch/config.json 2>/dev/null || fastfetch
+        fi
     fi
+fi
+ZSHFETCH_EOF
+    fi
+fi
+ZSHRC_CONFIG
 
-    # 8) Message de test
-    print_info "Test de la configuration fastfetch..."
-    if /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -c "command -v fastfetch >/dev/null 2>&1"; then
-        print_success "Fastfetch configuré avec succès"
-        echo ""
-        echo -e "${GREEN}Modules activés:${NC}"
-        echo -e "• ${CYAN}Système${NC} - OS, Host, Kernel, Uptime"
-        echo -e "• ${CYAN}Shell${NC} - Shell, Environnement, WM, Terminal"
-        echo -e "• ${CYAN}Ressources${NC} - CPU, GPU, Mémoire, Swap, Disque"
-        echo -e "• ${CYAN}Réseau${NC} - IP Publique, IP Locale"
-        echo -e "• ${CYAN}Divers${NC} - Batterie, Locale, Date/Heure, Météo"
-        echo -e "• ${CYAN}Visuel${NC} - Palette de couleurs, Barres de progression"
-        echo ""
-        echo -e "${YELLOW}Fastfetch s'exécutera automatiquement dans:${NC}"
-        echo -e "• ${WHITE}Terminal Bash${NC} (.bashrc)"
-        echo -e "• ${WHITE}Shells de login${NC} (.profile)"
-        echo -e "• ${WHITE}Zsh${NC} (si installé)"
-        echo ""
-        echo -e "${PURPLE}Commande disponible:${NC} ${CYAN}ff${NC} - Lance fastfetch avec la configuration"
+    # Créer un alias pratique
+    /usr/bin/arch-chroot /mnt /bin/bash <<'ALIAS_CONFIG'
+USERNAME='$USERNAME'
+BASHALIASES="/home/${USERNAME}/.bash_aliases"
+
+if ! grep -q "alias ff=" "$BASHALIASES" 2>/dev/null; then
+    echo "alias ff='fastfetch --config ~/.config/fastfetch/config.json'" >> "$BASHALIASES"
+fi
+ALIAS_CONFIG
+
+    # Fixer les permissions
+    /usr/bin/arch-chroot /mnt chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.config/fastfetch" 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.bashrc" "/home/${USERNAME}/.bash_aliases" 2>/dev/null || true
+
+    # Test
+    if /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -c "command -v fastfetch >/dev/null 2>&1 && fastfetch --help >/dev/null 2>&1"; then
+        print_success "Fastfetch installé et configuré avec autostart"
+        print_info "Fastfetch s'exécutera automatiquement à chaque lancement du terminal"
+        print_info "Raccourci disponible: ff"
     else
-        print_warning "Fastfetch installé mais non accessible dans le chroot"
+        print_warning "Fastfetch installé mais la configuration peut nécessiter une vérification"
     fi
 
     return 0
@@ -5491,7 +5286,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V754.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V764.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
