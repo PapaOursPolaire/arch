@@ -66,6 +66,7 @@ Auteur : PapaOursPolaire
 
 -   KDE : `plasma-meta`, `kde-applications`, `sddm`.
 -   GNOME : `gnome`, `gnome-extra`, `gdm`.
+-   Sans interface graphique : Installe uniquement les paquets nécessaires au système 
 
 ------------------------------------------------------------------------
 
