@@ -3,39 +3,30 @@
 if ! command -v arch-chroot &>/dev/null; then
     echo "[INFO] arch-chroot missing, attempting immediate installation..."
     pacman -Sy --noconfirm arch-install-scripts || {
-        echo "[ERROR] Unable to install arch-install-scripts. Stopping the script."
+        echo "[ERROR] Unable to install arch-install-scripts. Stopping script."
         exit 1
     }
 fi
-# Arch Linux automated installation script
-# Made by PapaOursPolaire - available on GitHub
-# Version: 754.4, patch 4 of version 754.4
-# Updated: 10/10/2025 at 3:42 p.m.
-# GET THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
-# Correction of 2358 errors referenced by ShellCheck and by the ISO TTY console corrected
-# Errors in step 17: do not install paru in the temp
-# Errors in step 23: gtk-theme is not recognized
-# Error in the automatic execution of fastfetch: it is there, but does not open automatically
-# Virtual Studio has not been installed! 
-# The boot is on the fallback of the fallout theme and the grub menu is not displayed
-# The GitHub image is visible in Plymouth when it should be in the background of the session and not in Plymouth!
-# No software has been installed!
-# Error STEP 18 -> finished
-# Error with the yay command  -> finished
-# Errors Steps 18 bis, 21 & 23 (in progress)
-# Removal of Vulkan software/extensions because they were giving me headaches and didn't work under automation
-# Redesign of the install_paru() variable -> Second redesign on 08/14 for permission denied
-#[community] -> REMOVED because the servers are whores 08/13/2025 around 8 p.m.
-#Include = /etc/pacman.d/mirrorlist -> Those assholes cleaned up the dcp servers, causing a 404 error, and on top of that, most of them crashed because of it. Two hours wasted on bullshit like that, no way, I'm pissed off, argh
-# Remember to remove DRY RUN mode, as it has become useless since version 246.6. Its purpose was to simulate the operating mode and check the script's appearance.
-# Global configuration -> Theme (under development, no declared function)
-# Translated by DBG - my local AI
 
+# Automated Arch Linux Installation Script
+# Made by PapaOursPolaire - available on GitHub PapaOursPolaire
+# Version: 764.4, fix 4 of version 764.4
+# Update: 10/15/2025 at 18:23
+# TAKE THE NEW VERSION after running dos2unix ON LINUX or in chroot, pacman -Sy dos2unix
+# Fixed 2358 errors reported by ShellCheck and by the TTY console of the ISO
+# Error in automatic execution of fastfetch: it's there, but doesn't run automatically
+# Virtual Studio still doesn't install even with its own function!
+# Removal of vulkan software/extensions because they were giving me headaches and not working under automation
+# Overhaul of install_paru() variable -> 130th overhaul on 08/14 and still doesn't work
+#[community] -> REMOVED because [community] package servers became obsolete on 08/13/2025 around 8 PM
+#Include = /etc/pacman.d/mirrorlist -> These f***ing assholes cleaned the servers so it was giving 404 error and plus most of them crashed because of that 2 hours lost for such bullshit I can't believe it
+# Remember to remove DRY RUN mode, because it became futile since version 246.6, it was meant to simulate operational mode and check the script appearance.
+# Global configuration -> Theme (in development, no declared function)
 
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="754.4"
+readonly SCRIPT_VERSION="764.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -47,18 +38,16 @@ readonly BLUE='\033[0;34m'
 readonly PURPLE='\033[0;35m'
 readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
-readonly NC='\033[0m' # No Color
-
-# Additional variables
+readonly NC='\033[0m'
 readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip"
-readonly SDDM_THEME_URL="https://github.com/PapaOursPolaire/arch/archive/refs/heads/Projets.zip"
-readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk"
+readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk" # Unused MegaNZ API bug
 readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme"
 readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
 
 # Global variables
 DISK=""
 EFI_PART=""
+BOOT_PART=""
 ROOT_PART=""
 HOME_PART=""
 SWAP_PART=""
@@ -80,7 +69,7 @@ PARTITION_SWAP_SIZE="8G"
 PARTITION_HOME_SIZE="remaining"
 CUSTOM_PARTITIONING=false
 
-# Main function - primary entry point
+# Main function - main entry point
 main() {
     # Initialization
     init_logging
@@ -93,11 +82,11 @@ main() {
     # Automatic boot mode detection (MUST be first)
     detect_boot_mode
 
-    # Check if /usr/bin/arch-chroot is installed, install if not
+    # Check if /usr/bin/arch-chroot is installed, otherwise install it
     if ! command -v /usr/bin/arch-chroot &>/dev/null; then
         echo "[INFO] /usr/bin/arch-chroot missing, attempting installation..."
         pacman -Sy --noconfirm arch-install-scripts || {
-            echo "[ERROR] Unable to install arch-install-scripts. Script termination."
+            echo "[ERROR] Unable to install arch-install-scripts. Stopping script."
             exit 1
         }
     fi
@@ -105,8 +94,8 @@ main() {
     # Signal handling
     trap cleanup EXIT INT TERM
 
-    # Install required commands
-    install_required_commands || {
+    # Installation of required commands
+    check_requirements || {
         print_error "Failed to install required commands"
         return 1
     }
@@ -127,16 +116,15 @@ main() {
     echo -e "${YELLOW}Boot mode: ${BOOT_MODE}${NC}"
     echo ""
 
-    # PHASE 1: SYSTEM PREPARATION
     echo -e "${PURPLE}PHASE 1: SYSTEM PREPARATION${NC}"
     
     check_requirements || {
-        print_error "Requirements check failed"
+        print_error "Failed to verify prerequisites"
         return 1
     }
     
     test_environment || {
-        print_error "Environment test failed"
+        print_error "Failed environment test"
         return 1
     }
     
@@ -147,39 +135,39 @@ main() {
     echo -e "${PURPLE}PHASE 2: DISK AND PARTITION CONFIGURATION${NC}"
     
     select_disk || {
-        print_error "Disk selection failed"
+        print_error "Failed to select disk"
         return 1
     }
     
     choose_partitioning || {
-        print_error "Partitioning choice failed"
+        print_error "Failed to choose partitioning"
         return 1
     }
     
     format_partitions || {
-        print_error "Partition formatting failed"
+        print_error "Failed to format partitions"
         return 1
     }
     
     mount_partitions || {
-        print_error "Partition mounting failed"
+        print_error "Failed to mount partitions"
         return 1
     }
 
     echo -e "${PURPLE}PHASE 3: BASE SYSTEM INSTALLATION${NC}"
     
     install_system || {
-        print_error "Base system installation failed"
+        print_error "Failed to install base system"
         return 1
     }
     
     configure_system || {
-        print_error "System configuration failed"
+        print_error "Failed to configure system"
         return 1
     }
     
     create_users || {
-        print_error "User creation failed"
+        print_error "Failed to create users"
         return 1
     }
 
@@ -191,7 +179,7 @@ main() {
     
     if [[ "$DE_CHOICE" != "none" ]]; then
         install_desktop || {
-            print_error "Desktop environment installation failed"
+            print_error "Failed to install desktop environment"
             return 1
         }
     else
@@ -201,43 +189,39 @@ main() {
     echo -e "${PURPLE}PHASE 5: BOOTLOADER AND THEMES${NC}"
     
     # Bootloader configuration adapted to mode
-    configure_bootloader || {
-        print_error "Bootloader configuration failed"
+    configure_grub || {
+        print_error "Failed to configure bootloader"
         return 1
-    }
-    
-    install_fallout_theme || {
-        print_warning "Fallout theme installation failed"
     }
     
     # KDE configuration only if KDE is installed
     if [[ "$DE_CHOICE" == "kde" ]]; then
         configure_kde_lockscreen || {
-            print_warning "KDE lockscreen configuration failed"
+            print_warning "Failed to configure KDE lockscreen"
         }
     fi
 
     echo -e "${PURPLE}PHASE 6: AUDIO AND MULTIMEDIA${NC}"
     
     install_audio_system || {
-        print_warning "Audio system installation failed"
+        print_warning "Failed to install audio system"
     }
     
     install_boot_sound || {
-        print_warning "Boot sound installation failed"
+        print_warning "Failed to install boot sound"
     }
     
     # Plymouth only for graphical environments
     if [[ "$DE_CHOICE" != "none" ]]; then
         configure_plymouth || {
-            print_warning "Plymouth configuration failed"
+            print_warning "Failed to configure Plymouth"
         }
     fi
     
     # Display manager only for graphical environments
     if [[ "$DE_CHOICE" != "none" ]]; then
         configure_sddm || {
-            print_warning "Display manager configuration failed"
+            print_warning "Failed to configure display manager"
         }
     fi
 
@@ -252,17 +236,17 @@ main() {
     }
     
     install_spotify || {
-        print_warning "Spotify installation failed"
+        print_warning "Failed to install Spotify"
     }
     
     install_wine || {
-        print_warning "Wine installation failed"
+        print_warning "Failed to install Wine"
     }
 
     echo -e "${PURPLE}PHASE 8: TOOLS AND DEVELOPMENT${NC}"
     
     install_paru || {
-        print_warning "Paru installation failed"
+        print_warning "Failed to install Paru"
     }
     
     install_development || {
@@ -272,7 +256,7 @@ main() {
     # Steam only for graphical environments
     if [[ "$DE_CHOICE" != "none" ]]; then
         install_steam || {
-            print_warning "Steam installation failed"
+            print_warning "Failed to install Steam"
         }
     fi
 
@@ -286,7 +270,7 @@ main() {
     fi
     
     install_fastfetch || {
-        print_warning "Fastfetch installation failed"
+        print_warning "Failed to install Fastfetch"
     }
 
     echo -e "${PURPLE}PHASE 10: FINAL CONFIGURATION${NC}"
@@ -296,23 +280,23 @@ main() {
     }
     
     install_vscode || {
-        print_warning "VS Code installation failed"
+        print_warning "Failed to install VS Code"
     }
     
     generate_postinstall || {
-        print_warning "Post-installation script generation failed"
+        print_warning "Failed to generate post-installation script"
     }
     
     # Finalization
     finish_install || {
-        print_error "Installation finalization failed"
+        print_error "Failed to finalize installation"
         return 1
     }
 
     echo -e "${GREEN}INSTALLATION REPORT COMPLETED${NC}"
     echo ""
     
-    # Mode-specific summary display
+    # Display summary according to mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         echo -e "${GREEN}✓ UEFI installation successful${NC}"
         echo -e "  • GPT table created"
@@ -328,21 +312,29 @@ main() {
     echo ""
     echo -e "${CYAN}Next steps:${NC}"
     echo -e "1. Remove installation media"
-    echo -e "2. Reboot the system"
+    echo -e "2. Restart system"
     echo -e "3. Log in with user: ${USERNAME}"
     
     if [[ "$BOOT_MODE" == "bios" ]]; then
-        echo -e "4. Verify BIOS boots from hard disk"
+        while true; do
+            read -r -p "Boot partition size (default: 512M): " boot_input
+            boot_input=${boot_input:-512M}
+            if validate_input "$boot_input" "size"; then
+                PARTITION_BOOT_SIZE="$boot_input"
+                break
+            fi
+            print_warning "Invalid format! Use: number + M/m or G/g (ex: 512M, 512m, 2G, 2g)"
+        done
     fi
     
     echo ""
-    print_success "Arch Linux installation completed successfully!"
+    print_success "Arch Linux Fallout Edition installation completed successfully!"
     
     # Final log backup
     if [[ -f "$LOG_FILE" ]] && [[ -n "$USERNAME" ]]; then
         local user_log="/mnt/home/$USERNAME/installation.log"
         if cp "$LOG_FILE" "$user_log" 2>/dev/null; then
-            print_info "Installation journal saved: $user_log"
+            print_info "Installation log saved: $user_log"
         fi
     fi
     
@@ -371,8 +363,8 @@ detect_boot_mode() {
     echo ""
 }
 
-configure_bootloader() {
-    print_header "STEP 13/$TOTAL_STEPS: BOOTLOADER CONFIGURATION"
+configure_grub() {
+    print_header "STEP 13/$TOTAL_STEPS: BOOTLOADER CONFIGURATION according to firmware"
     CURRENT_STEP=13
 
     if [[ "$DRY_RUN" == true ]]; then
@@ -388,112 +380,130 @@ configure_bootloader() {
 }
 
 configure_grub_bios() {
-    print_info "Installing and configuring GRUB for BIOS..."
-    
-    # GRUB installation for BIOS
+    print_header "STEP 14/$TOTAL_STEPS: BIOS GRUB CONFIGURATION"
+    CURRENT_STEP=14
+    print_info "Installing and configuring GRUB bootloader for BIOS..."
+
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-echo "Installing GRUB for BIOS on $DISK"
-grub-install --target=i386-pc --recheck "$DISK"
+echo "[INFO] Installing GRUB for BIOS on ${DISK}"
+grub-install --target=i386-pc --recheck "${DISK}"
 EOF
 
     if [[ $? -ne 0 ]]; then
-        print_error "GRUB installation for BIOS failed"
+        print_error "Failed to install GRUB for BIOS"
         return 1
     fi
 
-    # Common GRUB configuration
+    print_info "Downloading Fallout theme from GitHub..."
+    /usr/bin/arch-chroot /mnt bash -c '
+set -e
+THEME_DIR="/boot/grub/themes/fallout"
+TMP_DIR="/tmp/fallout-grub-theme"
+rm -rf "$THEME_DIR" "$TMP_DIR"
+git clone --depth=1 https://github.com/shvchk/fallout-grub-theme.git "$TMP_DIR"
+mkdir -p "$THEME_DIR"
+cp -r "$TMP_DIR"/* "$THEME_DIR"/
+rm -rf "$TMP_DIR"
+'
+
+    print_info "Configuring /etc/default/grub with Fallout theme..."
     cat > /mnt/etc/default/grub <<'EOF'
-# GRUB Configuration
+# BIOS GRUB configuration with Fallout theme
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=15
-GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
+GRUB_TIMEOUT=10
+GRUB_DISTRIBUTOR="Arch Linux Fallout Edition"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
-
-# Force menu display
 GRUB_TIMEOUT_STYLE=menu
-GRUB_TERMINAL_OUTPUT=console
-
-# Disable hidden menu
-GRUB_HIDDEN_TIMEOUT=0
-GRUB_HIDDEN_TIMEOUT_QUIET=false
-
+GRUB_TERMINAL_OUTPUT=gfxterm
+GRUB_GFXMODE=1920x1080,auto
 GRUB_DISABLE_RECOVERY=true
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 EOF
 
-    # GRUB configuration generation
+    print_info "Generating grub.cfg file..."
     /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
-        print_error "GRUB configuration generation failed"
+        print_error "Failed to generate grub.cfg file"
         return 1
     }
 
-    print_success "GRUB configured and installed for BIOS on $DISK"
+    print_success "BIOS GRUB installed and Fallout theme applied!"
 }
 
 configure_grub_uefi() {
-    print_info "Installing and configuring GRUB for UEFI..."
-    
+    print_header "STEP 14/$TOTAL_STEPS: UEFI GRUB CONFIGURATION"
+    CURRENT_STEP=14
+    print_info "Installing and configuring GRUB bootloader for UEFI..."
+
+    # GRUB installation for UEFI
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-echo "Installing GRUB for UEFI"
+echo "[INFO] Installing GRUB for UEFI..."
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ArchLinux --recheck
 EOF
 
     if [[ $? -ne 0 ]]; then
-        print_error "GRUB installation for UEFI failed"
+        print_error "Failed to install GRUB for UEFI"
         return 1
     fi
 
-    # GRUB configuration identical to BIOS version
+    print_info "Downloading Fallout theme from GitHub..."
+    /usr/bin/arch-chroot /mnt bash -c '
+set -e
+THEME_DIR="/boot/grub/themes/fallout"
+TMP_DIR="/tmp/fallout-grub-theme"
+rm -rf "$THEME_DIR" "$TMP_DIR"
+git clone --depth=1 https://github.com/shvchk/fallout-grub-theme.git "$TMP_DIR"
+mkdir -p "$THEME_DIR"
+cp -r "$TMP_DIR"/* "$THEME_DIR"/
+rm -rf "$TMP_DIR"
+'
+
+    print_info "Configuring /etc/default/grub with Fallout theme..."
     cat > /mnt/etc/default/grub <<'EOF'
-# GRUB Configuration
+# UEFI GRUB configuration with Fallout theme
 GRUB_DEFAULT=0
-GRUB_TIMEOUT=15
-GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
+GRUB_TIMEOUT=10
+GRUB_DISTRIBUTOR="Arch Linux Fallout Edition"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
-
-# Force menu display
 GRUB_TIMEOUT_STYLE=menu
-GRUB_TERMINAL_OUTPUT=console
-
-# Disable hidden menu
-GRUB_HIDDEN_TIMEOUT=0
-GRUB_HIDDEN_TIMEOUT_QUIET=false
-
+GRUB_TERMINAL_OUTPUT=gfxterm
+GRUB_GFXMODE=1920x1080,auto
 GRUB_DISABLE_RECOVERY=true
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 EOF
 
+    print_info "Generating grub.cfg file..."
     /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
-        print_error "GRUB configuration generation failed"
+        print_error "Failed to generate grub.cfg file"
         return 1
     }
 
-    print_success "GRUB configured and installed for UEFI"
+    print_success "UEFI GRUB installed and Fallout theme applied!"
 }
 
 install_web() {
     print_header "STEP 21/$TOTAL_STEPS: WEB BROWSERS INSTALLATION"
     CURRENT_STEP=21
 
+    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
     flatpak install -y flathub com.vivaldi.Vivaldi || true
     flatpak install -y flathub com.opera.Opera || true
     flatpak install -y flathub org.midori_browser.Midori || true
 
     browsers=(
-        # Check which ones are installed on GNOME & KDE, they are sometimes different
+        # Check which ones are installed on GNOME & KDE, they are different sometimes
         "Firefox|firefox|firefox||org.mozilla.firefox"
         "Chromium|chromium|chromium||org.chromium.Chromium"
-        "Brave|brave-browser||brave-bin|com.brave.Browser" # Doesn't work (only  postinstall script)
-        "Vivaldi|vivaldi|vivaldi||com.vivaldi.Vivaldi" # Doesn't work either
-        "Opera|opera|opera||com.opera.Opera" # Doesn't work either
-        "Tor Browser|torbrowser-launcher|torbrowser-launcher||org.torproject.torbrowser-launcher"
-        "GNOME Web (Epiphany)|epiphany|epiphany||org.gnome.Epiphany" # Doesn't work (I didn't check GNOME, I'm stupid)
+        "Brave|brave-browser||brave-bin|com.brave.Browser" # Doesn't work -> Installed via post-install.sh script
+        "Vivaldi|vivaldi|vivaldi||com.vivaldi.Vivaldi" # GNOME only (I think)
+        "Tor Browser|torbrowser-launcher|torbrowser-launcher||org.torproject.torbrowser-launcher" # Doesn't work
+        "GNOME Web (Epiphany)|epiphany|epiphany||org.gnome.Epiphany"
         "Midori|midori||midori|" # Doesn't work
-        "Google Chrome|google-chrome||google-chrome|com.google.Chrome" # Doesn't work but installed  via the post-install.sh script
+        "Google Chrome|google-chrome||google-chrome|com.google.Chrome" # Doesn't work but installed via post-install.sh script
     )
     for entry in "${browsers[@]}"; do
         IFS="|" read -r name cmd pkg_pacman pkg_paru pkg_flatpak <<< "$entry"
@@ -516,27 +526,27 @@ install_steam() {
     print_header "STEP 26/$TOTAL_STEPS: STEAM INSTALLATION"
     CURRENT_STEP=26
 
-    # Check that Flatpak is installed in the chroot
+    # Check that Flatpak is installed in chroot
     if ! /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
         print_info "Flatpak missing — installing..."
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed flatpak || {
             print_error "Unable to install Flatpak"
-        return 1
-    }
-    # Enable Flathub if not already configured
-    /usr/bin/arch-chroot /mnt flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
-fi
+            return 1
+        }
+        # Enable Flathub if not already configured
+        /usr/bin/arch-chroot /mnt flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+    fi
 
-    # Install Steam via Flatpak
+    # Steam installation via Flatpak
     if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.valvesoftware.Steam; then
-        print_success "Steam (Flatpak) successfully installed"
+        print_success "Steam (Flatpak) installed successfully"
     else
         print_warning "Failed to install Steam (Flatpak). Check your connection or Flathub."
     fi
 }
 
-fix_spicetify_prefs() { # Doesn't work because Spotify & spicetify are not installed in the chroot due to multi I don't know what anymore # Maybe it should be removed in the stable version if I don't succeed anyway the post-install succeeds
-    print_header "CORRECTION SPICETIFY PREFS (ROBUST, NON-BLOCKING)"
+fix_spicetify_prefs() { # Doesn't work because Spotify & spicetify aren't installed in chroot due to multi I don't remember what # Should maybe remove it in stable version if I can't anyway post-install works
+    print_header "SPICETIFY PREFS FIX (ROBUST, NON-BLOCKING)"
 
     # Security: ensure USERNAME is defined
     if [[ -z "${USERNAME:-}" ]]; then
@@ -562,7 +572,7 @@ ok(){ echo "[OK]    $*"; }
 warn(){ echo "[WARN]  $*"; }
 err(){ echo "[ERROR] $*"; }
 
-# Cumulative state of warnings/errors (but we exit with 0)
+# Cumulative state of warnings/errors (but exit with 0)
 WARN_COUNT=0
 ERR_COUNT=0
 warn_wrap(){ warn "$@"; WARN_COUNT=$((WARN_COUNT+1)); }
@@ -587,13 +597,13 @@ fi
 
 if command -v flatpak >/dev/null 2>&1 && flatpak info com.spotify.Client >/dev/null 2>&1; then
     IS_FLATPAK=true
-    ok "Spotify Flatpak detected."
+    ok "Flatpak Spotify detected."
 else
-    info "Spotify Flatpak not detected."
+    info "Flatpak Spotify not detected."
 fi
 
 if [[ "$IS_NATIVE" != true && "$IS_FLATPAK" != true ]]; then
-    warn_wrap "No Spotify installation detected (native nor Flatpak)."
+    warn_wrap "No Spotify installation detected (neither native nor Flatpak)."
     echo "End (Spotify absent"
     exit 0
 fi
@@ -607,7 +617,7 @@ fi
 if [[ "$IS_NATIVE" == true ]]; then
     CANDIDATES+=("${HOME}/.config/spotify/prefs")
 fi
-# Fallback addition just in case I know the script 90% fails this bastard
+# Additional fallback in case I know the script 90% fails this bastard
 CANDIDATES+=("${HOME}/.config/spotify/prefs" "${HOME}/.var/app/com.spotify.Client/config/spotify/prefs")
 
 PREFS_PATH=""
@@ -619,9 +629,9 @@ for p in "${CANDIDATES[@]}"; do
     fi
 done
 
-# If not found, carefully create a skeleton without launching Spotify (because chroot/tty)
+# If not found, create skeleton cautiously without launching Spotify (because chroot/tty)
 if [[ -z "$PREFS_PATH" ]]; then
-    # Choose priority target folder
+    # Priority target folder choice
     if [[ "$IS_FLATPAK" == true ]]; then
         TARGET_DIR="${HOME}/.var/app/com.spotify.Client/config/spotify"
     elif [[ "$IS_NATIVE" == true ]]; then
@@ -636,7 +646,7 @@ if [[ -z "$PREFS_PATH" ]]; then
 
     if [[ ! -f "$PREFS_PATH" ]]; then
         : > "$PREFS_PATH" || { err_wrap "Unable to create ${PREFS_PATH}"; echo "End (prefs creation failed)"; exit 0; }
-        ok "prefs created: $PREFS_PATH (will be completed after the first launch of Spotify)."
+        ok "prefs created: $PREFS_PATH (will be completed after first Spotify launch)."
         PREFS_WAS_CREATED="yes"
     else
         ok "prefs found just after folder creation: $PREFS_PATH"
@@ -649,7 +659,7 @@ fi
 # Spicetify configuration
 APPLY_OK=true
 
-# 1) Declare the prefs_path
+# 1) Set prefs_path
 if spicetify config prefs_path "$PREFS_PATH"; then
     ok "spicetify: prefs_path registered."
 else
@@ -675,13 +685,13 @@ fi
 if spicetify apply >/dev/null 2>&1; then
     ok "spicetify: apply ok."
 else
-    warn_wrap "spicetify: apply failed (probably prefs incomplete before 1st launch)."
+    warn_wrap "spicetify: apply failed (probably incomplete prefs before first launch)."
     APPLY_OK=false
 fi
 
-# Fallback post-install: autostart at 1st real graphical launch  
-# If we had to create the prefs empty, or if apply failed, we prepare a user task
-# that will retry automatically after the first launch of Spotify.
+# Fallback post-install: autostart on first real graphical launch  
+# If we had to create empty prefs, or if apply failed, prepare a user task
+# that will retry automatically after first Spotify launch.
 # I make a multitude of comments for this one but IT DOESN'T WORK
 if [[ "${PREFS_WAS_CREATED}" == "yes" || "${APPLY_OK}" == "false" ]]; then
     AUTOSTART_DIR="${HOME}/.config/autostart"
@@ -694,7 +704,7 @@ if [[ "${PREFS_WAS_CREATED}" == "yes" || "${APPLY_OK}" == "false" ]]; then
     cat > "$FIX_SCRIPT" << "EOSH"
 #!/usr/bin/env bash
 set -u
-# Wait for Spotify to have generated a "real" prefs, then reapply spicetify
+# Wait for Spotify to generate a "real" prefs, then reapply spicetify
 TRIES=60
 SLEEP_SECS=2
 
@@ -719,7 +729,7 @@ log(){ echo "[spicetify-postfirststart] $*"; }
     done
 
     if [[ -z "$FOUND" ]]; then
-    log "prefs still not found/empty, silent abort."
+    log "prefs still not found/empty, silent abandon."
     exit 0
     fi
 
@@ -728,7 +738,7 @@ spicetify config prefs_path "$FOUND" || true
 spicetify backup || true
 spicetify apply || true
 
-# Self-cleanup: remove this service after success
+# Auto-cleanup: remove this service after success
 rm -f "${HOME}/.config/autostart/spicetify-postfirststart.desktop" || true
 rm -f "${HOME}/.local/bin/spicetify-postfirststart.sh" || true
 exit 0
@@ -739,7 +749,7 @@ EOSH
 [Desktop Entry]
 Type=Application
 Name=Spicetify Post-First-Start
-Comment=Finalizes Spicetify after the 1st launch of Spotify
+Comment=Finalizes Spicetify after first Spotify launch
 Exec=${FIX_SCRIPT}
 X-GNOME-Autostart-enabled=true
 NoDisplay=true
@@ -760,38 +770,38 @@ fi
 echo "End fix_spicetify_prefs"
 exit 0
 ' || {
-        # Don't fail the global script: message and continue
-        print_warning "fix_spicetify_prefs: the chroot subcommand returned a non-zero (see user log). Step CONTINUED."
+        # Don't fail global script: message and continue
+        print_warning "fix_spicetify_prefs: chroot subcommand returned non-zero (see user log). Step CONTINUED."
         return 0
 
-    print_success "fix_spicetify_prefs executed (see user log ~/.local/share/spicetify-fix/fix.log in the chroot)."
+    print_success "fix_spicetify_prefs executed (see user log ~/.local/share/spicetify-fix/fix.log in chroot)."
 }
 
 # Utility functions and logging
-# Check for the presence of a command in the chroot
+# Check command presence in chroot
 chroot_cmd_exists() {
     /usr/bin/arch-chroot /mnt bash -lc "command -v '${1}' >/dev/null 2>&1"
 }
 
-# (Re)ensure the installation of paru in the chroot -> Doesn't work either
+# (Re)ensure paru installation in chroot -> Doesn't work either
 ensure_paru_in_chroot() {
-    # Check if paru is already present in the chroot
+    # Check if paru is already present in chroot
     if chroot_cmd_exists paru; then
-        print_success "Paru already present in the chroot"
+        print_success "Paru already present in chroot"
         return 0
     fi
 
-    print_info "Paru absent — installation via AUR in the chroot"
+    print_info "Paru absent — AUR installation in chroot"
 
     # Install base-devel and git to compile from AUR
     /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed base-devel git || {
-        print_error "Unable to install base-devel and git in the chroot"
+        print_error "Unable to install base-devel and git in chroot"
         return 1
     }
 
     # Launch installation via dedicated function
     if install_paru; then
-        print_success "Paru successfully installed in the chroot"
+        print_success "Paru installed successfully in chroot"
         return 0
     fi
 
@@ -799,8 +809,8 @@ ensure_paru_in_chroot() {
     install_yay_in_chroot || return 1
 }
 
-install_required_commands() {
-    print_info "Verification and installation of required commands..."
+check_requirements() {
+    print_info "Verifying and installing required commands..."
     
     local missing_pkgs=()
     local required_commands=(
@@ -809,7 +819,7 @@ install_required_commands() {
         "curl" "git" "timedatectl" "unzip"
     )
 
-    # Check for missing commands
+    # Check missing commands
     for cmd in "${required_commands[@]}"; do
         if ! command -v "$cmd" &>/dev/null; then
             case "$cmd" in
@@ -830,27 +840,27 @@ install_required_commands() {
         }
     fi
 
-    # Ensure unzip also in the target chroot (/mnt)
+    # Ensure unzip also in target chroot (/mnt)
     if [[ -d /mnt && -d /mnt/usr ]]; then
         if ! /usr/bin/arch-chroot /mnt bash -lc "command -v unzip >/dev/null 2>&1"; then
-            print_info "unzip absent in the chroot /mnt — attempt to install in the chroot..."
+            print_info "unzip absent in chroot /mnt — attempting installation in chroot..."
             /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip || {
-                print_warning "Unable to install unzip in the chroot (/mnt). Install it manually: /usr/bin/arch-chroot /mnt pacman -S unzip"
+                print_warning "Unable to install unzip in chroot (/mnt). Install manually: /usr/bin/arch-chroot /mnt pacman -S unzip"
             }
         else
-            print_info "unzip already present in the chroot /mnt"
+            print_info "unzip already present in chroot /mnt"
         fi
     fi
 
-    print_success "All required commands are available"
+    print_success "All required commands available"
 }
 
-# Optimization of Pacman configuration for speed
+# Pacman configuration optimization for speed
 optimize_pacman() {
     print_header "STEP 3/$TOTAL_STEPS: PACMAN OPTIMIZATION"
     CURRENT_STEP=3
 
-    # Backup original configuration
+    # Original configuration backup
     cp /etc/pacman.conf /etc/pacman.conf.backup 2>/dev/null || true
 
     # Optimized pacman configuration
@@ -872,9 +882,9 @@ Include = /etc/pacman.d/mirrorlist
 [multilib]
 Include = /etc/pacman.d/mirrorlist
 PACMAN_EOF
-# Removal of [community] because it is no longer in the repositories recently
+# Removal of [community] because it's no longer in repositories recently
 
-    # Block rust to avoid rustup conflict # Obsolete since I cleaned up rust & rustup, there's only rustup left
+    # Block rust to avoid rustup conflict # Obsolete since I cleaned rust & rustup, only rustup remains
     if ! grep -q "^IgnorePkg" /etc/pacman.conf; then
         echo "IgnorePkg = rust" >> /etc/pacman.conf
     else
@@ -892,18 +902,18 @@ PACMAN_EOF
     # Main attempt: fast + reliable (it doesn't work)
     if reflector --sort score --protocol https --country France,Germany,Netherlands,Belgium,Switzerland \
                     --latest 20 --save /etc/pacman.d/mirrorlist; then
-        print_success "Mirrors successfully optimized (filtered mode)"
+        print_success "Mirrors optimized successfully (filtered mode)"
     else
-        print_warning "Filtered optimization failed, large mode attempt..."
-        # Large fallback: all countries, no strict filtering # This one works
+        print_warning "Filtered optimization failed, wide mode attempt..."
+        # Wide fallback: all countries, no strict filtering # This one works
         if reflector --sort score --protocol https --latest 20 \
                         --save /etc/pacman.d/mirrorlist; then
-            print_success "Mirrors successfully optimized (large mode)"
+            print_success "Mirrors optimized successfully (wide mode)"
         else
-            print_warning "Unable to generate a mirrorlist with reflector, ultimate fallback"
+            print_warning "Unable to generate mirrorlist with reflector, ultimate fallback"
             # Ultimate fallback: official archlinux.org mirror
             cat > /etc/pacman.d/mirrorlist <<'EOF'
-## Fallback ArchLinux official
+## Official ArchLinux fallback
 Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 EOF
         fi
@@ -925,7 +935,7 @@ init_logging() {
     exec 1> >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$LOG_FILE" >&2)
     
-    echo "Installation Arch Linux Fallout - $(date)" >> "$LOG_FILE"
+    echo "Arch Linux Fallout Installation - $(date)" >> "$LOG_FILE"
     echo "Script version: $SCRIPT_VERSION" >> "$LOG_FILE"
     echo "" >> "$LOG_FILE"
 }
@@ -948,7 +958,7 @@ print_header() {
     log_message "HEADER" "$message"
 }
 
-# Do I keep in English or not? To think about doing a full English version but with google translate :/
+# Should I keep in English or not? Think about doing full English but with google translate :/
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
     log_message "INFO" "$1"
@@ -1059,7 +1069,7 @@ run_with_progress() {
     fi
 }
 
-# Input validation with minimum password length 6 characters
+# Input validation with minimum 6 character password
 validate_input() {
     local input="$1"
     local type="$2"
@@ -1091,9 +1101,9 @@ convert_to_mb() {
     local number="${size%[MmGg]}"
     local unit="${size: -1}"
     
-    case "$unit" in
-        "M"|"m") echo "$number" ;;
-        "G"|"g") echo $((number * 1024)) ;;
+    case "${unit^^}" in
+        "M") echo "$number" ;;
+        "G") echo $((number * 1024)) ;;
         *) echo "0" ;;
     esac
 }
@@ -1107,8 +1117,9 @@ configure_custom_partitioning() {
     echo -e "${YELLOW}Examples: 512M, 512m, 2G, 2g, 100G, 100g${NC}"
     echo ""
     
-    # Boot (BIOS) or EFI (UEFI) configuration
+    # Different configuration according to boot mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
+        # EFI configuration for UEFI
         while true; do
             read -r -p "EFI partition size (default: 512M): " efi_input
             efi_input=${efi_input:-512M}
@@ -1119,6 +1130,7 @@ configure_custom_partitioning() {
             print_warning "Invalid format! Use: number + M/m or G/g (ex: 512M, 512m, 2G, 2g)"
         done
     else
+        # Boot configuration for BIOS
         while true; do
             read -r -p "Boot partition size (default: 512M): " boot_input
             boot_input=${boot_input:-512M}
@@ -1130,7 +1142,7 @@ configure_custom_partitioning() {
         done
     fi
     
-    # Root configuration
+    # Root configuration (same for both modes)
     while true; do
         read -r -p "Root partition size (default: 60G): " root_input
         root_input=${root_input:-60G}
@@ -1192,7 +1204,7 @@ configure_custom_partitioning() {
         done
     else
         USE_SEPARATE_HOME=false
-        print_info "Separate /home partition disabled - Will be in Root partition"
+        print_info "Separate /home partition disabled - It will be in Root partition"
     fi
     
     # Configuration summary
@@ -1200,23 +1212,23 @@ configure_custom_partitioning() {
     echo -e "${GREEN}CONFIGURATION SUMMARY${NC}"
     echo -e "${WHITE}• Boot mode:${NC} $BOOT_MODE"
     if [[ "$BOOT_MODE" == "uefi" ]]; then
-        echo -e "${WHITE}• EFI Partition:${NC} $PARTITION_EFI_SIZE (FAT32)"
+        echo -e "${WHITE}• EFI partition:${NC} $PARTITION_EFI_SIZE (FAT32)"
     else
-        echo -e "${WHITE}• Boot Partition:${NC} $PARTITION_BOOT_SIZE (ext4)"
+        echo -e "${WHITE}• Boot partition:${NC} $PARTITION_BOOT_SIZE (ext4)"
     fi
-    echo -e "${WHITE}• Root Partition:${NC} $PARTITION_ROOT_SIZE"
-    [[ "$USE_SWAP" == true ]] && echo -e "${WHITE}• Swap Partition:${NC} $PARTITION_SWAP_SIZE"
+    echo -e "${WHITE}• Root partition:${NC} $PARTITION_ROOT_SIZE"
+    [[ "$USE_SWAP" == true ]] && echo -e "${WHITE}• Swap partition:${NC} $PARTITION_SWAP_SIZE"
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
         if [[ "$PARTITION_HOME_SIZE" == "remaining" ]]; then
-            echo -e "${WHITE}• Home Partition:${NC} Remaining available space"
+            echo -e "${WHITE}• Home partition:${NC} Remaining available space"
         else
-            echo -e "${WHITE}• Home Partition:${NC} $PARTITION_HOME_SIZE"
+            echo -e "${WHITE}• Home partition:${NC} $PARTITION_HOME_SIZE"
         fi
     else
-        echo -e "${WHITE}• Home Partition:${NC} Integrated in Root"
+        echo -e "${WHITE}• Home partition:${NC} Integrated in Root"
     fi
     echo ""
-    echo ""
+    
     if ! confirm_action "Confirm this configuration?" "Y"; then
         print_info "Reconfiguring partitions..."
         configure_custom_partitioning
@@ -1285,18 +1297,17 @@ trap 'cleanup; exit 130' INT   # CTRL+C
 trap 'cleanup; exit 143' TERM  # kill
 trap 'cleanup' EXIT            # Only at real script end
 
-
 # User interface functions
 show_banner() {
     clear
     echo -e "${CYAN}"
     cat << "EOF"
  █████╗ ██████╗  ██████╗██╗  ██╗    ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗
-██╔══██╗██╔══██╗██╔════╝██║  ██║    ██║     ██║████╗  ██║██║   ██╗╚██╗██╔╝
+██╔══██╗██╔══██╗██╔════╝██║  ██║    ██║     ██║████╗  ██║██║   ██║╚██╗██╔╝
 ███████║██████╔╝██║     ███████║    ██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
 ██╔══██║██╔══██╗██║     ██╔══██║    ██║     ██║██║╚██╗██║██║   ██║ ██╔██╗ 
 ██║  ██║██║  ██║╚██████╗██║  ██║    ███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗
-╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝    ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ �╚═╝  ╚═╝                                                                         
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝    ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝                                                                         
 
 EOF
     echo -e "${NC}"
@@ -1314,7 +1325,7 @@ show_help() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
-# Purely decorative because too lazy to make a real menu
+# Purely decorative because too lazy to make real menu
 Options: 
     -h, --help     Show this help
     -d, --dry-run  Simulation mode (makes no modifications)
@@ -1334,7 +1345,7 @@ Options:
 
     • Fallout theme for GRUB
     • Fallout boot sound (MP3 or system beep fallback) # Doesn't work
-    • Splashscreen with PipBoy animation
+    • PipBoy animation splashscreen
     • Arch logo Plymouth (can be changed via BearGrubChanger, available on my GitHub account: PapaOursPolaire)
     • SDDM configuration with custom Fallout wallpaper (video, .gif or random images for you to change)
     • Icon themes (Tela, Papirus) and modern visual themes
@@ -1343,7 +1354,7 @@ Options:
 
     • PipeWire + WirePlumber (professional low latency audio)
     • CAVA (terminal audio visualizer with green Matrix theme)
-    • PavuControl (graphical audio control interface)
+    • PavuControl (audio control graphical interface)
     • Automatic configuration for streaming and recording
 
     COMPLETE DEVELOPMENT ENVIRONMENT:
@@ -1357,12 +1368,12 @@ Options:
         - Live Server, Jupyter
         - Material Icon Theme, Error Lens
     • Android Studio for mobile development
-    • Enhanced terminal with Fastfetch and development aliases (to activate via a script from my repo, unavailable in the script for stupid reasons)
+    • Enhanced terminal with Fastfetch and development aliases (to activate via script from my repo, unavailable in script for stupid reasons)
 
-    PREINSTALLED WEB NAVIGATION:
+    PREINSTALLED WEB BROWSING:
 
     • Firefox (configured for Netflix, Disney+ with DRM)
-    • Google Chrome, Chromium, Brave Browser, Google Chrome & Brave are installed in the post-install script
+    • Google Chrome, Chromium, Brave Browser, Google Chrome & Brave are installed in post-install script
     • DuckDuckGo Browser (privacy) (unavailable for now)
 
     MULTIMEDIA AND ENTERTAINMENT:
@@ -1374,7 +1385,7 @@ Options:
 
     GAMING AND WINDOWS COMPATIBILITY:
 
-    • Steam with Proton configured automatically
+    • Steam with Proton automatically configured
     • Lutris, GameMode for gaming optimization
     • Wine + Winetricks (complete Windows compatibility)
     • Wine-mono, Wine-gecko for .NET and web applications
@@ -1398,7 +1409,7 @@ Options:
     • Progress bars with real time estimates
     • Robust error handling with automatic fallbacks
 
-    NEW FEATURES OF VERSION 754.4:
+    NEW FEATURES OF VERSION 764.4:
 
     • Custom partition size configuration
     • Optional separate /home partition with Y/N interface
@@ -1406,8 +1417,8 @@ Options:
     • Speed optimization with parallel downloads
     • Fixed PipeWire-Jack conflict bug
     • Installation using full bandwidth
-    • Fixed 2358 errors referenced by ShellCheck
-    • User interface redesign for more clarity
+    • Fixed 2358 errors reported by ShellCheck
+    • User interface overhaul for more clarity
     • Code restructuring for better readability and understandability
     • Added main() before function declarations to avoid stupid trap
     • Debugged over 3000 errors
@@ -1422,7 +1433,7 @@ Options:
     • UEFI system mandatory
     • Stable Internet connection (More than 10 Mbps recommended)
     • Arch Linux ISO not from prehistoric times
-    • Patience, as installation may take time (between 30 to 60 minutes according to several tests performed on my trash machines)
+    • Patience, because installation can take time (between 30 to 60 minutes according to several tests performed on my trash machines)
     • At least 60GB free disk space
     • RAM: minimum 8GB recommended (4GB minimum), starting from DDR3, I haven't tested DDR1 & 2
     • Execution from Arch Linux ISO
@@ -1431,7 +1442,7 @@ Options:
 
     • Automatic reboot proposed
     • Complete installation log saved for consultation and to send to me if problem
-    • Post-install verification script included (For software that couldn't be installed in the chroot)
+    • Post-installation verification script included (For software that couldn't be installed in chroot)
     • Optimized configuration ready to use
     • All important development and multimedia software installed
 
@@ -1451,8 +1462,8 @@ parse_arguments() { # Does it really work? I only managed to make it work once!
                 shift
                 ;;
             --version)
-                echo "Arch Linux Fallout Edition Complete Installation Script - Version: $SCRIPT_VERSION"
-                echo "Features: Pro Audio + Development + Gaming + Navigation + Fallout Themes"
+                echo "Complete Arch Linux Fallout Edition Installation Script - Version: $SCRIPT_VERSION"
+                echo "Features: Pro Audio + Development + Gaming + Browsing + Fallout Themes"
                 echo "New: Custom partition configuration + optional /home + Speed optimizations"
                 exit 0
                 ;;
@@ -1468,10 +1479,10 @@ parse_arguments() { # Does it really work? I only managed to make it work once!
 
 # Verification and test functions
 check_requirements() {
-    print_header "STEP 1/$TOTAL_STEPS: SYSTEM REQUIREMENTS CHECK"
+    print_header "STEP 1/$TOTAL_STEPS: PREREQUISITES VERIFICATION"
     CURRENT_STEP=1
     
-    # Remove [community] repository if present (no longer exists)
+    # Immediately remove [community] repository if present because it no longer exists
     if grep -q "^\[community\]" /etc/pacman.conf; then
         print_info "Removing [community] repository (merged into extra)"
         sed -i '/^\[community\]/,/^Include/d' /etc/pacman.conf
@@ -1479,7 +1490,7 @@ check_requirements() {
         rm -rf /var/lib/pacman/sync/* || true
     fi
     
-    # Check root privileges
+    # Check root
     if [[ $EUID -ne 0 ]]; then
         print_error "This script must be run as root!"
         return 1
@@ -1488,19 +1499,19 @@ check_requirements() {
     # Adapted boot mode verification
     detect_boot_mode
     
-    # Check internet connection with multiple hosts
-    print_info "Checking internet connection..."
+    # Check Internet connection with multiple hosts
+    print_info "Checking Internet connection..."
     local test_hosts=("archlinux.org" "8.8.8.8" "1.1.1.1" "github.com")
     local connected=false
     for host in "${test_hosts[@]}"; do
         if ping -c 1 -W 3 "$host" &> /dev/null; then
-            print_success "Internet connection active (tested: $host)"
+            print_success "Active Internet connection (tested: $host)"
             connected=true
             break
         fi
     done
     if [[ "$connected" != true ]]; then
-        print_error "No internet connection detected!"
+        print_error "No Internet connection detected!"
         return 1
     fi
 
@@ -1518,7 +1529,7 @@ check_requirements() {
     # Update pacman databases (without community)
     print_info "Updating pacman databases..."
     if ! pacman -Sy --noconfirm; then
-        print_warning "Update failed, attempting repair..."
+        print_warning "Error during update, attempting correction..."
         pacman -Scc --noconfirm || true
         rm -rf /var/lib/pacman/sync/* || true
         pacman -Sy --noconfirm || {
@@ -1527,7 +1538,7 @@ check_requirements() {
         }
     fi
     
-    print_success "Requirements verified for ${BOOT_MODE} mode"
+    print_success "Prerequisites verified for ${BOOT_MODE} mode"
 }
 
 test_environment() {
@@ -1568,15 +1579,20 @@ test_environment() {
         errors=$((errors + 1))
     fi
     
-    # UEFI test
+    # Boot mode test (UEFI or BIOS) - CORRECTION: Support both modes
     if [[ -d /sys/firmware/efi ]]; then
         print_success " UEFI system detected"
+        echo -e "${GREEN}  • Partition table: GPT${NC}"
+        echo -e "${GREEN}  • Boot partition: EFI (FAT32)${NC}"
+        echo -e "${GREEN}  • Bootloader: GRUB x86_64-efi${NC}"
     else
-        print_error " UEFI system required"
-        errors=$((errors + 1))
+        print_success " BIOS/Legacy system detected"
+        echo -e "${GREEN}  • Partition table: MBR${NC}"
+        echo -e "${GREEN}  • Boot partition: Boot (ext4)${NC}"
+        echo -e "${GREEN}  • Bootloader: GRUB i386-pc${NC}"
     fi
     
-    # Root test
+    # Test root
     if [[ $EUID -eq 0 ]]; then
         print_success " Root permissions"
     else
@@ -1584,7 +1600,7 @@ test_environment() {
         errors=$((errors + 1))
     fi
     
-    # Disk space test
+    # Test disk space
     local available_space
     available_space=$(df /tmp | awk 'NR==2 {print int($4/1024)}')
     if [[ $available_space -gt 2000 ]]; then
@@ -1593,7 +1609,7 @@ test_environment() {
         print_warning " Limited temporary space (${available_space}MB)"
     fi
     
-    # RAM test
+    # Test RAM
     local ram_gb=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
     if [[ $ram_gb -ge 8 ]]; then
         print_success "Optimal RAM (${ram_gb}GB)"
@@ -1633,11 +1649,17 @@ select_disk() {
     print_header "STEP 4/$TOTAL_STEPS: DISK SELECTION"
     CURRENT_STEP=4
     
+    # Wait for disks to be detected
+    sleep 2
+    sync
+    
     local disks
-    mapfile -t disks < <(lsblk -dno NAME | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])')
+    mapfile -t disks < <(lsblk -dno NAME,SIZE,MODEL | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])' | awk '{print $1}')
     
     if [[ ${#disks[@]} -eq 0 ]]; then
-        print_error "No disk detected!"
+        print_error "No disks detected!"
+        echo "Available disks:"
+        lsblk
         return 1
     fi
     
@@ -1653,18 +1675,25 @@ select_disk() {
     
     local disk_choice
     while true; do
-        read -r -p "Select disk (number):" disk_choice
+        read -r -p "Select disk (number): " disk_choice
         
         if [[ "$disk_choice" =~ ^[0-9]+$ ]] && \
             [[ "$disk_choice" -ge 1 ]] && \
             [[ "$disk_choice" -le "${#disks[@]}" ]]; then
+            DISK="/dev/${disks[$((disk_choice - 1))]}"
             break
         fi
         print_warning "Invalid selection!"
     done
     
-    DISK="/dev/${disks[$((disk_choice - 1))]}"
-    print_success "Disk selected: $DISK"
+    # Final disk verification
+    if [[ ! -b "$DISK" ]]; then
+        print_error "Disk $DISK doesn't exist!"
+        return 1
+    fi
+    
+    print_success "Selected disk: $DISK"
+    return 0
 }
 
 choose_partitioning() {
@@ -1682,16 +1711,16 @@ choose_partitioning() {
         case $choice in
             1)
                 print_info "Keeping existing partitions"
-                # Submenu for option 1
+                # Sub-menu for option 1
                 echo -e "${WHITE}Sub-options:${NC}"
-                echo -e "${CYAN}a.${NC} Use a single partition and split it"
+                echo -e "${CYAN}a.${NC} Use single partition and split it"
                 echo -e "${CYAN}b.${NC} Use already created existing partitions"
                 local sub_choice
                 while true; do
                     read -r -p "Your choice (a/b): " sub_choice
                     case $sub_choice in
                         a)
-                            print_info "Using a single partition to split"
+                            print_info "Using single partition to split"
                             use_single_partition_and_split
                             return 0
                             ;;
@@ -1725,14 +1754,14 @@ choose_partitioning() {
 }
 
 use_single_partition_and_split() {
-    print_info "Selecting a single partition to split"
+    print_info "Selecting single partition to split"
     
-    # Detect available partitions
+    # Detection of available partitions
     local partitions
     mapfile -t partitions < <(lsblk -no NAME "$DISK" | grep -E "${DISK##*/}[0-9p]")
     
     if [[ ${#partitions[@]} -eq 0 ]]; then
-        print_error "No partition found on $DISK"
+        print_error "No partitions found on $DISK"
         return 1
     fi
     
@@ -1746,7 +1775,7 @@ use_single_partition_and_split() {
     
     local part_choice
     while true; do
-        read -r -p "Select the partition to split (number): " part_choice
+        read -r -p "Select partition to split (number): " part_choice
         if [[ "$part_choice" =~ ^[0-9]+$ ]] && \
            [[ "$part_choice" -ge 1 ]] && \
            [[ "$part_choice" -le "${#partitions[@]}" ]]; then
@@ -1756,11 +1785,11 @@ use_single_partition_and_split() {
         print_warning "Invalid selection!"
     done
     
-    # Configure sizes for new partitions
-    print_info "Configuring sizes for new partitions"
+    # Configuration of sizes for new partitions
+    print_info "Configuring sizes of new partitions"
     configure_custom_partitioning
     
-    # Wipe the selected partition and create new partition table
+    # Erase selected partition and create new partition table
     print_warning "WARNING: All data on $selected_part will be erased!"
     if ! confirm_action "Confirm partition erasure?"; then
         return 1
@@ -1790,35 +1819,35 @@ use_single_partition_and_split() {
     # Start partitioning
     print_info "Starting partitioning of $selected_part"
     
-    # Delete the partition
+    # Erase partition
     parted -s "$selected_part" rm 1 || {
-        print_error "Cannot delete partition"
+        print_error "Unable to delete partition"
         return 1
     }
     
     # Create new partition table
     parted -s "$selected_part" mklabel gpt || {
-        print_error "Cannot create partition table"
+        print_error "Unable to create partition table"
         return 1
     }
     
     # Create partitions
     local current_pos=1
     
-    # EFI Partition
+    # EFI partition
     local efi_end=$((current_pos + efi_mb))
     parted -s "$selected_part" mkpart primary fat32 ${current_pos}MiB ${efi_end}MiB
     parted -s "$selected_part" set 1 esp on
     EFI_PART="${selected_part}1"
     current_pos=$efi_end
     
-    # Root Partition
+    # Root partition
     local root_end=$((current_pos + root_mb))
     parted -s "$selected_part" mkpart primary ext4 ${current_pos}MiB ${root_end}MiB
     ROOT_PART="${selected_part}2"
     current_pos=$root_end
     
-    # Swap Partition (optional)
+    # Swap partition (optional)
     if [[ "$USE_SWAP" == true ]]; then
         local swap_end=$((current_pos + swap_mb))
         parted -s "$selected_part" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB
@@ -1826,7 +1855,7 @@ use_single_partition_and_split() {
         current_pos=$swap_end
     fi
     
-    # Home Partition (optional)
+    # Home partition (optional)
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
         parted -s "$selected_part" mkpart primary ext4 ${current_pos}MiB 100%
         HOME_PART="${selected_part}$((USE_SWAP ? 4 : 3))"
@@ -1905,7 +1934,7 @@ configure_existing_partitions() {
     done
     
     # Optional: Home and Swap
-    if confirm_action "Configure a separate Home partition?"; then
+    if confirm_action "Configure separate Home partition?"; then
         USE_SEPARATE_HOME=true
         echo -e "${WHITE}Select Home partition:${NC}"
         for i in "${!partitions[@]}"; do
@@ -1932,7 +1961,7 @@ configure_existing_partitions() {
         done
     fi
     
-    if confirm_action "Configure a Swap partition?"; then
+    if confirm_action "Configure Swap partition?"; then
         USE_SWAP=true
         echo -e "${WHITE}Select Swap partition:${NC}"
         for i in "${!partitions[@]}"; do
@@ -1968,7 +1997,7 @@ configure_existing_partitions() {
         return 1
     fi
 
-    # Verify disk status
+    # Check disk status
     if ! lsblk "$DISK" >/dev/null 2>&1; then
         print_error "Disk $DISK is not accessible"
         return 1
@@ -1976,7 +2005,7 @@ configure_existing_partitions() {
 }
 
 create_new_partitioning() {
-    print_header "CREATING PARTITION LAYOUT"
+    print_header "PARTITIONING CREATION"
     
     print_warning "WARNING: All data on $DISK will be erased!"
     
@@ -1984,25 +2013,23 @@ create_new_partitioning() {
         return 1
     fi
 
-    # Complete and forced disk cleaning
-    print_info "Performing complete disk cleanup..."
+    # Complete and forced disk cleanup
+    print_info "Complete disk cleanup..."
     
     # Force unmount all partitions
     umount -f "${DISK}"* 2>/dev/null || true
     swapoff "${DISK}"* 2>/dev/null || true
     
-    # Clean partition signatures using multiple methods
+    # Clean partition signatures with multiple methods
     print_info "Erasing partition signatures..."
     wipefs -af "$DISK" 2>/dev/null || true
     dd if=/dev/zero of="$DISK" bs=1M count=10 status=none 2>/dev/null || true
     
-    # Synchronization and waiting
+    # Synchronization and wait
     sync
     sleep 3
-    partprobe "$DISK" 2>/dev/null || true
-    sleep 3
 
-    # Create partition table according to boot mode
+    # Create partition table according to mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         print_info "Creating GPT table for UEFI..."
         if ! parted -s "$DISK" mklabel gpt; then
@@ -2011,21 +2038,14 @@ create_new_partitioning() {
         fi
     else
         print_info "Creating MBR table for BIOS..."
-        
-        # More robust method for MBR
-        echo "o\nw\n" | fdisk "$DISK" >/dev/null 2>&1 || {
-            # Fallback with parted
-            if ! parted -s "$DISK" mklabel msdos; then
-                print_error "Failed to create MBR table with all methods"
-                return 1
-            fi
-        }
+        if ! parted -s "$DISK" mklabel msdos; then
+            print_error "Failed to create MBR table"
+            return 1
+        fi
     fi
 
     # Synchronization after table creation
     sync
-    sleep 2
-    partprobe "$DISK" 2>/dev/null || true
     sleep 2
 
     # Calculate sizes in MB
@@ -2041,6 +2061,7 @@ create_new_partitioning() {
         home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE") || home_mb=0
 
     local current_pos=1
+    local part_num=1
 
     # Partition 1: Boot/EFI
     local boot_end=$((current_pos + boot_mb))
@@ -2052,6 +2073,7 @@ create_new_partitioning() {
         fi
         parted -s "$DISK" set 1 esp on
         EFI_PART="${DISK}1"
+        print_success "EFI partition created: $EFI_PART"
     else
         print_info "Creating Boot partition (${current_pos}MiB-${boot_end}MiB)..."
         if ! parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${boot_end}MiB; then
@@ -2059,9 +2081,11 @@ create_new_partitioning() {
             return 1
         fi
         parted -s "$DISK" set 1 boot on
-        EFI_PART="${DISK}1"
+        BOOT_PART="${DISK}1"
+        print_success "Boot partition created: $BOOT_PART"
     fi
     current_pos=$boot_end
+    part_num=2
 
     # Synchronization after first partition
     sync
@@ -2075,18 +2099,20 @@ create_new_partitioning() {
         return 1
     fi
     ROOT_PART="${DISK}2"
+    print_success "Root partition created: $ROOT_PART"
     current_pos=$root_end
+    part_num=3
 
     sync
     sleep 1
 
     # Partition 3: Swap (optional)
-    local part_num=3
     if [[ "$USE_SWAP" == true ]]; then
         local swap_end=$((current_pos + swap_mb))
         print_info "Creating Swap partition (${current_pos}MiB-${swap_end}MiB)..."
         if parted -s "$DISK" mkpart primary linux-swap ${current_pos}MiB ${swap_end}MiB; then
             SWAP_PART="${DISK}3"
+            print_success "Swap partition created: $SWAP_PART"
             current_pos=$swap_end
             part_num=4
         else
@@ -2104,6 +2130,7 @@ create_new_partitioning() {
             print_info "Creating Home partition (remaining space)..."
             if parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB 100%; then
                 HOME_PART="${DISK}${part_num}"
+                print_success "Home partition created: $HOME_PART"
             else
                 print_warning "Failed to create Home partition, continuing without separate home"
                 USE_SEPARATE_HOME=false
@@ -2113,6 +2140,7 @@ create_new_partitioning() {
             print_info "Creating Home partition (${current_pos}MiB-${home_end}MiB)..."
             if parted -s "$DISK" mkpart primary ext4 ${current_pos}MiB ${home_end}MiB; then
                 HOME_PART="${DISK}${part_num}"
+                print_success "Home partition created: $HOME_PART"
             else
                 print_warning "Failed to create Home partition, continuing without separate home"
                 USE_SEPARATE_HOME=false
@@ -2123,10 +2151,8 @@ create_new_partitioning() {
     # Final synchronization
     sync
     sleep 3
-    partprobe "$DISK" 2>/dev/null || true
-    sleep 3
 
-    # Verify partitions exist
+    # Verification that partitions exist
     print_info "Verifying created partitions..."
     local partitions_ok=true
     
@@ -2135,8 +2161,11 @@ create_new_partitioning() {
         partitions_ok=false
     fi
     
-    if [[ ! -b "$EFI_PART" ]]; then
-        print_error "EFI/Boot partition not found: $EFI_PART"
+    if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -b "$EFI_PART" ]]; then
+        print_error "EFI partition not found: $EFI_PART"
+        partitions_ok=false
+    elif [[ "$BOOT_MODE" == "bios" ]] && [[ ! -b "$BOOT_PART" ]]; then
+        print_error "Boot partition not found: $BOOT_PART"
         partitions_ok=false
     fi
     
@@ -2152,11 +2181,13 @@ create_new_partitioning() {
 
     if [[ "$partitions_ok" != true ]]; then
         print_error "Some partitions were not created correctly"
+        print_info "Current partition state:"
         lsblk "$DISK"
         return 1
     fi
 
     print_success "Partitioning completed successfully"
+    print_info "Partitioning summary:"
     lsblk "$DISK"
     return 0
 }
@@ -2178,7 +2209,7 @@ create_mbr_with_fdisk() {
 }
 
 format_partitions() {
-    print_header "STEP 6/$TOTAL_STEPS: FORMATTING PARTITIONS"
+    print_header "STEP 6/$TOTAL_STEPS: PARTITION FORMATTING"
     CURRENT_STEP=6
     
     if [[ "$DRY_RUN" == true ]]; then
@@ -2187,13 +2218,11 @@ format_partitions() {
     fi
     
     # Wait for partitions to be available
-    print_info "Waiting for partitions to become available..."
+    print_info "Waiting for partition availability..."
     sleep 5
     sync
-    partprobe "$DISK" 2>/dev/null || true
-    sleep 3
     
-    # Verify partitions exist
+    # Verification that partitions exist
     print_info "Verifying partitions..."
     local partitions_ok=true
     
@@ -2202,8 +2231,11 @@ format_partitions() {
         partitions_ok=false
     fi
     
-    if [[ ! -b "$EFI_PART" ]]; then
-        print_error "EFI/Boot partition not found: $EFI_PART"
+    if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -b "$EFI_PART" ]]; then
+        print_error "EFI partition not found: $EFI_PART"
+        partitions_ok=false
+    elif [[ "$BOOT_MODE" == "bios" ]] && [[ ! -b "$BOOT_PART" ]]; then
+        print_error "Boot partition not found: $BOOT_PART"
         partitions_ok=false
     fi
     
@@ -2212,13 +2244,13 @@ format_partitions() {
         return 1
     fi
 
-    # Preventive unmounting
-    print_info "Preventive unmounting..."
-    umount -f "$EFI_PART" "$ROOT_PART" "$HOME_PART" 2>/dev/null || true
+    # Preventive unmount
+    print_info "Preventive unmount..."
+    umount -f "$EFI_PART" "$BOOT_PART" "$ROOT_PART" "$HOME_PART" 2>/dev/null || true
     swapoff "$SWAP_PART" 2>/dev/null || true
     sleep 2
 
-    # Format EFI/Boot
+    # Boot/EFI formatting according to mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         print_info "Formatting EFI partition: $EFI_PART"
         if mkfs.fat -F32 -n 'EFI' "$EFI_PART"; then
@@ -2228,8 +2260,8 @@ format_partitions() {
             return 1
         fi
     else
-        print_info "Formatting Boot partition: $EFI_PART"
-        if mkfs.ext4 -F -L 'ArchBoot' "$EFI_PART"; then
+        print_info "Formatting Boot partition: $BOOT_PART"
+        if mkfs.ext4 -F -L 'ArchBoot' "$BOOT_PART"; then
             print_success "Boot partition formatted (ext4)"
         else
             print_error "Boot formatting failed"
@@ -2237,7 +2269,7 @@ format_partitions() {
         fi
     fi
 
-    # Format Root
+    # Root formatting
     print_info "Formatting Root partition: $ROOT_PART"
     if mkfs.ext4 -F -L 'ArchRoot' "$ROOT_PART"; then
         print_success "Root partition formatted (ext4)"
@@ -2246,7 +2278,7 @@ format_partitions() {
         return 1
     fi
 
-    # Format Home (optional)
+    # Home formatting (optional)
     if [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
         print_info "Formatting Home partition: $HOME_PART"
         if mkfs.ext4 -F -L 'ArchHome' "$HOME_PART"; then
@@ -2257,14 +2289,14 @@ format_partitions() {
         fi
     fi
 
-    # Configure Swap (optional)
+    # Swap configuration (optional)
     if [[ "$USE_SWAP" == true ]] && [[ -b "$SWAP_PART" ]]; then
         print_info "Configuring Swap partition: $SWAP_PART"
         if mkswap -L 'ArchSwap' "$SWAP_PART"; then
             if swapon "$SWAP_PART"; then
                 print_success "Swap partition configured and activated"
             else
-                print_warning "Could not activate swap"
+                print_warning "Unable to activate swap"
             fi
         else
             print_warning "Swap configuration failed, disabling..."
@@ -2277,105 +2309,81 @@ format_partitions() {
 }
 
 mount_partitions() {
-    print_header "STEP 7/$TOTAL_STEPS: MOUNTING PARTITIONS"
+    print_header "STEP 7/$TOTAL_STEPS: PARTITION MOUNTING"
     CURRENT_STEP=7
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating mounting"
+        print_info "[DRY RUN] Mounting simulation"
         return 0
     fi
     
-    # Verify partitions exist before mounting
-    print_info "Verifying partitions before mounting..."
-    
-    if [[ ! -b "$ROOT_PART" ]]; then
-        print_error "CRITICAL: Root partition $ROOT_PART not found for mounting!"
-        return 1
-    fi
-    
-    if [[ ! -b "$EFI_PART" ]]; then
-        print_error "CRITICAL: Boot/EFI partition $EFI_PART not found for mounting!"
-        return 1
-    fi
-    
-    # Unmount any existing mounts
-    print_info "Unmounting any existing mounts..."
-    if mountpoint -q /mnt; then
-        umount -R /mnt || true
-    fi
-    
-    # Create mount point
+    # Preventive unmount
+    print_info "Preventive unmount..."
+    umount -R /mnt 2>/dev/null || true
     mkdir -p /mnt
-    
-    # Mount Root partition
+
+    # Root mount
     print_info "Mounting Root partition: $ROOT_PART on /mnt"
     if ! mount "$ROOT_PART" /mnt; then
-        print_error "Unable to mount Root partition $ROOT_PART"
+        print_error "Failed to mount Root partition"
         return 1
     fi
-    print_success "Root partition mounted"
-    
-    # Mount Boot/EFI partition
+
+    # Boot/EFI mounting according to mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         mkdir -p /mnt/boot/efi
         print_info "Mounting EFI partition: $EFI_PART on /mnt/boot/efi"
         if ! mount "$EFI_PART" /mnt/boot/efi; then
-            print_error "Unable to mount EFI partition $EFI_PART"
+            print_error "Failed to mount EFI partition"
             return 1
         fi
-        print_success "EFI partition mounted"
     else
         mkdir -p /mnt/boot
-        print_info "Mounting Boot partition: $EFI_PART on /mnt/boot"
-        if ! mount "$EFI_PART" /mnt/boot; then
-            print_error "Unable to mount Boot partition $EFI_PART"
+        print_info "Mounting Boot partition: $BOOT_PART on /mnt/boot"
+        if ! mount "$BOOT_PART" /mnt/boot; then
+            print_error "Failed to mount Boot partition"
             return 1
         fi
-        print_success "Boot partition mounted"
     fi
-    
-    # Mount Home partition (optional)
-    if [[ -n "$HOME_PART" ]] && [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
+
+    # Home mounting (optional)
+    if [[ "$USE_SEPARATE_HOME" == true ]] && [[ -b "$HOME_PART" ]]; then
         mkdir -p /mnt/home
         print_info "Mounting Home partition: $HOME_PART on /mnt/home"
         if ! mount "$HOME_PART" /mnt/home; then
-            print_warning "Unable to mount Home partition, disabling..."
+            print_warning "Failed to mount Home partition, continuing without separate home"
             USE_SEPARATE_HOME=false
-            HOME_PART=""
         else
             print_success "Home partition mounted"
         fi
-    elif [[ "$USE_SEPARATE_HOME" == true ]] && [[ ! -b "$HOME_PART" ]]; then
-        print_warning "Home partition not found, disabling..."
-        USE_SEPARATE_HOME=false
-        HOME_PART=""
+    fi
+
+    # Mount verification
+    print_info "Verifying mount points..."
+    local mount_ok=true
+    
+    if ! mountpoint -q /mnt; then
+        print_error "Failed to mount /mnt"
+        mount_ok=false
     fi
     
-    # Verify mounts
-    print_info "Verifying mounts..."
-    if ! mountpoint -q /mnt; then
-        print_error "Root partition not mounted!"
+    if [[ "$BOOT_MODE" == "uefi" ]] && ! mountpoint -q /mnt/boot/efi; then
+        print_error "Failed to mount /mnt/boot/efi"
+        mount_ok=false
+    elif [[ "$BOOT_MODE" == "bios" ]] && ! mountpoint -q /mnt/boot; then
+        print_error "Failed to mount /mnt/boot"
+        mount_ok=false
+    fi
+
+    if [[ "$mount_ok" != true ]]; then
+        print_error "Mount point verification failed"
         return 1
     fi
-    
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        if ! mountpoint -q /mnt/boot/efi; then
-            print_error "EFI partition not mounted!"
-            return 1
-        fi
-    else
-        if ! mountpoint -q /mnt/boot; then
-            print_error "Boot partition not mounted!"
-            return 1
-        fi
-    fi
-    
-    print_success "All partitions mounted successfully for ${BOOT_MODE} mode"
-    
-    # Show final mount status
-    echo ""
-    echo -e "${GREEN}MOUNT STATUS:${NC}"
+
+    print_success "Partitions mounted successfully"
+    echo "Mount points:"
     mount | grep /mnt
+    return 0
 }
 
 # Base system installation functions
@@ -2400,8 +2408,8 @@ install_system() {
         reflector --country France,Germany --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist || true
     fi
     
-    # Force database update
-    print_info "Forcing database update..."
+    # Forced database update
+    print_info "Forced database update..."
     pacman -Syy --noconfirm || {
         print_warning "Update failed, cleaning cache..."
         pacman -Scc --noconfirm || true
@@ -2412,7 +2420,7 @@ install_system() {
         }
     }
     
-    # Base packages adapted for boot mode
+    # Base packages adapted according to boot mode
     local base_packages=(
         base base-devel linux linux-firmware
         networkmanager sudo grub os-prober
@@ -2422,12 +2430,12 @@ install_system() {
         dosfstools e2fsprogs
     )
     
-    # Mode-specific additions
+    # Specific addition according to mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         base_packages+=("efibootmgr")
         print_info "Adding efibootmgr for UEFI"
     else
-        print_info "BIOS configuration - efibootmgr not needed"
+        print_info "BIOS configuration - no efibootmgr needed"
     fi
     
     print_info "Installing base packages for ${BOOT_MODE} mode..."
@@ -2496,21 +2504,21 @@ create_users() {
     CURRENT_STEP=10
 
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating user creation"
+        print_info "[DRY RUN] User creation simulation"
         return 0
     fi
 
-    # Create main user
+    # Main user creation
     while true; do
         read -r -p "Main username: " USERNAME
         export USERNAME
         if validate_input "$USERNAME" "username"; then
             break
         fi
-        print_warning "Invalid username (min 3 characters, lowercase letters, numbers, hyphens and underscores only, must start with a letter)"
+        print_warning "Invalid username (min 3 characters, lowercase letters, numbers, hyphens and underscores only, must start with letter)"
     done
 
-    # Create password for main user
+    # Main user password creation
     local password password2
     while true; do
         read -r -s -p "Password for $USERNAME (min 6 characters): " password
@@ -2522,38 +2530,38 @@ create_users() {
                 USER_PASSWORD="$password"
                 break
             fi
-            print_warning "Passwords don't match"
+            print_warning "Different passwords"
         else
             print_warning "Password too short (minimum 6 characters)"
         fi
     done
 
-    # Configure sudo to allow wheel group to execute commands without password
+    # Sudo configuration to allow wheel group to execute commands without password
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 # Sudo configuration for wheel group - NOPASSWD
 if ! grep -q "^%wheel ALL=(ALL) NOPASSWD: ALL" /etc/sudoers; then
-    # Temporarily disable password requirement for wheel
+    # Temporarily disable password prompt for wheel
     sed -i '/^%wheel ALL=(ALL:ALL) ALL/s/^/# /' /etc/sudoers
     echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 fi
 EOF
 
-    # Create main user with password
+    # Main user creation with password
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-# Create main user
+# Main user creation
 useradd -m -G wheel,audio,video,storage,optical,network "$USERNAME"
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
 
-# Create personal directories
+# Personal directory creation
 mkdir -p "/home/$USERNAME"/{Documents,Downloads,Images,Videos,Music,Desktop,.ssh}
 chown -R "$USERNAME":"$USERNAME" "/home/$USERNAME"
 chmod 700 "/home/$USERNAME/.ssh"
 EOF
 
-    print_success "User created: $USERNAME (with passwordless sudo rights)"
+    print_success "User created: $USERNAME (with sudo rights without password)"
 
-    # Create additional users with their own passwords
+    # Additional user creation with their own passwords
     if confirm_action "Create additional users?"; then
         while true; do
             local additional_user
@@ -2571,7 +2579,7 @@ EOF
                         if [[ "$add_password" == "$add_password2" ]]; then
                             break
                         fi
-                        print_warning "Passwords don't match"
+                        print_warning "Different passwords"
                     else
                         print_warning "Password too short (minimum 6 characters)"
                     fi
@@ -2579,25 +2587,25 @@ EOF
 
                 /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-# Create additional user
+# Additional user creation
 useradd -m -G wheel,audio,video,storage,optical,network "$additional_user"
 echo "$additional_user:$add_password" | chpasswd
 
-# Create personal directories
+# Personal directory creation
 mkdir -p "/home/$additional_user"/{Documents,Downloads,Images,Videos,Music,Desktop,.ssh}
 chown -R "$additional_user":"$additional_user" "/home/$additional_user"
 chmod 700 "/home/$additional_user/.ssh"
 EOF
 
-                print_success "Additional user created: $additional_user (with passwordless sudo rights)"
+                print_success "Additional user created: $additional_user (with sudo rights without password)"
             else
-                print_warning "Invalid username, skipped"
+                print_warning "Invalid username, ignored"
             fi
         done
     fi
 
-    # Configure root password (optional and different)
-    if confirm_action "Set a root password? (recommended: NO)"; then
+    # Root password configuration (optional and different)
+    if confirm_action "Set root password? (recommended: NO)"; then
         local root_password root_password2
         while true; do
             read -r -s -p "Root password (leave empty to disable root account): " root_password
@@ -2616,10 +2624,10 @@ EOF
                     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 echo "root:$root_password" | chpasswd
 EOF
-                    print_success "Root password set (different from user passwords)"
+                    print_success "Root password set (different from users)"
                     break
                 else
-                    print_warning "Passwords don't match"
+                    print_warning "Different passwords"
                 fi
             else
                 print_warning "Password too short (minimum 6 characters)"
@@ -2637,7 +2645,7 @@ EOF
     echo ""
     print_success "User configuration completed"
     echo -e "${GREEN}All users can use sudo without password${NC}"
-    echo -e "${YELLOW}Root account has been disabled for better security${NC}"
+    echo -e "${YELLOW}Root account has been disabled for more security${NC}"
     echo -e "${CYAN}Use 'sudo' for commands requiring elevated privileges${NC}"
 }
 
@@ -2649,7 +2657,6 @@ select_desktop() {
     echo -e "${CYAN}1.${NC} KDE Plasma"
     echo -e "${CYAN}2.${NC} GNOME"
     echo -e "${CYAN}3.${NC} No graphical interface (server/minimal)"
-    echo -e "${CYAN}4.${NC} Hyperland (under development, do not select)" # Besides the external doesn't work either
     
     local choice
     while true; do
@@ -2658,7 +2665,6 @@ select_desktop() {
             1) DE_CHOICE="kde"; break ;;
             2) DE_CHOICE="gnome"; break ;;
             3) DE_CHOICE="none"; break ;;
-            # 4) DE_CHOICE="hyperland"; print_warning "Hyperland is under development"; break ;;
             *) print_warning "Invalid choice! Use 1, 2 or 3." ;;
         esac
     done
@@ -2696,104 +2702,6 @@ install_desktop() {
     print_success "Desktop environment installed"
 }
 
-# Bootloader and theme functions
-configure_grub() {
-    print_header "STEP 13/$TOTAL_STEPS: GRUB CONFIGURATION"
-    CURRENT_STEP=13
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] GRUB configuration simulation"
-        return 0
-    fi
-
-    print_info "Installing and configuring GRUB..."
-
-    /usr/bin/arch-chroot /mnt /bin/bash <<EOF
-set -e
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ArchLinux --recheck
-EOF
-
-    cat > /mnt/etc/default/grub <<'EOF'
-# GRUB Configuration
-GRUB_DEFAULT=0
-GRUB_TIMEOUT=15
-GRUB_DISTRIBUTOR="Arch Linux - by PapaOursPolaire on GitHub"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
-GRUB_CMDLINE_LINUX=""
-
-# Force menu display
-GRUB_TIMEOUT_STYLE=menu
-GRUB_TERMINAL_OUTPUT=gfxterm
-GRUB_GFXMODE=auto
-GRUB_GFXPAYLOAD_LINUX=keep
-
-# Disable hidden menu
-# GRUB_HIDDEN_TIMEOUT=0
-# GRUB_HIDDEN_TIMEOUT_QUIET=false
-
-GRUB_DISABLE_RECOVERY=true
-GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
-EOF
-
-#    /usr/bin/arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || {
-#       print_error "Failed to generate GRUB configuration"
-#        return 1
-#    } -> Commented because it prevents Fallout theme installation
-
-    print_success "GRUB configured and installed"
-}
-
-install_fallout_theme() {
-    print_header "STEP 14/$TOTAL_STEPS: FALLOUT GRUB THEME INSTALLATION"
-    CURRENT_STEP=14
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Fallout theme installation simulation"
-        return 0
-    fi
-
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-set -euo pipefail
-
-echo "[INFO] Installing Git if necessary..."
-pacman -Sy --noconfirm --needed git
-
-cd /tmp
-echo "[INFO] Cleaning temporary repositories..."
-rm -rf fallout-grub-theme
-
-echo "[INFO] Cloning Fallout GRUB repository..."
-git clone --depth=1 https://github.com/shvchk/fallout-grub-theme.git
-
-echo "[INFO] Automatic search for folder containing theme.txt..."
-THEME_DIR=$(find fallout-grub-theme -type f -name "theme.txt" -printf '%h\n' | head -n1)
-
-if [[ -z "$THEME_DIR" ]]; then
-    echo "[ERROR] Unable to find theme.txt in repository."
-    echo "[DEBUG] Repository structure:"
-    ls -R fallout-grub-theme || true
-    exit 1
-fi
-
-echo "[INFO] Theme folder detected: $THEME_DIR"
-install -d -m 0755 /boot/grub/themes
-rm -rf /boot/grub/themes/fallout
-cp -a "$THEME_DIR" /boot/grub/themes/fallout
-
-echo "[INFO] Configuring GRUB_THEME in /etc/default/grub..."
-if grep -q "^#*GRUB_THEME=" /etc/default/grub; then
-    sed -i 's|^#*GRUB_THEME=.*|GRUB_THEME="/boot/grub/themes/fallout/theme.txt"|' /etc/default/grub
-else
-    echo 'GRUB_THEME="/boot/grub/themes/fallout/theme.txt"' >> /etc/default/grub
-fi
-
-echo "[INFO] Regenerating GRUB configuration..."
-grub-mkconfig -o /boot/grub/grub.cfg
-
-echo "[SUCCESS] Fallout theme installed and configured."
-EOF
-}
-
 # Audio and multimedia functions
 install_audio_system() {
     print_header "STEP 16/$TOTAL_STEPS: PIPEWIRE AUDIO SYSTEM INSTALLATION"
@@ -2804,7 +2712,7 @@ install_audio_system() {
         return 0
     fi
 
-    print_info "Installing PipeWire and audio tools..." # PipeWire doesn't install, I think
+    print_info "Installing PipeWire and audio tools..." # PipeWire doesn't install I think
 
     local audio_packages=(
         pipewire pipewire-alsa pipewire-pulse
@@ -2854,31 +2762,31 @@ EOF
     print_success "PipeWire audio system installed and configured"
 }
 
-install_boot_sound() {
-    print_header "STEP 17/$TOTAL_STEPS: CONFIGURING BOOT SOUND"
+install_boot_sound() { # Boot sound beep dysfunctional, to fix or not
+    print_header "STEP 17/$TOTAL_STEPS: BOOT SOUND BEEP CONFIGURATION"
     CURRENT_STEP=17
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating boot sound installation"
+        print_info "[DRY RUN] Boot sound installation simulation"
         return 0
     fi
     
-    # Create sounds directory
+    # Sound directory creation
     mkdir -p /mnt/usr/share/sounds/fallout
     
-    # Download Fallout boot sound
+    # Fallout sound download (URL correction)
     print_info "Downloading Fallout boot sound..."
     if curl -fL -o /mnt/usr/share/sounds/fallout/boot.wav \
         'https://raw.githubusercontent.com/PapaOursPolaire/arch/refs/heads/Projets/boot.wav' 2>/dev/null; then
         
         print_success "Boot sound downloaded successfully"
         
-        # Install audio dependencies
-        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed alsa-utils || {
-            print_warning "Could not install all audio dependencies"
+        # Audio dependencies installation
+        /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed alsa-utils pulseaudio-alsa || {
+            print_warning "Unable to install complete audio dependencies"
         }
         
-        # Systemd service configuration
+        # Corrected systemd service
         cat > /mnt/etc/systemd/system/boot-sound.service <<'EOF'
 [Unit]
 Description=Fallout Boot Sound
@@ -2896,12 +2804,12 @@ WantedBy=multi-user.target
 EOF
         
     else
-        print_warning "Could not download sound file, creating system beep fallback"
+        print_warning "Unable to download sound, creating system beep"
         
-        # System beep fallback
+        # Fallback to integrated system beep
         cat > /mnt/usr/local/bin/fallout-beep <<'EOF'
 #!/bin/bash
-# Fallout-style system beep
+# Fallout style system beep
 for i in {1..3}; do
     echo -e '\a'
     sleep 0.1
@@ -2929,12 +2837,12 @@ WantedBy=multi-user.target
 EOF
     fi
     
-    # Enable the service
+    # Service activation
     /usr/bin/arch-chroot /mnt systemctl enable boot-sound.service || {
-        print_warning "Could not enable boot sound service"
+        print_warning "Unable to activate boot sound service"
     }
     
-    print_success "Boot sound configured"
+    print_success "Boot sound beep configured"
 }
 
 configure_plymouth() {
@@ -2981,7 +2889,7 @@ EOF
 }
 
 configure_sddm() {
-    print_header "STEP 19/$TOTAL_STEPS: DISPLAY MANAGER CONFIGURATION"
+    print_header "STEP 19/$TOTAL_STEPS: SDDM (DISPLAY MANAGER) CONFIGURATION"
     CURRENT_STEP=19
 
     local repo_zip="/root/Projets.zip"
@@ -3019,7 +2927,7 @@ configure_sddm() {
     # 4) Extraction
     /usr/bin/arch-chroot /mnt rm -rf "$extract_dir" "$theme_dir"
     if ! /usr/bin/arch-chroot /mnt unzip -o "$repo_zip" -d /root/; then
-        print_error "Failed to extract GitHub archive"
+        print_error "GitHub archive extraction failed"
         return 1
     fi
 
@@ -3037,7 +2945,7 @@ configure_sddm() {
         return 1
     fi
     if ! /usr/bin/arch-chroot /mnt test -f "$theme_dir/background.mp4"; then
-        print_warning "Warning: background.mp4 video is missing"
+        print_warning "Warning: background.mp4 video missing"
     fi
 
     # 7) Configure SDDM
@@ -3053,301 +2961,233 @@ EOF"
     # 8) Activate SDDM
     /usr/bin/arch-chroot /mnt systemctl enable sddm.service
 
-    print_success "SDDM successfully configured with Fallout theme"
+    print_success "SDDM configured successfully with Fallout theme"
 }
 
 configure_kde_lockscreen() {
-    # Lockscreen configuration for KDE only (via KSplash QML)
     print_header "STEP 15/$TOTAL_STEPS: KDE SPLASH CONFIGURATION"
     CURRENT_STEP=15
     
     if [[ "$DE_CHOICE" != "kde" ]]; then
-        print_info "KDE environment not detected - lockscreen skipped"
+        print_info "KDE environment not detected - lockscreen ignored"
         return 0
     fi
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating KDE lockscreen configuration"
+        print_info "[DRY RUN] KDE lockscreen configuration simulation"
         return 0
     fi
 
-    print_info "Configuring automatic KDE Fallout lockscreen..."
+    print_info "Configuring KDE Fallout splash screen..."
     
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 set -euo pipefail
 
-# Variables
-THEME_ID="org.kde.falloutlock"
-THEME_DIR="/usr/share/plasma/look-and-feel/$THEME_ID"
-TEMP_DIR="/tmp/fallout-lockscreen"
-LOG_FILE="/var/log/fallout-lockscreen-install.log"
+echo "[INFO] Installing KDE Splash components..."
+pacman -S --noconfirm --needed ksplash
 
-echo "[$(date)] Starting Fallout lockscreen configuration" > "$LOG_FILE"
+# Create theme directory
+THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.fallout.desktop"
+mkdir -p "$THEME_DIR/contents/componentsets"
+mkdir -p "$THEME_DIR/contents/plasmacolorschemes"
 
-# Logging functions
-log_info() { echo "[INFO] $1" | tee -a "$LOG_FILE"; }
-log_error() { echo "[ERROR] $1" | tee -a "$LOG_FILE"; exit 1; }
-log_warning() { echo "[WARNING] $1" | tee -a "$LOG_FILE"; }
-
-# Clean previous installations
-rm -rf "$TEMP_DIR" "$THEME_DIR"
-mkdir -p "$TEMP_DIR"
-
-# Download Fallout lockscreen theme
-log_info "Downloading Fallout lockscreen theme..."
-if ! curl -fL -o "$TEMP_DIR/fallout-splashscreen4k.zip" "https://github.com/PapaOursPolaire/arch/blob/Projets/fallout-splashscreen4k.zip; then
-    log_warning "Download failed, creating basic Fallout theme"
-    
-    # Create basic Fallout theme
-    mkdir -p "$THEME_DIR/contents/components"
-    mkdir -p "$THEME_DIR/contents/lockscreen"
-    
-    # Main metadata file
-    cat > "$THEME_DIR/metadata.desktop" <<'META_EOF'
+# Main metadata.desktop file
+cat > "$THEME_DIR/metadata.desktop" <<'METADATA_EOF'
 [Desktop Entry]
-Name=Fallout Lock Screen
-Comment=Fallout-themed lock screen for KDE Plasma
-X-KDE-PluginInfo-Author=PapaOursPolaire
-X-KDE-PluginInfo-Email=contact@example.com
-X-KDE-PluginInfo-Name=org.kde.falloutlock
-X-KDE-PluginInfo-Version=1.0
-X-KDE-PluginInfo-Website=https://github.com/PapaOursPolaire
-X-KDE-PluginInfo-License=GPLv3
-X-KDE-PluginInfo-EnabledByDefault=true
-X-KDE-PlasmaLookAndFeel-Title=Fallout Lock Screen
-X-KDE-PlasmaLookAndFeel-Description=Fallout-themed lock screen with Pip-Boy style
-META_EOF
-
-    # Lockscreen component configuration
-    cat > "$THEME_DIR/contents/components/falloutlockscreen/metadata.desktop" <<'COMP_META_EOF'
-[Desktop Entry]
-Name=Fallout Lock Screen
+Name=Fallout
+Comment=Fallout-themed Plasma Look and Feel
 Type=Service
-X-KDE-ServiceTypes=Plasma/LockScreen
+
 X-KDE-PluginInfo-Author=PapaOursPolaire
 X-KDE-PluginInfo-Email=contact@example.com
-X-KDE-PluginInfo-Name=falloutlockscreen
+X-KDE-PluginInfo-Name=org.kde.fallout
 X-KDE-PluginInfo-Version=1.0
 X-KDE-PluginInfo-Website=https://github.com/PapaOursPolaire
 X-KDE-PluginInfo-License=GPLv3
-X-KDE-PluginInfo-EnabledByDefault=true
-COMP_META_EOF
+X-KDE-ServiceTypes=Plasma/LookAndFeel
 
-    # Main QML file for lockscreen
-    mkdir -p "$THEME_DIR/contents/components/falloutlockscreen/contents/ui"
-    cat > "$THEME_DIR/contents/components/falloutlockscreen/contents/ui/main.qml" <<'QML_EOF'
-import QtQuick 2.12
-import QtQuick.Controls 2.12
-import QtQuick.Layouts 1.12
-import org.kde.plasma.components 3.0 as PlasmaComponents
-import org.kde.plasma.core 2.0 as PlasmaCore
+X-KDE-Plasma-MainScript=plasmoidsetupscripts/main.js
+METADATA_EOF
 
-PlasmaCore.FrameSvgItem {
-    id: root
-    imagePath: "widgets/background"
-    
-    width: 1920
-    height: 1080
-    
-    Rectangle {
+# Splash screen configuration
+cat > "$THEME_DIR/contents/splash/Splash.qml" <<'SPLASH_EOF'
+import QtQuick 2.5
+import QtGraphicalEffects 1.0
+
+Rectangle {
+    width: 800
+    height: 600
+    color: "#002b36"
+
+    Image {
         anchors.fill: parent
-        color: "#002b36" // Fallout-style dark green background
-        
-        // Background image or color
-        Image {
-            anchors.fill: parent
-            source: "file:///usr/share/wallpapers/fallout-background.jpg"
-            fillMode: Image.PreserveAspectCrop
-            opacity: 0.3
-        }
-        
-        ColumnLayout {
-            anchors.centerIn: parent
-            spacing: 30
-            
-            // Fallout logo/text
-            Text {
-                text: "ARCH LINUX\nFALLOUT EDITION"
-                color: "#00ff00" // Fallout fluorescent green
-                font.pixelSize: 32
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                Layout.alignment: Qt.AlignHCenter
-            }
-            
-            // Password field
-            PlasmaComponents.TextField {
-                id: passwordField
-                placeholderText: "Password"
-                echoMode: TextInput.Password
-                focus: true
-                Layout.preferredWidth: 300
-                Layout.alignment: Qt.AlignHCenter
-                
-                background: Rectangle {
-                    color: "#073642"
-                    border.color: "#00ff00"
-                    border.width: 2
-                    radius: 5
-                }
-                
-                onAccepted: {
-                    // Authentication logic
-                    authenticator.tryUnlock(passwordField.text)
-                }
-            }
-            
-            // Unlock button
-            PlasmaComponents.Button {
-                text: "UNLOCK"
-                Layout.alignment: Qt.AlignHCenter
-                
-                background: Rectangle {
-                    color: "#00ff00"
-                    radius: 5
-                }
-                
-                onClicked: {
-                    authenticator.tryUnlock(passwordField.text)
-                }
-            }
-            
-            // Date and time
-            Text {
-                text: Qt.formatDateTime(new Date(), "dddd, MMMM dd yyyy\nhh:mm:ss AP")
-                color: "#00ff00"
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
-                Layout.alignment: Qt.AlignHCenter
+        source: "fallout-bg.png"
+        fillMode: Image.PreserveAspectCrop
+        opacity: 0.3
+    }
+
+    Text {
+        anchors.centerIn: parent
+        text: "ARCH LINUX\nFALLOUT EDITION"
+        color: "#00ff00"
+        font.pixelSize: 48
+        font.bold: true
+        horizontalAlignment: Text.AlignHCenter
+        style: Text.Outline
+        styleColor: "#000000"
+    }
+
+    BusyIndicator {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 50
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 80
+        height: 80
+        running: true
+
+        contentItem: Canvas {
+            width: parent.width
+            height: parent.height
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                ctx.strokeStyle = "#00ff00"
+                ctx.lineWidth = 3
+                ctx.beginPath()
+                ctx.arc(width/2, height/2, width/3, 0, Math.PI * 2)
+                ctx.stroke()
             }
         }
     }
+
+    ProgressBar {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 400
+        value: scaleY
+    }
+
+    Component.onCompleted: {
+        console.log("Fallout splash screen loaded")
+    }
 }
-QML_EOF
+SPLASH_EOF
 
-else
-    # Extract downloaded theme
-    log_info "Extracting lockscreen theme..."
-    if ! unzip -o "$TEMP_DIR/fallout-splashscreen4k.zip" -d "$TEMP_DIR"; then
-        log_error "Archive extraction failed"
-    fi
-    
-    # Find theme directory
-    THEME_SOURCE=$(find "$TEMP_DIR" -name "metadata.desktop" -exec dirname {} \; | head -1)
-    if [[ -z "$THEME_SOURCE" ]]; then
-        log_error "Invalid theme structure - metadata.desktop not found"
-    fi
-    
-    # Copy theme
-    mkdir -p "$THEME_DIR"
-    cp -r "$THEME_SOURCE"/* "$THEME_DIR/" || log_error "Theme copy failed"
-fi
+# Create simple background image (Fallout green pixel)
+cat > "$THEME_DIR/contents/splash/fallout-bg.png" << 'PNG_EOF'
+# Simplified creation - use solid color
+PNG_EOF
 
-# Set permissions
+# Fallout color scheme configuration
+cat > "$THEME_DIR/contents/plasmacolorschemes/FalloutDark.colors" <<'COLORS_EOF'
+[ColorScheme]
+Name=Fallout Dark
+Description=Fallout-inspired dark color scheme
+
+[Colors:Window]
+BackgroundNormal=0,43,54
+BackgroundAlternate=7,54,66
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+ForegroundLink=42,161,152
+ForegroundVisited=108,113,196
+ForegroundNegative=220,50,47
+ForegroundNeutral=181,137,0
+ForegroundPositive=133,153,0
+
+[Colors:Button]
+BackgroundNormal=7,54,66
+BackgroundAlternate=0,43,54
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+
+[Colors:Selection]
+BackgroundNormal=42,161,152
+BackgroundAlternate=0,255,0
+ForegroundNormal=0,43,54
+ForegroundActive=255,255,255
+
+[Colors:Tooltip]
+BackgroundNormal=0,43,54
+BackgroundAlternate=7,54,66
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+
+[Colors:View]
+BackgroundNormal=0,43,54
+BackgroundAlternate=7,54,66
+ForegroundNormal=101,123,113
+ForegroundActive=0,255,0
+COLORS_EOF
+
+# Lookandfeel configuration
+cat > "$THEME_DIR/contents/defaults" <<'DEFAULTS_EOF'
+[kdeglobals]
+[General]
+ColorScheme=FalloutDark
+widgetStyle=Breeze
+
+[Icons]
+Theme=Tela
+
+[KDE]
+SingleClick=false
+
+[Wallpaper]
+Image=file:///usr/share/wallpapers/fallout-wallpaper.jpg
+DEFAULTS_EOF
+
+# Permissions
 chmod -R 755 "$THEME_DIR"
 chown -R root:root "$THEME_DIR"
 
-# System configuration to force lockscreen theme
-log_info "Configuring system to force Fallout lockscreen..."
-
-# SDDM configuration for theme
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/fallout-theme.conf <<'SDDM_EOF'
-[Theme]
-Current=fallout
-CursorTheme=Breeze
-Font=Noto Sans
-SDDM_EOF
-
-# Plasma configuration to force lockscreen theme
-mkdir -p /etc/xdg/plasma-workspace/env
-cat > /etc/xdg/plasma-workspace/env/fallout-lockscreen.sh <<'ENV_EOF'
-#!/bin/bash
-export KSCREENLOCKER_THEME="org.kde.falloutlock"
-ENV_EOF
-chmod +x /etc/xdg/plasma-workspace/env/fallout-lockscreen.sh
-
-# KScreenLocker configuration
-mkdir -p /etc/xdg/kscreenlockerrc
-cat > /etc/xdg/kscreenlockerrc <<'LOCKER_EOF'
-[Daemon]
-Theme=org.kde.falloutlock
-Timeout=60
-LockOnResume=true
-LockOnSuspend=true
-
-[Greeter]
-Theme=org.kde.falloutlock
-LOCKER_EOF
-
-# Configuration for all future users
-mkdir -p /etc/skel/.config
-cat > /etc/skel/.config/kscreenlockerrc <<'USER_LOCKER_EOF'
-[Daemon]
-Theme=org.kde.falloutlock
-Timeout=60
-LockOnResume=true
-LockOnSuspend=true
-
-[Greeter]
-Theme=org.kde.falloutlock
-USER_LOCKER_EOF
-
-# Force theme via lookandfeeltool
-if command -v lookandfeeltool >/dev/null; then
-    log_info "Applying lookandfeel theme..."
-    lookandfeeltool -a org.kde.breeze.desktop 2>/dev/null || true
-    # Lockscreen theme will be applied via system configuration
-fi
-
-# Fallback script to ensure theme is applied at startup
-mkdir -p /etc/xdg/autostart
-cat > /etc/xdg/autostart/fallout-lockscreen-helper.desktop <<'AUTO_EOF'
-[Desktop Entry]
-Type=Application
-Name=Fallout Lock Screen Helper
-Exec=bash -c "sleep 5 && dbus-send --session --dest=org.kde.ksmserver --type=method_call /KSMServer org.kde.KSMServerInterface.setLockScreenTheme string:org.kde.falloutlock"
-Hidden=false
-NoDisplay=true
-X-KDE-autostart-phase=1
-AUTO_EOF
-
-log_info "Fallout lockscreen configuration completed successfully"
+echo "[SUCCESS] KDE Splash theme created"
 EOF
 
-    # Apply configuration for existing user
-    if [[ -n "$USERNAME" ]]; then
-        print_info "Applying configuration for user $USERNAME..."
-        
-        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -c '
-            # Copy lockscreen configuration
-            mkdir -p ~/.config
-            cp /etc/skel/.config/kscreenlockerrc ~/.config/ 2>/dev/null || true
-            
-            # Force theme via DBUS (immediate method)
-            if command -v dbus-send >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
-                dbus-send --session --dest=org.kde.ksmserver --type=method_call /KSMServer org.kde.KSMServerInterface.setLockScreenTheme string:org.kde.falloutlock 2>/dev/null || true
-            fi
-            
-            echo "Fallout lockscreen configured for user"
-        ' || print_warning "Could not configure lockscreen for user"
-    fi
+    # Configuration to force theme usage
+    /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Partial KDE configuration"
+# SDDM configuration for splash
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/kde-splash.conf <<'SDDM_EOF'
+[General]
+Session=plasmaX11
+Locale=fr_FR
+Session=KDE
+SDDM_EOF
 
-    # Restart relevant services
-    print_info "Restarting services..."
-    /usr/bin/arch-chroot /mnt systemctl restart sddm 2>/dev/null || true
-    
-    print_success "KDE Fallout lockscreen configured and automatically enabled"
-    print_info "Theme will be applied on next lock or reboot"
+# Plasma configuration for all users
+mkdir -p /etc/skel/.config
+cat > /etc/skel/.config/plasmarc <<'PLASMA_EOF'
+[Theme]
+name=breeze-dark
+
+[Splash]
+Engine=KSplash
+Theme=org.kde.fallout
+PLASMA_EOF
+
+# Copy for existing user if present
+if [[ -n "$USERNAME" && -d "/mnt/home/$USERNAME" ]]; then
+    mkdir -p "/mnt/home/$USERNAME/.config"
+    cp /etc/skel/.config/plasmarc "/mnt/home/$USERNAME/.config/" 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/plasmarc" 2>/dev/null || true
+fi
+
+# Force theme to load via lookandfeel
+lookandfeeltool -a org.kde.fallout.desktop 2>/dev/null || true
+EOF
+
+    print_success "KDE Fallout Splash configured"
 }
 
-# Functions for installing applications, never worked - REMEMBER TO DELETE IN THE FINAL VERSION
+# Application installation functions, never worked - THINK TO REMOVE IN FINAL VERSION
 install_paru() {
     print_header "STEP 24/$TOTAL_STEPS: PARU (AUR HELPER) INSTALLATION"
     CURRENT_STEP=24
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating Paru installation"
+        print_info "[DRY RUN] Paru installation simulation"
         return 0
     fi
     
@@ -3358,11 +3198,11 @@ set -e
 
 echo "STARTING PARU INSTALLATION"
 
-# Installing dependencies + rustup to be sure
+# Installation of dependencies + rustup to be sure
 echo "Installing dependencies..."
 pacman -Sy --noconfirm --needed base-devel git sudo rust cargo
 
-# Creating temporary user
+# Temporary user creation
 echo "Creating builduser..."
 id builduser &>/dev/null || useradd -m builduser
 echo "builduser ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/99-aur
@@ -3378,7 +3218,7 @@ sudo -u builduser git clone https://aur.archlinux.org/paru-bin.git
 echo "Clone OK"
 
 cd paru-bin
-echo "Running makepkg..."
+echo "Launching makepkg..."
 sudo -u builduser makepkg -si --noconfirm
 echo "Compilation completed"
 
@@ -3386,7 +3226,7 @@ echo "Compilation completed"
 echo "IMMEDIATE VERIFICATION"
 echo "Current PATH: $PATH"
 
-# Explicitly adding /usr/local/bin to PATH
+# Explicit addition of /usr/local/bin to PATH
 export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 echo "New PATH: $PATH"
 
@@ -3395,7 +3235,7 @@ if command -v paru; then
     echo "PARU FOUND: $(which paru)"
     paru --version
 else
-    echo "Paru not found, searching randomly..."
+    echo "Paru not found, random search..."
     find /usr -name "*paru*" -type f 2>/dev/null
     
     # If found elsewhere, create link
@@ -3405,7 +3245,7 @@ else
     fi
 fi
 
-# Adding permanent PATH in bashrc
+# Permanent PATH addition in bashrc
 echo 'export PATH="/usr/local/bin:$PATH"' >> /etc/bash.bashrc
 
 # Final test
@@ -3414,7 +3254,7 @@ export PATH="/usr/local/bin:/usr/bin:/bin"
 command -v paru && paru --version
 
 # Cleanup (but keep paru!)
-echo "Cleaning..."
+echo "Cleaning up..."
 rm -f /etc/sudoers.d/99-aur
 userdel -r builduser 2>/dev/null || true
 # DO NOT delete /tmp/paru-bin until paru is confirmed
@@ -3439,7 +3279,7 @@ CHROOT_EOF
         /usr/bin/arch-chroot /mnt rm -rf /tmp/paru-bin 2>/dev/null || true
     else
         print_error "Paru could not be installed correctly"
-        print_info "Final search for paru..."
+        print_info "Final paru search..."
         /usr/bin/arch-chroot /mnt find /usr -name "*paru*" -type f 2>/dev/null || echo "No paru found"
         return 1
     fi
@@ -3473,7 +3313,7 @@ install_yay_in_chroot() {
         return 1
     }
 
-    print_success "yay successfully installed in chroot"
+    print_success "yay installed successfully in chroot"
 }
 
 clean_pacman_cache_chroot() {
@@ -3490,7 +3330,7 @@ EOF
     print_success "Pacman cache cleaned in chroot"
 }
 
-refresh_mirrors() { # To use if download errors in future variables  # Disabled because dysfunctional
+refresh_mirrors() { # To use if download errors in future variables # Disabled because dysfunctional
     print_info "Refreshing fast mirrors..."
     if command -v reflector &> /dev/null; then
         reflector \
@@ -3511,7 +3351,7 @@ refresh_mirrors() { # To use if download errors in future variables  # Disabled 
     pacman -Syy --noconfirm
 }
 
-install_development() {
+install_development() { # VS Code still doesn't install, to fix or not
     print_header "STEP 25/$TOTAL_STEPS: DEVELOPMENT ENVIRONMENT INSTALLATION"
     CURRENT_STEP=25
 
@@ -3522,13 +3362,13 @@ install_development() {
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating development environment installation"
+        print_info "[DRY RUN] Development environment installation simulation"
         return 0
     fi
 
     print_info "Installing programming languages and development tools..."
 
-    # List of development packages - Add more if I forgot some
+    # Development packages list - Add more if I forgot some
     local dev_packages=(
         # Languages
         python python-pip python-virtualenv
@@ -3580,80 +3420,26 @@ usermod -aG docker \"\$USERNAME\"
     print_success "Development environment installed and configured"
 }
 
-# Function to inform user about what will happen - Doesn't work in chroot, available in post-install
+# Function to indicate to user what will happen - Doesn't work in chroot, available in post-install
 vscode_post_install_info() {
     print_info ""
     print_info "  VS CODE INFORMATION:"
     print_info "   VS Code extensions will install automatically"
-    print_info "   on first startup of your graphical session."
+    print_info "   on first launch of your graphical session."
     print_info "   You can also install them manually with:"
     print_info "   • ~/install-vscode-extensions.sh"
     print_info "   • ~/manual-vscode-setup.sh (simplified version)"
     print_info ""
 }
 
-install_web() {
-    print_header "STEP 19/$TOTAL_STEPS: INSTALLING WEB BROWSERS"
-    CURRENT_STEP=19
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating web browser installation"
-        return 0
-    fi
-
-    print_info "Installing web browsers in the system..."
-
-    /usr/bin/arch-chroot /mnt /bin/bash <<'CHROOT_EOF'
-set -e
-
-# List of web browsers to install: package:command
-web_browsers=(
-    "firefox:firefox"
-    "chromium:chromium"
-    "brave-browser:brave-browser" # Installed in post-install
-    "vivaldi-stable:vivaldi" # lost in the forest
-    "opera:opera" # buried in the desert of papaoursland
-    "torbrowser-launcher:torbrowser-launcher" # disappeared
-    "epiphany:epiphany" # didn't know it originally, found in a gloomy forum
-    "midori:midori" # same gloomy forum
-)
-
-for browser_entry in "${web_browsers[@]}"; do
-    IFS=":" read -r browser_pkg browser_cmd <<< "$browser_entry"
-
-    echo "[INFO] Installing $browser_pkg..."
-
-    if command -v "$browser_cmd" &>/dev/null; then
-        echo "[WARNING] $browser_pkg is already installed."
-    else
-        if pacman -S --noconfirm --needed "$browser_pkg"; then
-            echo "[SUCCESS] $browser_pkg successfully installed."
-        else
-            echo "[ERROR] Failed to install $browser_pkg, moving to next."
-            continue
-        fi
-    fi
-
-    # Update MIME cache only if browser is properly installed
-    if command -v "$browser_cmd" &>/dev/null; then
-        echo "[INFO] Updating MIME cache for $browser_pkg..."
-        update-desktop-database /usr/share/applications || true
-    else
-        echo "[WARNING] $browser_pkg not found after installation, skipping MIME cache."
-    fi
-done
-CHROOT_EOF
-
-    print_success "Web browser installation completed."
-}
-
-install_spotify() {
+install_spotify() {  # Only installs launcher, not native client (spotify-client) so is duplicated
+    # with spotify-client from post-install -> To fix or not
     print_header "STEP 22/$TOTAL_STEPS: SPOTIFY INSTALLATION"
     CURRENT_STEP=22
 
     # Check that Flatpak is installed in chroot
     if ! chroot_cmd_exists flatpak; then
-        print_info "Flatpak absent — installing..."
+        print_info "Flatpak missing — installing..."
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed flatpak || {
             print_error "Unable to install Flatpak"
             return 1
@@ -3663,34 +3449,34 @@ install_spotify() {
 
     local spotify_ok=false
 
-    # Attempt Spotify installation via Flatpak
+    # Spotify installation attempt via Flatpak
     if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.spotify.Client; then
-        print_success "Spotify (Flatpak) successfully installed"
+        print_success "Spotify (Flatpak) installed successfully"
         spotify_ok=true
     else
-        print_warning "Failed Spotify installation (Flatpak, extra-data). Attempting AUR version..."
+        print_warning "Spotify installation failed (Flatpak, extra-data). AUR version attempt…"
 
         if chroot_cmd_exists paru; then
             /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm spotify-launcher && spotify_ok=true || \
-                print_warning "Failed installation via AUR (spotify-launcher)."
+                print_warning "AUR installation failed (spotify-launcher)."
         else
-            print_warning "Paru absent, unable to install Spotify via AUR."
+            print_warning "Paru missing, unable to install Spotify via AUR."
         fi
     fi
 
-    # Verify Spotify installation
+    # Spotify installation verification
     if [[ "$spotify_ok" == false ]]; then
         print_warning "Spotify could not be installed automatically. It can be installed manually after reboot."
         return 0
     fi
 
-    # Install Spicetify CLI
+    # Spicetify CLI installation
     if /usr/bin/arch-chroot /mnt command -v spicetify &>/dev/null; then
         print_success "Spicetify already present"
     else
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed spicetify-cli && \
             print_success "Spicetify CLI installed" || \
-            print_warning "Failed Spicetify CLI installation"
+            print_warning "Spicetify CLI installation failed"
     fi
 
     # Minimal Spicetify configuration
@@ -3706,15 +3492,15 @@ install_spotify() {
     print_success "Spotify + Spicetify installation completed (with fallbacks)."
 }
 
-# Safe cleanup of /tmp before font installation (to avoid "No space left on device")
+# Safe /tmp cleanup before font installation (to avoid "No space left on device")
 clean_tmp() { # More effective since version 238.0, to remove in final version
-    print_header "CLEANING /tmp — Before font installation"
+    print_header "/tmp CLEANUP"
     local CLEAN_TMP_MINUTES="${CLEAN_TMP_MINUTES:-120}"  # files inactive older than X minutes will be deleted
     local LARGE_FILE_MB="${LARGE_FILE_MB:-100}"         # files > X MB will be deleted
     local DRY="${DRY_RUN:-false}"
     local BEFORE_MB AFTER_MB
 
-    # Show state before
+    # Display state before
     BEFORE_MB=$(du -sm /tmp 2>/dev/null | awk '{print $1}' || echo 0)
     print_info "Space used /tmp: ${BEFORE_MB} MB (before cleanup)."
     if [[ "$DRY" == "true" ]]; then
@@ -3722,25 +3508,25 @@ clean_tmp() { # More effective since version 238.0, to remove in final version
         return 0
     fi
 
-    # Safety: don't delete if /tmp is non-standard link
+    # Security: don't delete if /tmp is non-standard link
     if [[ ! -d /tmp ]]; then
-        print_warning "/tmp not found or not directory — canceling cleanup."
+        print_warning "/tmp not found or not directory — cleanup canceled."
         return 0
     fi
 
-    # Switch to tolerant mode for errors during deletions
+    # Switch to tolerant mode on errors during deletions
     set +e
 
     # 1) Delete large files (> LARGE_FILE_MB) (regular files)
     print_info "Deleting files > ${LARGE_FILE_MB} MB in /tmp (to free space)..."
     find /tmp -type f -size +"${LARGE_FILE_MB}"M -print -exec rm -f {} \; 2>/dev/null || true
 
-    # 2) Delete files/dirs in /tmp inactive for CLEAN_TMP_MINUTES minutes
+    # 2) Delete files/dirs in /tmp inactive since CLEAN_TMP_MINUTES minutes
     print_info "Deleting entries inactive for > ${CLEAN_TMP_MINUTES} minutes..."
     # Limit depth to 1 to avoid recursively traversing very large trees
     find /tmp -mindepth 1 -maxdepth 1 -mmin +"${CLEAN_TMP_MINUTES}" -print -exec rm -rf {} \; 2>/dev/null || true
 
-    # 3) Delete old temporary archives (additional safety)
+    # 3) Delete old temporary archives (additional security)
     print_info "Deleting archives (.zip .tar.gz .tgz .tar.xz) older than > ${CLEAN_TMP_MINUTES} minutes..."
     find /tmp -type f \( -iname '*.zip' -o -iname '*.tar.gz' -o -iname '*.tgz' -o -iname '*.tar.xz' -o -iname '*.tar' \) -mmin +"${CLEAN_TMP_MINUTES}" -print -exec rm -f {} \; 2>/dev/null || true
 
@@ -3771,38 +3557,38 @@ install_wine() {
     CURRENT_STEP=23
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating Wine installation"
+        print_info "[DRY RUN] Wine installation simulation"
         return 0
     fi
     
     print_info "Installing Wine for Windows compatibility..."
     
-    # Enable multilib for Wine
+    # Multilib activation for Wine
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-# Enable multilib in pacman.conf
+# Multilib activation in pacman.conf
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman -Sy
 EOF
     
-    # Install Wine and tools
+    # Wine and tools installation
     local wine_packages=(
         wine wine-staging winetricks
         wine-mono wine-gecko
     )
     
-    run_with_progress "Installing Wine" 180 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm ${wine_packages[*]}"
+    run_with_progress "Wine installation" 180 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm ${wine_packages[*]}"
     
-    # Configure Wine for user
-    /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Failed Wine configuration"
+    # Wine configuration for user
+    /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Wine configuration failed"
 sudo -u $USERNAME /bin/bash <<'USEREOF'
 # Wine initialization (Windows 10)
 export WINEPREFIX=/home/$USERNAME/.wine
 wineboot --init >/dev/null 2>&1 || true
 
-# Configure Wine as Windows 10
+# Wine configuration as Windows 10
 winecfg /v win10 >/dev/null 2>&1 || true
 
-# Install essential components via Winetricks
+# Essential components installation via Winetricks
 winetricks --unattended corefonts vcrun2019 dotnetfx48 || echo "Some Winetricks components failed"
 
 echo "Wine configured for Windows 10"
@@ -3819,12 +3605,12 @@ install_software() {
     if declare -F clean_tmp >/dev/null; then
         clean_tmp
     else
-        print_warning "clean_tmp function absent — minimal /tmp cleanup"
+        print_warning "clean_tmp function missing — minimal /tmp cleanup"
         find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf {} \; 2>/dev/null || true
     fi
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating software installation"
+        print_info "[DRY RUN] Software installation simulation"
         return 0
     fi
     
@@ -3838,7 +3624,7 @@ install_software() {
         telegram-desktop  # to verify
     )
     
-    run_with_progress "Installing Internet" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${internet_packages[*]}"
+    run_with_progress "Internet installation" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${internet_packages[*]}"
     
     # Discord via AUR or Flatpak
     if /usr/bin/arch-chroot /mnt command -v paru &> /dev/null; then
@@ -3862,18 +3648,18 @@ install_software() {
         blender # OK 
         krita # To verify*
     )
-    # *: Didn't install before version 411, to recheck
-    run_with_progress "Installing Multimedia" 180 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${multimedia_packages[*]}"
+    # * : Didn't install before version 411, to recheck
+    run_with_progress "Multimedia installation" 180 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${multimedia_packages[*]}"
     
         # Category 3: Gaming (if graphical interface installed) 
         if [[ "$DE_CHOICE" != "none" ]]; then
-            print_header "INSTALLING GAMING SOFTWARE"
+            print_header "GAMING SOFTWARE INSTALLATION"
             print_info "Installing complete Gaming suite..."
 
             # Ensure multilib in chroot before installing Steam
             /usr/bin/arch-chroot /mnt pacman -Syyu --noconfirm
 
-            # Enable multilib repo if not already enabled (again)
+            # Enable multilib repository if not already enabled (again)
             if ! grep -q "^\[multilib\]" /mnt/etc/pacman.conf; then
                 echo "[multilib]" >> /mnt/etc/pacman.conf
                 echo "Include = /etc/pacman.d/mirrorlist" >> /mnt/etc/pacman.conf
@@ -3885,11 +3671,11 @@ install_software() {
 
             # Ensure paru is present before any AUR Gaming install
             if ! chroot_cmd_exists paru; then
-                print_info "Paru not available — attempting installation via pacman..."
+                print_info "Paru not available — installation attempt via pacman..."
                 if /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed paru; then
-                    print_success "Paru successfully installed via repositories"
+                    print_success "Paru installed successfully via repositories"
                 else
-                    print_warning "Binary installation failed — attempting via AUR..."
+                    print_warning "Binary installation failed — AUR attempt..."
                     if install_paru; then
                         print_success "Paru installed via AUR"
                     elif install_yay_in_chroot; then
@@ -3954,7 +3740,7 @@ install_software() {
         fi
 
 
-            # Verify Paru in chroot - Still doesn't work
+            # Paru verification in chroot - Still doesn't work
             if chroot_cmd_exists paru; then
                 print_info "Installing AUR Gaming packages via Paru..."
                 local gaming_aur_packages=(
@@ -3981,7 +3767,7 @@ install_software() {
                 print_success "Gaming packages installed (pacman)"
             fi
 
-            # Install specific AUR packages via paru - Doesn't work yet
+            # Specific AUR packages installation via paru - Doesn't work therefore
             local aur_gaming_packages=(
                 heroic-games-launcher-bin
                 yuzu-early-access-bin
@@ -4043,7 +3829,7 @@ EOF
         flameshot # IDK
         htop # IDK
         btop # IDK
-        #neofetch  -> recently removed from repositories and I think fastfetch is better anyway
+        #neofetch  -> was removed from repositories recently and I think fastfetch is better anyway
         lsb-release # OK
         wget # OK
         curl # OK
@@ -4054,9 +3840,9 @@ EOF
 
     clean_tmp
     
-    run_with_progress "Installing Utilities" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${utility_packages[*]}"
+    run_with_progress "Utilities installation" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${utility_packages[*]}"
     
-    # Category 5: Fonts and themes - To verify as I don't think all fonts were installed
+    # Category 5: Fonts and themes - To verify because I don't think all fonts were installed
     print_info "Installing Fonts..."
     local font_packages=(
         ttf-dejavu
@@ -4069,7 +3855,7 @@ EOF
         ttf-jetbrains-mono
     )
     
-    run_with_progress "Installing Fonts" 60 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${font_packages[*]}"
+    run_with_progress "Fonts installation" 60 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${font_packages[*]}"
     
 
     /usr/bin/arch-chroot /mnt /bin/bash -lc '
@@ -4084,7 +3870,7 @@ EOF
 
     # Advanced Flatpak configuration
     print_info "Configuring Flatpak and applications..."
-    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Failed Flatpak configuration"
+    /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Flatpak configuration failed"
 # Flatpak configuration
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 systemctl enable --global flatpak-system-helper.service
@@ -4113,7 +3899,7 @@ EOF
     # Advanced Steam configuration (if installed)
     if [[ "$DE_CHOICE" != "none" ]]; then
         print_info "Configuring Steam and gaming..."
-        /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Failed Steam configuration"
+        /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Steam configuration failed"
 sudo -u $USERNAME /bin/bash <<'USEREOF'
 # Steam configuration with Proton
 mkdir -p /home/$USERNAME/.steam/steam/config
@@ -4170,9 +3956,9 @@ EOF
     
     print_info "Verifying installations..."
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
-echo "VERIFYING INSTALLED SOFTWARE"
+echo "SOFTWARE INSTALLATION VERIFICATION"
 
-# Verification of critical software
+# Critical software verification
 critical_apps=(
     "firefox" "vlc" "gimp" "steam" "discord" 
     "code" "git" "docker" "fastfetch"
@@ -4195,8 +3981,8 @@ done
 
 echo "SUMMARY: $installed_count/$total_count software installed"
 
-# List of installed packages
-echo "Total number of installed packages: $(pacman -Q | wc -l)"
+# Installed packages list
+echo "Total packages installed: $(pacman -Q | wc -l)"
 EOF
     
     print_success "ALL ESSENTIAL SOFTWARE HAS BEEN INSTALLED "
@@ -4213,7 +3999,7 @@ install_themes() {
     
     print_info "Installing themes and icons..."
     
-    # Icons and themes via pacman - CORRECTION: correct package names - not sure as not many are installed, to recheck
+    # Icons and themes via pacman - CORRECTION: correct package names - not sure because not many are installed, to recheck
     local theme_packages=(
         papirus-icon-theme
         tela-icon-theme
@@ -4224,10 +4010,10 @@ install_themes() {
         sweet-theme-git
     )
     
-    # Installation of base themes
-    run_with_progress "Installing themes and icons" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed papirus-icon-theme breeze-icons breeze-gtk"
+    # Base themes installation
+    run_with_progress "Themes and icons installation" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed papirus-icon-theme breeze-icons breeze-gtk"
     
-    # Additional themes via AUR - Apart from Tela, others weren't installed TO RECHECK
+    # Additional themes via AUR - Except Tela, others weren't installed TO RECHECK
     if /usr/bin/arch-chroot /mnt command -v paru &> /dev/null; then
         print_info "Installing additional themes via AUR..."
         
@@ -4249,7 +4035,7 @@ install_themes() {
     
     # Default theme configuration - CORRECTION: Existing themes (ineffective correction)
     if [[ "$DE_CHOICE" == "kde" ]]; then
-        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "Failed KDE theme configuration"
+        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "KDE theme configuration failed"
 # KDE configuration with valid themes
 mkdir -p /home/$USERNAME/.config
 
@@ -4279,14 +4065,14 @@ mkdir -p /home/$USERNAME/.local/share/wallpapers
 # CORRECTION: Correct desktop image download
 curl -o /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png \
     'https://raw.githubusercontent.com/PapaOursPolaire/Linux-tools/refs/heads/Projets/fallout-desktop-bg.png' 2>/dev/null || {
-    # Copy SDDM image as fallback
+    # SDDM image copy as fallback
     if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
         cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png
     fi
 }
 EOF
     elif [[ "$DE_CHOICE" == "gnome" ]]; then
-        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "Failed GNOME theme configuration"
+        /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "GNOME theme configuration failed"
 # GNOME configuration - CORRECTION: Valid themes
 gsettings set org.gnome.desktop.interface icon-theme 'Papirus-Dark'
 gsettings set org.gnome.desktop.interface gtk-theme 'Arc-Dark'
@@ -4310,44 +4096,91 @@ EOF
     print_success "Themes and icons installed and configured"
 }
 
-install_vscode() {
+install_vscode() { # Doesn't work
     print_header "STEP 30/$TOTAL_STEPS: VISUAL STUDIO CODE INSTALLATION"
     CURRENT_STEP=30
 
-    # Check if Flatpak is available
-    if ! command -v flatpak &>/dev/null; then
-        print_info "Flatpak not found - installing..."
-        pacman -S --noconfirm --needed flatpak || {
-            print_error "Unable to install Flatpak"
-            return 1
-        }
-        flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+    if [[ "$DRY_RUN" == true ]]; then
+        print_info "[DRY RUN] VSCode installation simulation"
+        return 0
     fi
 
-    # Install VS Code via Flatpak
-    if flatpak install -y flathub com.visualstudio.code; then
-        print_success "Visual Studio Code installed via Flatpak"
-    else
-        print_warning "Failed to install VS Code (com.visualstudio.code)"
+    print_info "Installing Visual Studio Code..."
+
+    # Attempt 1: via pacman directly
+    if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code 2>/dev/null; then
+        print_success "Visual Studio Code installed via pacman"
+        
+        # Create desktop shortcut
+        /usr/bin/arch-chroot /mnt /bin/bash <<EOF
+mkdir -p /usr/share/applications
+cat > /usr/share/applications/code-fallout.desktop <<'DESK_EOF'
+[Desktop Entry]
+Name=Visual Studio Code
+Exec=code %U
+Icon=visual-studio-code
+Terminal=false
+Type=Application
+Categories=Development;
+MimeType=text/plain;inode/directory;
+DESK_EOF
+EOF
+        return 0
     fi
 
-    # Install VSCodium via Flatpak
-    if flatpak install -y flathub com.vscodium.codium; then
-        print_success "VSCodium installed via Flatpak"
-    else
-        print_warning "Failed to install VSCodium (com.vscodium.codium)"
+    print_warning "VSCode not available via pacman, AUR attempt..."
+
+    # Attempt 2: via AUR with paru
+    if /usr/bin/arch-chroot /mnt command -v paru &>/dev/null; then
+        if /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm visual-studio-code-bin 2>/dev/null; then
+            print_success "Visual Studio Code installed via AUR (paru)"
+            return 0
+        fi
     fi
+
+    # Attempt 3: via Flatpak
+    if /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
+        /usr/bin/arch-chroot /mnt flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+        
+        if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.visualstudio.code 2>/dev/null; then
+            print_success "Visual Studio Code installed via Flatpak"
+            return 0
+        fi
+    fi
+
+    # Attempt 4: VSCodium (open-source alternative)
+    print_warning "Official VSCode unavailable, VSCodium attempt..."
+    if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed vscodium 2>/dev/null; then
+        print_success "VSCodium (open-source alternative) installed"
+        return 0
+    fi
+
+    # Attempt 5: VSCodium via Flatpak
+    if /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
+        if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.vscodium.codium 2>/dev/null; then
+            print_success "VSCodium installed via Flatpak"
+            return 0
+        fi
+    fi
+
+    print_error "Unable to install Visual Studio Code or VSCodium"
+    print_info "Manual installation possible after reboot via:"
+    echo "  • pacman -S code"
+    echo "  • paru -S visual-studio-code-bin"
+    echo "  • flatpak install flathub com.visualstudio.code"
+    
+    return 1
 }
 
 generate_postinstall() {
-    print_header "STEP 31/$TOTAL_STEPS: POST-INSTALL SCRIPT GENERATION"
+    print_header "STEP 31/$TOTAL_STEPS: POST-INSTALLATION SCRIPT GENERATION"
     CURRENT_STEP=31
 
     local U TARGET
     U="${USERNAME:-}"
 
     if [[ -z "$U" ]]; then
-        echo "[FATAL] USERNAME is empty, cannot generate post-install.sh" >&2
+        echo "[FATAL] USERNAME is empty, unable to generate post-install.sh" >&2
         return 1
     fi
 
@@ -4365,7 +4198,7 @@ generate_postinstall() {
 #   chmod +x ~/post-install.sh
 #   ~/post-install.sh
 #
-# NOTE: adapts some commands according to your distro (script tries to detect package manager)
+# NOTE: adapts some commands according to your distro (script attempts to detect package manager)
 
 set -o pipefail
 
@@ -4399,7 +4232,7 @@ run_cmd() {
     fi
     }
 
-    # Helper: execute command that must be root, try sudo if not root
+    # Helper: execute command that must be root, attempts sudo if not root
     run_cmd_sudo() {
     local desc="$1"; shift
     if (( EUID == 0 )); then
@@ -4408,7 +4241,7 @@ run_cmd() {
         if command -v sudo >/dev/null 2>&1; then
         run_cmd "$desc" sudo "$@"
         else
-        red "[ERROR] sudo not found — cannot execute (root): $desc"
+        red "[ERROR] sudo not found — unable to execute (root): $desc"
         return 1
         fi
     fi
@@ -4473,8 +4306,7 @@ install_packages() {
         emerge)
         run_cmd_sudo "emerge ${pkgs[*]}" emerge "${pkgs[@]}" ;;
         *)
-        red "[WARN] install_packages: unknown manager, try apt-get/pacman manually"
-        return 1 ;;
+        red "[WARN] install_packages: unknown manager, attempt apt-get/pacman manually" ;;
     esac
 }
 
@@ -4497,7 +4329,7 @@ install_flatpak() {
         run_cmd "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo" flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
         run_cmd "Install flatpak ref $ref" flatpak install -y flathub "$ref"
     else
-        red "[ERROR] flatpak unavailable, cannot install $ref"
+        red "[ERROR] flatpak unavailable, unable to install $ref"
     fi
 }
 
@@ -4510,7 +4342,7 @@ install_aur_pkg() {
     elif command -v yay >/dev/null 2>&1; then
         run_cmd "yay -S --noconfirm $pkg" yay -S --noconfirm "$pkg"
     else
-        red "[WARN] No AUR helper detected (paru/yay). Ignore $pkg or install an AUR helper."
+        red "[WARN] No AUR helper detected (paru/yay). Ignore $pkg or install AUR helper."
         return 1
     fi
 }
@@ -4528,7 +4360,7 @@ fi
 # SECTION A: Debug Steam / fixes Steam common issues
 steam_debug() {
     echo
-    yellow "[TASK] Debug Steam / verification of 32-bit libraries (lib32)"
+    yellow "[TASK] Debug Steam / 32-bit libraries verification (lib32)"
 
     # On Arch check for multilib packages like lib32-gnutls, lib32-mesa
     if [[ "$PKG_MANAGER" == "pacman" ]]; then
@@ -4543,7 +4375,7 @@ steam_debug() {
 # SECTION B: Android Studio installation (flatpak preferred)
 install_android_studio() {
     echo
-    yellow "[TASK] Install Android Studio (flatpak preferred)"
+    yellow "[TASK] Android Studio installation (flatpak preferred)"
 
     if command -v flatpak >/dev/null 2>&1; then
     install_flatpak com.google.AndroidStudio || true
@@ -4561,7 +4393,7 @@ install_android_studio() {
 # SECTION C: Spotify & Spicetify
 install_spotify_and_spicetify() {
     echo
-    yellow "[TASK] Install Spotify and Spicetify (if available)"
+    yellow "[TASK] Spotify and Spicetify installation (if available)"
 
     # Install Spotify client (flatpak preferred)
     if command -v flatpak >/dev/null 2>&1; then
@@ -4626,7 +4458,7 @@ install_vscode_extensions_user() {
 # SECTION E: Browsers (Brave, Chrome, DuckDuckGo Browser)
 install_browsers() {
     echo
-    yellow "[TASK] Install browsers (Brave / Google Chrome / DuckDuckGo Browser if possible)"
+    yellow "[TASK] Browser installation (Brave / Google Chrome / DuckDuckGo Browser if possible)"
 
     # Prefer flatpak for cross-distro
     if command -v flatpak >/dev/null 2>&1; then
@@ -4667,7 +4499,7 @@ install_multimedia_and_fonts() {
         install_packages pipewire pipewire-alsa pipewire-jack freetype-freeworld google-noto-emoji-fonts || true
         ;;
     *)
-        echo "[INFO] Install PipeWire/codecs/fonts manually if needed" >&3
+        echo "[INFO] Install manually PipeWire/codecs/fonts if needed" >&3
         ;;
     esac
 }
@@ -4677,7 +4509,7 @@ user_misc_tweaks() {
     echo
     yellow "[TASK] Optional user tasks (spicetify backup, config copies...)"
 
-    # Create a ~/bin if not present and ensure it's in PATH
+    # Create ~/bin if not present and ensure it's in PATH
     mkdir -p "$HOME/bin"
     if ! echo "$PATH" | grep -q "$HOME/bin"; then
     echo "export PATH=\"\$HOME/bin:\$PATH\"" >> "$HOME/.profile"
@@ -4696,7 +4528,7 @@ user_misc_tweaks() {
 main() {
     yellow "Starting post-install tasks"
 
-    # 0) update index
+    # 0) index update
     update_db
 
     # 1) Steam debug
@@ -4705,22 +4537,22 @@ main() {
     # 2) Android Studio
     install_android_studio
 
-    # 3) Spotify & Spicetify -> I think I overdid the long name
+    # 3) Spotify & Spicetify -> I abused the ridiculously long name I think
     install_spotify_and_spicetify
 
-    # 4) Visual Studio Code extensions -> I think I overdid the long name
+    # 4) Visual Studio Code extensions -> I abused the ridiculously long name I think
     install_vscode_extensions_user
 
     # 5) Browsers
     install_browsers
 
-    # 6) Multimedia & Fonts -> I think I overdid the long name
+    # 6) Multimedia & Fonts -> I abused the ridiculously long name I think
     install_multimedia_and_fonts
 
     # 7) Misc user tweaks
     user_misc_tweaks
 
-    # 8) Deploy helper -> I think I overdid the long name
+    # 8) Deploy helper -> I abused the ridiculously long name I think
     deploy_post_install_helper
 
     yellow "Post-install tasks completed"
@@ -4748,12 +4580,8 @@ POST_EOF
     chmod 0755 "$TARGET"
 }
 
-
-
-
-# Fastfetch runs automatically -> To reexamine, meanwhile proceed with installation via fastfetch.sh available on the repo
 install_fastfetch() {
-    print_header "STEP 28/$TOTAL_STEPS: INSTALLING AND CONFIGURING FASTFETCH"
+    print_header "STEP 28/$TOTAL_STEPS: FASTFETCH INSTALLATION AND CONFIGURATION"
     CURRENT_STEP=28
 
     if [[ -z "${USERNAME:-}" ]]; then
@@ -4766,319 +4594,140 @@ install_fastfetch() {
         return 0
     fi
 
-    local USER_HOME="/home/${USERNAME}"
-    local CHROOT_USER_HOME="/mnt${USER_HOME}"
-    local CONFIG_DIR="${CHROOT_USER_HOME}/.config/fastfetch"
-    local PROFILE_FILE="${CHROOT_USER_HOME}/.bashrc"
-    local INVOKE_MARKER="# fastfetch autostart entry - added by install script"
-    local installed_in_chroot=false
-
-    # 1) Install fastfetch
     print_info "Installing fastfetch..."
-    
-    if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch 2>/dev/null; then
-        print_success "fastfetch installed via pacman"
-        installed_in_chroot=true
-    else
-        print_warning "Failed to install via pacman, trying Flatpak..."
-        
-        # Install via Flatpak
-        if /usr/bin/arch-chroot /mnt flatpak install -y flathub io.github.fastfetch_cli 2>/dev/null; then
-            print_success "fastfetch installed via Flatpak"
-            installed_in_chroot=true
-        else
-            print_warning "Failed to install via Flatpak"
+
+    # Package installation
+    if ! /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed fastfetch; then
+        print_warning "Pacman failed, Flatpak attempt..."
+        if ! /usr/bin/arch-chroot /mnt flatpak install -y flathub io.github.fastfetch_cli 2>/dev/null; then
+            print_error "Unable to install fastfetch"
+            return 1
         fi
     fi
 
-    # 2) Advanced configuration with all modules
-    print_info "Configuring fastfetch with complete modules..."
-    
-    mkdir -p "$CONFIG_DIR" || {
-        print_error "Cannot create $CONFIG_DIR"
-        return 1
-    }
+    local USER_HOME="/home/${USERNAME}"
+    local CONFIG_DIR="${USER_HOME}/.config/fastfetch"
 
-    # Complete configuration with all available modules
-    cat > "${CONFIG_DIR}/config.jsonc" <<'FFCFG'
+    print_info "Creating fastfetch configuration..."
+
+    # Create config directory
+    /usr/bin/arch-chroot /mnt mkdir -p "$CONFIG_DIR"
+
+    # Fastfetch configuration
+    /usr/bin/arch-chroot /mnt bash -c "cat > '$CONFIG_DIR/config.json' <<'FFCONFIG'
 {
-    "display": {
-        "separator": " : ",
-        "keyWidth": 20,
-        "keyColor": "#00ff00",
-        "valueColor": "#ffffff",
-        "showColors": true,
-        "barChar": "█",
-        "barWidth": 15,
-        "barStyle": "gradient"
+    \"logo\": {
+        \"type\": \"ascii\",
+        \"source\": \"arch\",
+        \"width\": 30,
+        \"height\": 20,
+        \"color\": {
+            \"foreground\": \"green\"
+        }
     },
-    "modules": [
-        {
-            "type": "title",
-            "format": "Arch Linux - {user}@{host}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "separator",
-            "color": "#00ff00"
-        },
-        {
-            "type": "os",
-            "key": "System",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "host",
-            "key": "Host",
-            "format": "{product} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "kernel",
-            "key": "Kernel",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "uptime",
-            "key": "Uptime",
-            "format": "{days}d {hours}h {minutes}m",
-            "color": "#00ff00"
-        },
-        {
-            "type": "shell",
-            "key": "Shell",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "de",
-            "key": "Desktop",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "wm",
-            "key": "Window Manager",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "terminal",
-            "key": "Terminal",
-            "format": "{name} {version}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "packages",
-            "key": "Packages",
-            "format": "{count}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "cpu",
-            "key": "CPU",
-            "format": "{name} @ {frequency}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "gpu",
-            "key": "GPU",
-            "format": "{name}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "memory",
-            "key": "Memory",
-            "format": "{used} / {total}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "swap",
-            "key": "Swap",
-            "format": "{used} / {total}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "disk",
-            "key": "Disk",
-            "format": "{used} / {total} ({percent}%)",
-            "color": "#00ff00"
-        },
-        {
-            "type": "battery",
-            "key": "Battery",
-            "format": "{percentage}% ({status})",
-            "color": "#00ff00"
-        },
-        {
-            "type": "locale",
-            "key": "Locale",
-            "format": "{name}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "datetime",
-            "key": "Date/Time",
-            "format": "{date} {time}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "publicip",
-            "key": "Public IP",
-            "format": "{address}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "localip",
-            "key": "Local IP",
-            "format": "{address}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "weather",
-            "key": "Weather",
-            "format": "{location}: {temperature}°C {condition}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "processes",
-            "key": "Processes",
-            "format": "{count}",
-            "color": "#00ff00"
-        },
-        {
-            "type": "break",
-            "color": "#00ff00"
-        },
-        {
-            "type": "colors",
-            "key": "Color Palette",
-            "blockStyle": "vertical",
-            "color": "#00ff00"
-        }
-    ],
-    "logo": {
-        "type": "ascii",
-        "source": "arch",
-        "color": "#00ff00",
-        "padding": {
-            "top": 1,
-            "right": 2,
-            "bottom": 0,
-            "left": 0
-        }
-    }
+    \"display\": {
+        \"separator\": \" : \",
+        \"keyWidth\": 20,
+        \"keyColor\": \"green\",
+        \"valueColor\": \"white\",
+        \"barsColor\": \"green\",
+        \"barChar\": \"█\",
+        \"barWidth\": 20
+    },
+    \"modules\": [
+        \"os\",
+        \"host\",
+        \"kernel\",
+        \"uptime\",
+        \"packages\",
+        \"shell\",
+        \"de\",
+        \"wm\",
+        \"cpu\",
+        \"gpu\",
+        \"memory\",
+        \"swap\",
+        \"disk\",
+        \"battery\",
+        \"localip\",
+        \"publicip\"
+    ]
 }
-FFCFG
+FFCONFIG
+"
 
-    # 3) Configure autorun in .bashrc
-    print_info "Configuring autorun in .bashrc..."
+    # Bashrc configuration for GUARANTEED autostart
+    print_info "Configuring autostart in bashrc..."
     
-    if ! grep -q "$INVOKE_MARKER" "$PROFILE_FILE" 2>/dev/null; then
-        cat >> "$PROFILE_FILE" <<'BASHRC_FF'
-# fastfetch autostart - displays system information in every shell
-# Only runs in interactive shells
-$INVOKE_MARKER
-if [[ $- == *i* ]] && command -v fastfetch >/dev/null 2>&1; then
-    # Check if we're in a graphical terminal or TTY
-    if [[ -n "$DISPLAY" ]] || [[ "$TERM" =~ ^xterm|^rxvt|^screen|^tmux|^linux|^vt ]]; then
-        # Use custom configuration if available
-        if [[ -f ~/.config/fastfetch/config.jsonc ]]; then
-            fastfetch --load-config ~/.config/fastfetch/config.jsonc 2>/dev/null || \
-            fastfetch 2>/dev/null
-        else
-            fastfetch 2>/dev/null
-        fi
-        echo ""
-    fi
-fi
-BASHRC_FF
-    fi
+    /usr/bin/arch-chroot /mnt /bin/bash <<'BASHRC_CONFIG'
+USERNAME='$USERNAME'
+BASHRC="/home/${USERNAME}/.bashrc"
+MARKER="### FASTFETCH AUTOSTART - Arch Installation"
 
-    # 4) Additional configuration for login shells
-    local BASHRC_LOGIN="${CHROOT_USER_HOME}/.profile"
-    if [[ ! -f "$BASHRC_LOGIN" ]]; then
-        touch "$BASHRC_LOGIN"
-    fi
-    
-    if ! grep -q "fastfetch" "$BASHRC_LOGIN" 2>/dev/null; then
-        cat >> "$BASHRC_LOGIN" <<'PROFILE_FF'
-# Run fastfetch for login shells
-if [ -n "$BASH_VERSION" ] && [ -n "$PS1" ] && command -v fastfetch >/dev/null 2>&1; then
-    if [[ -f ~/.config/fastfetch/config.jsonc ]]; then
-        fastfetch --load-config ~/.config/fastfetch/config.jsonc 2>/dev/null || true
-    else
-        fastfetch 2>/dev/null || true
-    fi
-    echo ""
-fi
-PROFILE_FF
-    fi
-
-    # 5) Configuration for Zsh (if installed)
-    local ZSHRC="${CHROOT_USER_HOME}/.zshrc"
-    if [[ -f "$ZSHRC" ]] || /usr/bin/arch-chroot /mnt command -v zsh >/dev/null 2>&1; then
-        if [[ ! -f "$ZSHRC" ]]; then
-            touch "$ZSHRC"
-        fi
+# If marker doesn't exist, add config
+if ! grep -q "$MARKER" "$BASHRC" 2>/dev/null; then
+    cat >> "$BASHRC" <<'FASTFETCH_EOF'
+### FASTFETCH AUTOSTART - Arch Installation
+if [[ $- == *i* ]]; then
+    # Execute only once per shell session
+    if [[ -z "$FASTFETCH_RUN" ]]; then
+        export FASTFETCH_RUN=1
         
-        if ! grep -q "fastfetch" "$ZSHRC" 2>/dev/null; then
-            cat >> "$ZSHRC" <<'ZSHRC_FF'
-# fastfetch for Zsh
-if command -v fastfetch >/dev/null 2>&1 && [[ -o interactive ]]; then
-    if [[ -f ~/.config/fastfetch/config.jsonc ]]; then
-        fastfetch --load-config ~/.config/fastfetch/config.jsonc 2>/dev/null || \
-        fastfetch 2>/dev/null
-    else
-        fastfetch 2>/dev/null
-    fi
-    echo ""
-fi
-ZSHRC_FF
+        if command -v fastfetch >/dev/null 2>&1; then
+            fastfetch --config ~/.config/fastfetch/config.json 2>/dev/null || fastfetch
         fi
     fi
+fi
+FASTFETCH_EOF
+fi
+BASHRC_CONFIG
 
-    # 6) Fix permissions
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown -R ${USERNAME}:${USERNAME} '/home/${USERNAME}/.config/fastfetch' >/dev/null 2>&1 || true"
-    /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.bashrc' '/home/${USERNAME}/.profile' >/dev/null 2>&1 || true"
-    
-    if [[ -f "$ZSHRC" ]]; then
-        /usr/bin/arch-chroot /mnt /bin/bash -lc "chown ${USERNAME}:${USERNAME} '/home/${USERNAME}/.zshrc' >/dev/null 2>&1 || true"
-    fi
-
-    # 7) Create a convenient alias
-    local BASHRC_ALIAS="${CHROOT_USER_HOME}/.bash_aliases"
-    if [[ ! -f "$BASHRC_ALIAS" ]]; then
-        touch "$BASHRC_ALIAS"
+    # Zshrc configuration if installed
+    /usr/bin/arch-chroot /mnt /bin/bash <<'ZSHRC_CONFIG'
+if /usr/bin/arch-chroot /mnt command -v zsh >/dev/null 2>&1; then
+    ZSHRC="/home/${USERNAME}/.zshrc"
+    if [[ ! -f "$ZSHRC" ]]; then
+        touch "$ZSHRC"
     fi
     
-    if ! grep -q "alias ff=" "$BASHRC_ALIAS" 2>/dev/null; then
-        echo "alias ff='fastfetch --load-config ~/.config/fastfetch/config.jsonc'" >> "$BASHRC_ALIAS"
+    if ! grep -q "FASTFETCH AUTOSTART" "$ZSHRC" 2>/dev/null; then
+        cat >> "$ZSHRC" <<'ZSHFETCH_EOF'
+### FASTFETCH AUTOSTART - Arch Installation
+if [[ -o interactive ]]; then
+    if [[ -z "$FASTFETCH_RUN" ]]; then
+        export FASTFETCH_RUN=1
+        
+        if command -v fastfetch >/dev/null 2>&1; then
+            fastfetch --config ~/.config/fastfetch/config.json 2>/dev/null || fastfetch
+        fi
     fi
+fi
+ZSHFETCH_EOF
+    fi
+fi
+ZSHRC_CONFIG
 
-    # 8) Test message
-    print_info "Testing fastfetch configuration..."
-    if /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -c "command -v fastfetch >/dev/null 2>&1"; then
-        print_success "Fastfetch configured successfully"
-        echo ""
-        echo -e "${GREEN}Enabled modules:${NC}"
-        echo -e "• ${CYAN}System${NC} - OS, Host, Kernel, Uptime"
-        echo -e "• ${CYAN}Shell${NC} - Shell, Desktop, WM, Terminal"
-        echo -e "• ${CYAN}Resources${NC} - CPU, GPU, Memory, Swap, Disk"
-        echo -e "• ${CYAN}Network${NC} - Public IP, Local IP"
-        echo -e "• ${CYAN}Misc${NC} - Battery, Locale, Date/Time, Weather"
-        echo -e "• ${CYAN}Visual${NC} - Color Palette, Progress bars"
-        echo ""
-        echo -e "${YELLOW}Fastfetch will run automatically in:${NC}"
-        echo -e "• ${WHITE}Bash terminals${NC} (.bashrc)"
-        echo -e "• ${WHITE}Login shells${NC} (.profile)"
-        echo -e "• ${WHITE}Zsh${NC} (if installed)"
-        echo ""
-        echo -e "${PURPLE}Available command:${NC} ${CYAN}ff${NC} - Run fastfetch with configuration"
+    # Create convenient alias
+    /usr/bin/arch-chroot /mnt /bin/bash <<'ALIAS_CONFIG'
+USERNAME='$USERNAME'
+BASHALIASES="/home/${USERNAME}/.bash_aliases"
+
+if ! grep -q "alias ff=" "$BASHALIASES" 2>/dev/null; then
+    echo "alias ff='fastfetch --config ~/.config/fastfetch/config.json'" >> "$BASHALIASES"
+fi
+ALIAS_CONFIG
+
+    # Fix permissions
+    /usr/bin/arch-chroot /mnt chown -R "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.config/fastfetch" 2>/dev/null || true
+    /usr/bin/arch-chroot /mnt chown "${USERNAME}:${USERNAME}" "/home/${USERNAME}/.bashrc" "/home/${USERNAME}/.bash_aliases" 2>/dev/null || true
+
+    # Test
+    if /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -c "command -v fastfetch >/dev/null 2>&1 && fastfetch --help >/dev/null 2>&1"; then
+        print_success "Fastfetch installed and configured with autostart"
+        print_info "Fastfetch will execute automatically on each terminal launch"
+        print_info "Shortcut available: ff"
     else
-        print_warning "Fastfetch installed but not accessible in chroot"
+        print_warning "Fastfetch installed but configuration may require verification"
     fi
 
     return 0
@@ -5090,7 +4739,7 @@ final_config() {
     CURRENT_STEP=29
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulating final configuration"
+        print_info "[DRY RUN] Final configuration simulation"
         return 0
     fi
     
@@ -5105,7 +4754,7 @@ systemctl enable NetworkManager
 systemctl enable systemd-timesyncd
 systemctl enable fstrim.timer
 
-# PipeWire audio services
+# Audio services PipeWire
 systemctl --global enable pipewire.service
 systemctl --global enable pipewire-pulse.service
 systemctl --global enable wireplumber.service
@@ -5252,7 +4901,7 @@ else
     PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
 fi
 
-# GUARANTEED automatic Fastfetch
+# Guaranteed automatic Fastfetch
 if [[ -z "\$FASTFETCH_SHOWN" && "\$TERM" != "linux" ]]; then
     export FASTFETCH_SHOWN=1
     
@@ -5278,7 +4927,7 @@ fi
 
 BASHRC_EOF
 
-# Improved VIM configuration
+# Enhanced VIM configuration
 cat > /home/$USERNAME/.vimrc <<'VIM_EOF'
 " Vim configuration - Arch Linux Fallout Edition
 set number
@@ -5326,20 +4975,20 @@ sudo -u $USERNAME git config --global core.editor nano
 sudo -u $USERNAME git config --global pull.rebase false
 sudo -u $USERNAME git config --global credential.helper store
 
-# Create user directories
-mkdir -p /home/$USERNAME/{Projets,Scripts,Téléchargements/{Logiciels,Musique,Vidéos},Documents/{Dev,Personnel,Notes},Images/{Screenshots,Wallpapers}}
+# User directory creation
+mkdir -p /home/$USERNAME/{Projects,Scripts,Downloads/{Software,Music,Videos},Documents/{Dev,Personal,Notes},Images/{Screenshots,Wallpapers}}
 
-# Full permissions
+# Complete permissions
 chown -R $USERNAME:$USERNAME /home/$USERNAME/
 chmod 755 /home/$USERNAME
-chmod -R 755 /home/$USERNAME/{Projets,Scripts,Documents,Images}
-chmod -R 775 /home/$USERNAME/Téléchargements
+chmod -R 755 /home/$USERNAME/{Projects,Scripts,Documents,Images}
+chmod -R 775 /home/$USERNAME/Downloads
 EOF
     
     print_info "Final verification of ALL corrections..."
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 echo ""
-echo "FINAL VERIFICATION OF CORRECTIONS"
+echo "FINAL CORRECTIONS VERIFICATION"
 echo ""
 
 # 1. Theme verification
@@ -5356,7 +5005,7 @@ echo "2.  FASTFETCH:"
 if command -v fastfetch >/dev/null 2>&1; then
     echo "    Fastfetch installed"
     [[ -f /home/$USERNAME/.config/fastfetch/config.jsonc ]] && echo "    Custom configuration"
-    grep -q "fastfetch" /home/$USERNAME/.bashrc && echo "    Auto-launch configured"
+    grep -q "fastfetch" /home/$USERNAME/.bashrc && echo "    Automatic launch configured"
 else
     echo "    Fastfetch not found"
 fi
@@ -5419,15 +5068,15 @@ echo "    Total packages installed: $total_packages"
 # 8. Services
 echo ""
 echo "8.  SERVICES:"
-systemctl is-enabled NetworkManager >/dev/null && echo "    NetworkManager enabled"
-systemctl --global is-enabled pipewire >/dev/null 2>&1 && echo "    PipeWire enabled"
+systemctl is-enabled NetworkManager >/dev/null && echo "    NetworkManager activated"
+systemctl --global is-enabled pipewire >/dev/null 2>&1 && echo "    PipeWire activated"
 
 echo ""
 echo "FINAL SUMMARY"
 if [[ $theme_ok -ge 2 && "$vscode_ok" == true && $software_count -ge 4 ]]; then
     echo "System ready for use"
 else
-    echo "Some corrections may require manual intervention because too lazy to create a correction script or debug this script, you think I don't have other scripts on the floor?"
+    echo "Some corrections may require manual intervention because too lazy to create correction script or debug this script, you think I don't have other scripts on the floor?"
 fi
 EOF
     
@@ -5439,13 +5088,13 @@ finish_install() {
     CURRENT_STEP=32
     
     if [[ "$DRY_RUN" == true ]]; then
-        print_success " SIMULATION COMPLETED - No actual modifications made"
+        print_success " SIMULATION COMPLETED - No real modifications made"
         echo ""
-        echo -e "${YELLOW}For real installation, run without --dry-run${NC}"
+        echo -e "${YELLOW}For real installation, restart without --dry-run${NC}"
         return 0
     fi
     
-    print_success "Complete Arch Linux Fallout Edition installation is now finished!"
+    print_success "Complete Arch Linux Fallout Edition installation is now completed!"
     echo ""
     echo -e "${GREEN} COMPLETE INSTALLATION SUMMARY:${NC}"
     echo -e "${CYAN}• Disk:${NC} $DISK"
@@ -5461,7 +5110,7 @@ finish_install() {
     [[ -n "$SWAP_PART" ]] && echo -e "  - Swap: $SWAP_PART ($PARTITION_SWAP_SIZE)"
     echo -e "${CYAN}• Hostname:${NC} $HOSTNAME"
     echo -e "${CYAN}• User:${NC} $USERNAME"
-    echo -e "${CYAN}• Desktop Environment:${NC} $DE_CHOICE"
+    echo -e "${CYAN}• Environment:${NC} $DE_CHOICE"
     [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "${CYAN}• Partitioning:${NC} Custom"
     echo ""
     
@@ -5469,24 +5118,24 @@ finish_install() {
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         echo -e "• Bootloader: GRUB x86_64-efi"
         echo -e "• Partition table: GPT"
-        echo -e "• EFI Partition: FAT32"
+        echo -e "• EFI partition: FAT32"
     else
         echo -e "• Bootloader: GRUB i386-pc"
         echo -e "• Partition table: MBR"
-        echo -e "• Boot Partition: ext4"
+        echo -e "• Boot partition: ext4"
     fi
     echo ""
     
-    # Rest of the function remains identical...
-    # [identical content for features display]
+    # The rest of the function remains identical...
+    # [identical content of features display]
     
-    # Adapted post-installation instructions
+    # Post-installation instructions adapted
     echo -e "${BLUE} POST-INSTALLATION INSTRUCTIONS:${NC}"
     echo -e "1. ${WHITE}Remove installation media${NC}"
-    echo -e "2. ${WHITE}Reboot the system${NC}"
-    echo -e "3. ${WHITE}Login with:${NC} ${CYAN}$USERNAME${NC}"
+    echo -e "2. ${WHITE}Restart system${NC}"
+    echo -e "3. ${WHITE}Log in with:${NC} ${CYAN}$USERNAME${NC}"
     if [[ "$BOOT_MODE" == "bios" ]]; then
-        echo -e "4. ${WHITE}Verify BIOS boots from hard disk${NC}"
+        echo -e "4. ${WHITE}Verify BIOS boots correctly on hard disk${NC}"
     fi
     echo -e "5. ${WHITE}First update:${NC} ${CYAN}sudo pacman -Syu${NC}"
     echo ""
@@ -5497,37 +5146,37 @@ finish_install() {
         print_info "Installation log saved: /home/$USERNAME/installation.log"
     fi
     
-    if confirm_action "Reboot now?" "Y"; then
-        print_info "Rebooting in 5 seconds..."
+    if confirm_action "Do you want to restart now?" "Y"; then
+        print_info "Restarting in 5 seconds..."
         
         print_info "Unmounting partitions..."
         sync
         
-        # Clean unmounting
+        # Clean unmount
         [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
         umount -R /mnt 2>/dev/null || print_warning "Partial unmount"
         
         echo ""
         for i in {5..1}; do
-            echo -ne "\r${YELLOW} Rebooting in $i seconds... (Ctrl+C to cancel)${NC}"
+            echo -ne "\r${YELLOW} Restarting in $i seconds... (Ctrl+C to cancel)${NC}"
             sleep 1
         done
         echo ""
         echo ""
-        print_success " Rebooting... Welcome to Arch Linux (${BOOT_MODE})!"
+        print_success " Restarting... Welcome to Arch Linux (${BOOT_MODE})!"
         
         reboot
     else
-        print_info "Installation completed. Reboot manually when ready."
-        echo -e "${YELLOW} Don't forget to remove the bootable USB media!${NC}"
+        print_info "Installation completed. Restart manually when you want."
+        echo -e "${YELLOW} Don't forget to remove bootable USB key!${NC}"
         
-        # Manual unmounting
+        # Manual unmount
         sync
         [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Complete V754.4-BIOS installation! Your Arch Linux system is ready.${NC}"
+        echo -e "${GREEN} Complete installation V764.4-BIOS! Your Arch Linux system is ready.${NC}"
         echo ""
     fi
 }
@@ -5537,7 +5186,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Ensure paru is present before any AUR Gaming install
     if ! chroot_cmd_exists paru; then
         print_info "Paru not available — automatic (re)installation…"
-        ensure_paru_in_chroot || print_warning "Unable to (re)install an AUR helper — AUR Gaming packages will be ignored"
+        ensure_paru_in_chroot || print_warning "Unable to (re)install AUR helper — AUR Gaming packages will be ignored"
     fi
 
     exec > >(tee -a "$LOG_FILE")
