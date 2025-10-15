@@ -11,24 +11,16 @@ fi
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub PapaOursPolaire
 # Version: 764.4, correctif 4 de la version 764.4
-# Mise à jour : 14/10/2025 à 17:14
+# Mise à jour : 15/10/2025 à 16:01
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
-# Erreurs à l'étape 17  : ne paas installer paru dans le temp
-# Erreurs à l'étape 23 : gtk-theme n'est pas reconnu
-# Erreur de l'éxécution automatique de fastfetch : il est bien là, mais ne s'ouvre pas automatiquement
-# Virtual Studio n'a pas été installé ! 
-# Le boot est sur le fallback du thème fallout et on ne voit pas l'affichage du menu grub
-# On voit l'image GitHub en Plymouth alors qu'elle devait etree en arrière-plan sur la session et pas en plymouth !
-# Aucun logiciels n'a été installés !
-# ErreurS ETAPE 18 -> fini
-# Erreur avec la commande yay  -> fini
-# Erreurs Etapes 18 bis, 21 & 23 (en cours)
+# Erreur de l'éxécution automatique de fastfetch : il est bien là, mais ne s'éxécute pas automatiquement
+# Virtual Studio ne s'installe tj pas meme avec sa propre fonction ! 
 # Suppression des logiciels/extensions vulkan car elles me cassaient la tete et ne fonctionnaient pas sous automatisation
-# Refonte de la variable install_paru() -> Deuxième refonte le 14/08 pour permission denied
-#[community] -> RETIRE prcq les serveurs sont des putes 13/08/2025 vers 20 heures
+# Refonte de la variable install_paru() -> 130eme refonte le 14/08 et marche tj pas
+#[community] -> RETIRE prcq les serveurs packages [community] sont devenus obsolètes le 13/08/2025 vers 20 heures
 #Include = /etc/pacman.d/mirrorlist -> Ces ptn de fdp ont nettoyé les serveurs dcp ça faisait eerreur 404 et en plus la plupart ont crash à cause de cel 2 heures de perdus pour des conneries pareil non mais wlh je cable argh
-# Penser à enelver le mode DRY RUN, car il est devenu futile depuis la version 246.6, il avait pour but de simuler le mode apératoire aisni que de vérifier l'appenrece du script.
+# Penser à enlever le mode DRY RUN, car il est devenu futile depuis la version 246.6, il avait pour but de simuler le mode apératoire ainsi que de vérifier l'apparence du script.
 # Configuration globale -> Thème (en cours de dévellopement, pas de fonction déclarée)
 
 set -euo pipefail
@@ -103,7 +95,7 @@ main() {
     trap cleanup EXIT INT TERM
 
     # Installation des commandes requises
-    install_required_commands || {
+    check_requirements || {
         print_error "Échec de l'installation des commandes requises"
         return 1
     }
@@ -197,13 +189,9 @@ main() {
     echo -e "${PURPLE}PHASE 5: BOOTLOADER ET THÈMES${NC}"
     
     # Configuration du bootloader adaptée au mode
-    configure_bootloader || {
+    configure_grub || {
         print_error "Échec de la configuration du bootloader"
         return 1
-    }
-    
-    install_fallout_theme || {
-        print_warning "Échec de l'installation du thème Fallout"
     }
     
     # Configuration KDE uniquement si KDE est installé
@@ -376,8 +364,8 @@ detect_boot_mode() {
     echo ""
 }
 
-configure_bootloader() {
-    print_header "ETAPE 13/$TOTAL_STEPS: CONFIGURATION BOOTLOADER"
+configure_grub() {
+    print_header "ETAPE 13/$TOTAL_STEPS: CONFIGURATION BOOTLOADER selon le firmware"
     CURRENT_STEP=13
 
     if [[ "$DRY_RUN" == true ]]; then
@@ -511,9 +499,8 @@ install_web() {
         # Vérifier lesquels sont installés sur GNOME & KDE , sont différents parfois
         "Firefox|firefox|firefox||org.mozilla.firefox"
         "Chromium|chromium|chromium||org.chromium.Chromium"
-        "Brave|brave-browser||brave-bin|com.brave.Browser" # Ne marche pas
-        "Vivaldi|vivaldi|vivaldi||com.vivaldi.Vivaldi" # Non plus
-        "Opera|opera|opera||com.opera.Opera" # Non plus
+        "Brave|brave-browser||brave-bin|com.brave.Browser" # Ne marche pas -> Installé via le script post-install.sh
+        "Vivaldi|vivaldi|vivaldi||com.vivaldi.Vivaldi" # GNOME uniquement (enfin je pense)
         "Tor Browser|torbrowser-launcher|torbrowser-launcher||org.torproject.torbrowser-launcher" # Ne marche pas
         "GNOME Web (Epiphany)|epiphany|epiphany||org.gnome.Epiphany"
         "Midori|midori||midori|" # Ne marche pas
@@ -823,7 +810,7 @@ ensure_paru_in_chroot() {
     install_yay_in_chroot || return 1
 }
 
-install_required_commands() {
+check_requirements() {
     print_info "Vérification et installation des commandes requises..."
     
     local missing_pkgs=()
@@ -2672,7 +2659,6 @@ select_desktop() {
     echo -e "${CYAN}1.${NC} KDE Plasma"
     echo -e "${CYAN}2.${NC} GNOME"
     echo -e "${CYAN}3.${NC} Sans interface graphique (serveur/minimal)"
-    echo -e "${CYAN}4.${NC} Hyperland (en cours de développement, ne pas sélectionner)" # D'ailleurs l'externe  marche pas nn plus 
     
     local choice
     while true; do
@@ -2681,7 +2667,6 @@ select_desktop() {
             1) DE_CHOICE="kde"; break ;;
             2) DE_CHOICE="gnome"; break ;;
             3) DE_CHOICE="none"; break ;;
-            # 4) DE_CHOICE="hyperland"; print_warning "Hyperland est en cours de développement"; break ;;
             *) print_warning "Choix invalide! Utilisez 1, 2 ou 3." ;;
         esac
     done
@@ -2717,44 +2702,6 @@ install_desktop() {
     esac
     
     print_success "Environnement de bureau installé"
-}
-
-install_fallout_theme() {
-    local REPO="${1:-https://github.com/shvchk/fallout-grub-theme.git}"
-    local TMPDIR="/tmp/fallout-grub-theme"
-    local THEME_TARGET="/mnt/boot/grub/themes/fallout"
-
-    if [[ ! -d /mnt ]]; then
-        echo "[ERREUR] /mnt non trouvé — monte la racine cible sur /mnt."
-        return 1
-    fi
-
-    rm -rf "$TMPDIR"
-    mkdir -p "$TMPDIR"
-
-    echo "[INFO] Clonage du dépôt $REPO ..."
-    git clone --depth=1 "$REPO" "$TMPDIR" || { echo "[ERREUR] git clone a échoué"; return 2; }
-
-    # Cherche le répertoire contenant theme.txt (compatible avec plusieurs structures)
-    local THEMEDIR
-    THEMEDIR=$(find "$TMPDIR" -type f -name "theme.txt" -printf '%h\n' | head -n1)
-    if [[ -z "$THEMEDIR" ]]; then
-        echo "[ERREUR] theme.txt introuvable dans le dépôt cloné ($TMPDIR)."
-        ls -la "$TMPDIR"
-        return 3
-    fi
-    echo "[INFO] theme.txt trouvé dans : $THEMEDIR"
-
-    # Copier dans la racine cible
-    echo "[INFO] Installation du thème dans $THEME_TARGET ..."
-    rm -rf "$THEME_TARGET"
-    mkdir -p "$(dirname "$THEME_TARGET")"
-    cp -a "$THEMEDIR" "$THEME_TARGET" || { echo "[ERREUR] copie vers $THEME_TARGET a échoué"; return 4; }
-    chown -R root:root "$THEME_TARGET"
-    chmod -R 755 "$THEME_TARGET"
-
-    echo "[SUCCÈS] Thème copié dans $THEME_TARGET"
-    return 0
 }
 
 # Fonctions audia et multimedia
@@ -2817,7 +2764,7 @@ EOF
     print_success "Système audio PipeWire installé et configuré"
 }
 
-install_boot_sound() {
+install_boot_sound() { # Bip sonore de boot disfonctionnel, à y remédier ou non
     print_header "ETAPE 17/$TOTAL_STEPS: CONFIGURATION BIP SONORE BOOT"
     CURRENT_STEP=17
     
@@ -2944,7 +2891,7 @@ EOF
 }
 
 configure_sddm() {
-    print_header "ETAPE 19/$TOTAL_STEPS: CONFIGURATION DU DISPLAY MANAGER"
+    print_header "ETAPE 19/$TOTAL_STEPS: CONFIGURATION DU  SDDM (DISPLAY MANAGER)"
     CURRENT_STEP=19
 
     local repo_zip="/root/Projets.zip"
@@ -3406,7 +3353,7 @@ refresh_mirrors() { # A utiliser si erreurs de téléchargement dans les futures
     pacman -Syy --noconfirm
 }
 
-install_development() {
+install_development() { # VS Code ne s'installe tj pas, à y remédier ou non
     print_header "ETAPE 25/$TOTAL_STEPS: INSTALLATION ENVIRONNEMENT DE DEVELOPPEMENT"
     CURRENT_STEP=25
 
@@ -3487,62 +3434,8 @@ vscode_post_install_info() {
     print_info ""
 }
 
-install_web() {
-    print_header "ETAPE 19/$TOTAL_STEPS: INSTALLATION DES NAVIGATEURS WEB"
-    CURRENT_STEP=19
-
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] Simulation de l'installation des navigateurs web"
-        return 0
-    fi
-
-    print_info "Installation des navigateurs web dans le système..."
-
-    /usr/bin/arch-chroot /mnt /bin/bash <<'CHROOT_EOF'
-set -e
-
-# Liste des navigateurs web à installer : paquet:commande
-web_browsers=(
-    "firefox:firefox"
-    "chromium:chromium"
-    "brave-browser:brave-browser" # Installé dans le post-install
-    "vivaldi-stable:vivaldi" # perdu dans la foret
-    "opera:opera" # enfoui dans le désert du papaoursland
-    "torbrowser-launcher:torbrowser-launcher" # disparu
-    "epiphany:epiphany" # connassais  pas de base, trouvé dans un forum lugubre
-    "midori:midori" # pareil  forum lugubre
-)
-
-for browser_entry in "${web_browsers[@]}"; do
-    IFS=":" read -r browser_pkg browser_cmd <<< "$browser_entry"
-
-    echo "[INFO] Installation de $browser_pkg..."
-
-    if command -v "$browser_cmd" &>/dev/null; then
-        echo "[WARNING] $browser_pkg est déjà installé."
-    else
-        if pacman -S --noconfirm --needed "$browser_pkg"; then
-            echo "[SUCCESS] $browser_pkg installé avec succès."
-        else
-            echo "[ERROR] Échec de l'installation de $browser_pkg, passage au suivant."
-            continue
-        fi
-    fi
-
-    # Mise à jour du cache MIME uniquement si le navigateur est bien installé
-    if command -v "$browser_cmd" &>/dev/null; then
-        echo "[INFO] Mise à jour du cache MIME pour $browser_pkg..."
-        update-desktop-database /usr/share/applications || true
-    else
-        echo "[WARNING] $browser_pkg non trouvé après installation, skip cache MIME."
-    fi
-done
-CHROOT_EOF
-
-    print_success "Installation des navigateurs web terminée."
-}
-
-install_spotify() {
+install_spotify() {  # N'installe que le launcher, pas le client natif (spotify-client) donc est dupliqué
+    # avec le spotify-client du post-install -> A y remédier ou non
     print_header "ETAPE 22/$TOTAL_STEPS: INSTALLATION DE SPOTIFY"
     CURRENT_STEP=22
 
@@ -4205,7 +4098,7 @@ EOF
     print_success "Thèmes et icones installés et configurés"
 }
 
-install_vscode() {
+install_vscode() { # Ne fonctionne pas
     print_header "ETAPE 30/$TOTAL_STEPS: INSTALLATION VISUAL STUDIO CODE"
     CURRENT_STEP=30
 
