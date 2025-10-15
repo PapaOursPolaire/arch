@@ -1,8 +1,8 @@
-# Script d'installation Arch Linux Fallout Edition (v674.4)
+# Script d'installation Arch Linux Fallout Edition (v764.4)
 
 Ce script automatise l'installation complète d'Arch Linux avec une
 thématisation par défaut Fallout.
-Version : **674.4, correctif 5**
+Version : **764.4, correctif 4**
 
 Auteur : PapaOursPolaire
 
@@ -73,7 +73,7 @@ Auteur : PapaOursPolaire
 ### Phase 5 : Bootloader & thèmes
 
 13. **configure_grub** : installe GRUB UEFI avec thème Fallout.
-14. **install_fallout_theme** : applique thème GRUB Fallout.
+14. **configure_grub_uefi** OU **configure_grub_bios**  : applique le thème GRUB Fallout selon le firmware.
 15. **configure_kde_lockscreen** : ajoute une transtion animée entre le SDDM  et la session, uniquement disponible sur l'environnement KDE.
 
 ------------------------------------------------------------------------
@@ -131,13 +131,14 @@ Auteur : PapaOursPolaire
 
 ### Phase 10 : Finalisation
 
-29. **final_configuration** : nettoie, optimise les services.
-30. *generate_postinstall* : Créée un script shell supplémentaire à éxécuter lors de la première connection à la session pour la finalisation de l'installation logistique.
-31. **finish_install** : affiche succès, propose reboot.
+29. **final_config** : nettoie, optimise les services.
+30. **install_vscode** : Installe Visual Studio Code
+31. *generate_postinstall* : Créée un script shell supplémentaire à éxécuter lors de la première connection à la session pour la finalisation de l'installation logistique.
+32. **finish_install** : affiche succès, propose reboot.
 
 ------------------------------------------------------------------------
 
-## ⚙️ Particularités de la version 674.4
+## ⚙️ Particularités de la version 764.4
 
 -   Correction des 2358 erreurs ShellCheck.
 -   Partition `/home` séparée optionnelle.
