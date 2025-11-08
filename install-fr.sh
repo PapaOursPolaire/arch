@@ -413,7 +413,7 @@ rm -rf "$TMP_DIR"
 # Configuration GRUB BIOS avec thème Fallout
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=10
-GRUB_DISTRIBUTOR="Arch Linux Fallout Edition"
+GRUB_DISTRIBUTOR="Arch"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
 GRUB_TIMEOUT_STYLE=menu
