@@ -40,7 +40,7 @@ readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip"
-readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk"
+readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk" # Inutilisée bug API MegaNZ
 readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme"
 readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
 
@@ -413,13 +413,14 @@ rm -rf "$TMP_DIR"
 # Configuration GRUB BIOS avec thème Fallout
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=10
-GRUB_DISTRIBUTOR="Arch"
+GRUB_DISTRIBUTOR="Arch Linux"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
 GRUB_TIMEOUT_STYLE=menu
 GRUB_TERMINAL_OUTPUT=gfxterm
 GRUB_GFXMODE=1920x1080,auto
 GRUB_DISABLE_RECOVERY=true
+GRUB_DISABLE_OS_PROBER=true
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 EOF
 
@@ -466,13 +467,14 @@ rm -rf "$TMP_DIR"
 # Configuration GRUB UEFI avec thème Fallout
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=10
-GRUB_DISTRIBUTOR="Arch Linux Fallout Edition"
+GRUB_DISTRIBUTOR="Arch Linux"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.systemd.show_status=auto rd.udev.log_level=3"
 GRUB_CMDLINE_LINUX=""
 GRUB_TIMEOUT_STYLE=menu
 GRUB_TERMINAL_OUTPUT=gfxterm
 GRUB_GFXMODE=1920x1080,auto
 GRUB_DISABLE_RECOVERY=true
+GRUB_DISABLE_OS_PROBER=true
 GRUB_THEME="/boot/grub/themes/fallout/theme.txt"
 EOF
 
@@ -841,15 +843,30 @@ check_requirements() {
         }
     fi
 
-    # Assure unzip aussi dans le chroot cible (/mnt)
-    if [[ -d /mnt && -d /mnt/usr ]]; then
+    # Installation FORCÉE de git (au cas où)
+    if ! command -v git &>/dev/null; then
+        print_info "Installation forcée de git..."
+        pacman -Sy --noconfirm git || {
+            print_error "Impossible d'installer git"
+            return 1
+        }
+    fi
+
+    # Installation FORCÉE de unzip
+    if ! command -v unzip &>/dev/null; then
+        print_info "Installation forcée de unzip..."
+        pacman -Sy --noconfirm unzip || {
+            print_error "Impossible d'installer unzip"
+            return 1
+        }
+    fi
+
+    if [[ -d /mnt ]]; then
         if ! /usr/bin/arch-chroot /mnt bash -lc "command -v unzip >/dev/null 2>&1"; then
-            print_info "unzip absent dans le chroot /mnt — tentative d'installation dans le chroot..."
-            /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed unzip || {
-                print_warning "Impossible d'installer unzip dans le chroot (/mnt). Installez-le manuellement : /usr/bin/arch-chroot /mnt pacman -S unzip"
+            print_info "Installation de unzip dans le chroot..."
+            /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed unzip || {
+                print_warning "Impossible d'installer unzip dans le chroot"
             }
-        else
-            print_info "unzip déjà présent dans le chroot /mnt"
         fi
     fi
 
