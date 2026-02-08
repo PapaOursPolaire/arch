@@ -886,12 +886,15 @@ check_requirements() {
 # Optimisation de la configuration Pacman pour la vitesse
 optimize_pacman() {
     print_header "ETAPE 3/$TOTAL_STEPS: OPTIMISATION DE PACMAN"
-    CURRENT_STEP=3
-
-    # Sauvegarde de la configuration d'origine
-    cp /etc/pacman.conf /etc/pacman.conf.backup 2>/dev/null || true
-
-    # Configuration pacman optimisée
+    
+    # Sauvegarde configuration originale
+    if [[ -f /etc/pacman.conf ]]; then
+        cp /etc/pacman.conf /etc/pacman.conf.backup.$(date +%s)
+    fi
+    
+    print_info "Configuration de Pacman pour performances maximales..."
+    
+    # Configuration optimisée
     cat > /etc/pacman.conf <<'PACMAN_EOF'
 [options]
 HoldPkg     = pacman glibc
@@ -902,59 +905,85 @@ ParallelDownloads = 10
 ILoveCandy
 SigLevel    = Required DatabaseOptional
 LocalFileSigLevel = Optional
+Color
+TotalDownload
 
 [core]
 Include = /etc/pacman.d/mirrorlist
+
 [extra]
 Include = /etc/pacman.d/mirrorlist
+
 [multilib]
 Include = /etc/pacman.d/mirrorlist
 PACMAN_EOF
-# Suppression de [community] car il n'est plus dans les depots depuis peu
-
-    # Blocage de rust pour éviter conflit rustup # Obsolète vu que j'ai nettoyé  rust & rustup, y'a plus que rustup
-    if ! grep -q "^IgnorePkg" /etc/pacman.conf; then
-        echo "IgnorePkg = rust" >> /etc/pacman.conf
-    else
-        sed -i 's/^IgnorePkg.*/& rust/' /etc/pacman.conf
+    
+    print_info "Nettoyage des miroirs obsolètes..."
+    
+    # Supprimer [community] s'il existe (obsolète)
+    if grep -q "^\[community\]" /etc/pacman.conf; then
+        sed -i '/^\[community\]/,/^Include/d' /etc/pacman.conf
+        print_warning "Dépôt [community] supprimé (obsolète)"
     fi
-
+    
+    print_info "Optimisation des miroirs avec reflector..."
+    
     # Installation reflector si manquant
     if ! command -v reflector &>/dev/null; then
-        pacman -Sy --noconfirm reflector || {
-            print_warning "Impossible d'installer reflector, utilisation des miroirs existants"
+        pacman -S --noconfirm reflector || {
+            print_warning "Reflector non installable, utilisation miroirs par défaut"
             return 0
         }
     fi
-
-    # Essai principal : rapide + fiable (il marche pas)
-    if reflector --sort score --protocol https --country France,Germany,Netherlands,Belgium,Switzerland \
-                    --latest 20 --save /etc/pacman.d/mirrorlist; then
-        print_success "Miroirs optimisés avec succès (mode filtré)"
+    
+    # Génération miroirs optimisés
+    local reflector_success=false
+    
+    # Essai 1: Pays rapides
+    if reflector \
+        --country France,Germany,Netherlands,Belgium,Switzerland \
+        --protocol https \
+        --latest 20 \
+        --sort rate \
+        --save /etc/pacman.d/mirrorlist; then
+        reflector_success=true
+        print_success "Miroirs optimisés (pays ciblés)"
+    
+    # Essai 2: Tous pays
+    elif reflector \
+        --protocol https \
+        --latest 20 \
+        --sort rate \
+        --save /etc/pacman.d/mirrorlist; then
+        reflector_success=true
+        print_success "Miroirs optimisés (tous pays)"
+    
+    # Essai 3: Fallback minimum
     else
-        print_warning "Échec optimisation filtrée, tentative mode large..."
-        # Fallback large : tous pays, aucun filtrage strict # Lui marche
-        if reflector --sort score --protocol https --latest 20 \
-                        --save /etc/pacman.d/mirrorlist; then
-            print_success "Miroirs optimisés avec succès (mode large)"
-        else
-            print_warning "Impossible de générer une mirrorlist avec reflector, fallback ultime"
-            # Fallback ultime : miroir officiel archlinux.org
-            cat > /etc/pacman.d/mirrorlist <<'EOF'
-## Fallback ArchLinux officiel
+        print_warning "Reflector échoué, utilisation miroir de secours"
+        cat > /etc/pacman.d/mirrorlist <<'EOF'
+## Fallback ArchLinux
 Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
 EOF
-        fi
     fi
-
-    # Nettoyage du cache + resync
-    pacman -Scc --noconfirm || true
-    rm -rf /var/lib/pacman/sync/* || true
-    pacman -Syy --noconfirm || {
-        print_warning "Impossible de rafraichir les bases de données pacman après optimisation"
-    }
-
-    print_success "Configuration Pacman finalisée"
+    
+    print_info "Nettoyage du cache Pacman..."
+    
+    # Nettoyage agressif mais sûr
+    pacman -Scc --noconfirm 2>/dev/null || true
+    rm -rf /var/lib/pacman/sync/* 2>/dev/null || true
+    
+    print_info "Synchronisation des bases de données..."
+    
+    # Resync avec nouvelle configuration
+    if pacman -Syy --noconfirm; then
+        print_success "Bases de données synchronisées"
+    else
+        print_warning "Synchronisation partielle, continuation..."
+    fi
+    
+    print_success "PACMAN OPTIMISÉ - Prêt pour l'installation rapide"
 }
 
 # Initialisation du logging
@@ -1509,166 +1538,278 @@ parse_arguments() { # Est-ce qu'il marche réellement ? J'ai réussi qu'une fois
 # Fonctions de vérifications et tests
 check_requirements() {
     print_header "ETAPE 1/$TOTAL_STEPS: VERIFICATION DES PREREQUIS"
-    CURRENT_STEP=1
     
-    # Supprime immédiatement le dépot [community] s'il est présent car il n'existe plus
-    if grep -q "^\[community\]" /etc/pacman.conf; then
-        print_info "Suppression du dépot [community] (fusionné dans extra)"
-        sed -i '/^\[community\]/,/^Include/d' /etc/pacman.conf
-        pacman -Scc --noconfirm || true
-        rm -rf /var/lib/pacman/sync/* || true
-    fi
-    
-    # Vérifie root
+    # Vérification root
     if [[ $EUID -ne 0 ]]; then
         print_error "Ce script doit être exécuté en tant que root !"
         return 1
     fi
     
-    # Vérification du mode de boot adaptée
-    detect_boot_mode
-    
-    # Vérifie la connexion Internet avec plusieurs hotes
+    # Vérification connexion Internet AVANT toute installation
     print_info "Vérification de la connexion Internet..."
+    local internet_ok=false
     local test_hosts=("archlinux.org" "8.8.8.8" "1.1.1.1" "github.com")
-    local connected=false
+    
     for host in "${test_hosts[@]}"; do
         if ping -c 1 -W 3 "$host" &> /dev/null; then
-            print_success "Connexion Internet active (testé : $host)"
-            connected=true
-            break
-        fi
-    done
-    if [[ "$connected" != true ]]; then
-        print_error "Aucune connexion Internet détectée !"
-        return 1
-    fi
-
-    # Activer les user namespaces si désactivés
-    if sysctl -n kernel.unprivileged_userns_clone 2>/dev/null | grep -q '^0$'; then
-        print_info "Activation de kernel.unprivileged_userns_clone=1 pour Flatpak"
-        sysctl -w kernel.unprivileged_userns_clone=1 || true
-        echo "kernel.unprivileged_userns_clone=1" >> /etc/sysctl.d/00-local-userns.conf
-    fi
-    
-    # Synchronise l'horloge
-    timedatectl set-ntp true
-    sleep 2
-    
-    # Mise à jour des bases de données pacman (sans community)
-    print_info "Mise à jour des bases de données pacman..."
-    if ! pacman -Sy --noconfirm; then
-        print_warning "Erreur lors de la mise à jour, tentative de correction..."
-        pacman -Scc --noconfirm || true
-        rm -rf /var/lib/pacman/sync/* || true
-        pacman -Sy --noconfirm || {
-            print_error "Impossible de mettre à jour les bases de données pacman"
-            return 1
-        }
-    fi
-    
-    print_success "Prérequis vérifiés pour le mode ${BOOT_MODE}"
-}
-
-test_environment() {
-    print_header "ETAPE 2/$TOTAL_STEPS: TEST DE L'ENVIRONNEMENT D'INSTALLATION"
-    CURRENT_STEP=2
-    
-    local errors=0
-    
-    # Commandes requises
-    local required_commands=(
-        "pacman" "pacstrap" "genfstab" "/usr/bin/arch-chroot"
-        "parted" "mkfs.fat" "mkfs.ext4" "lsblk"
-        "curl" "git" "timedatectl" "unzip"
-    )
-    
-    for cmd in "${required_commands[@]}"; do
-        if command -v "$cmd" &> /dev/null; then
-            print_success " $cmd trouvé"
-        else
-            print_error " $cmd manquant"
-            errors=$((errors + 1))
-        fi
-    done
-    
-    # Test internet avec plusieurs serveurs
-    local test_servers=("archlinux.org" "github.com" "google.com")
-    local internet_ok=false
-    for server in "${test_servers[@]}"; do
-        if ping -c 1 -W 3 "$server" &> /dev/null; then
-            print_success " Connexion Internet active (testé: $server)"
+            print_success "Connexion Internet active (testé: $host)"
             internet_ok=true
             break
         fi
     done
     
     if [[ "$internet_ok" != true ]]; then
-        print_error " Aucune connexion Internet détectée"
-        errors=$((errors + 1))
+        print_error "AUCUNE CONNEXION INTERNET DÉTECTÉE !"
+        echo "Vérifiez votre connexion et réessayez."
+        return 1
     fi
     
-    # Test mode boot (UEFI ou BIOS) - CORRECTION: Support des deux modes
-    if [[ -d /sys/firmware/efi ]]; then
-        print_success " Système UEFI détecté"
-        echo -e "${GREEN}  • Table de partitions: GPT${NC}"
-        echo -e "${GREEN}  • Partition boot: EFI (FAT32)${NC}"
-        echo -e "${GREEN}  • Bootloader: GRUB x86_64-efi${NC}"
-    else
-        print_success " Système BIOS/Legacy détecté"
-        echo -e "${GREEN}  • Table de partitions: MBR${NC}"
-        echo -e "${GREEN}  • Partition boot: Boot (ext4)${NC}"
-        echo -e "${GREEN}  • Bootloader: GRUB i386-pc${NC}"
+    # Liste COMPLÈTE des commandes REQUISES avec leurs paquets
+    local requirements=(
+        # Commande:Paquet
+        "pacman:pacman"
+        "pacstrap:arch-install-scripts"
+        "genfstab:arch-install-scripts"
+        "arch-chroot:arch-install-scripts"
+        "parted:parted"
+        "mkfs.fat:dosfstools"
+        "mkfs.ext4:e2fsprogs"
+        "lsblk:util-linux"
+        "curl:curl"
+        "git:git"
+        "timedatectl:systemd"
+        "unzip:unzip"
+        "wget:wget"
+        "reflector:reflector"
+        "rsync:rsync"
+        "gzip:gzip"
+        "tar:tar"
+    )
+    
+    # Vérification et installation des dépendances
+    print_info "Vérification des outils système..."
+    local missing_packages=()
+    local all_ok=true
+    
+    # Étape 1: Vérifier ce qui manque
+    for req in "${requirements[@]}"; do
+        IFS=":" read -r cmd pkg <<< "$req"
+        
+        if ! command -v "$cmd" &>/dev/null; then
+            print_warning "$cmd manquant (paquet: $pkg)"
+            if [[ ! " ${missing_packages[@]} " =~ " ${pkg} " ]]; then
+                missing_packages+=("$pkg")
+            fi
+            all_ok=false
+        else
+            print_success "$cmd disponible"
+        fi
+    done
+    
+    # Étape 2: Installer les paquets manquants
+    if [[ ${#missing_packages[@]} -gt 0 ]]; then
+        print_info "Installation des paquets manquants..."
+        echo "Paquets à installer: ${missing_packages[*]}"
+        
+        # Mise à jour des miroirs avant installation
+        print_info "Mise à jour des bases de données pacman..."
+        pacman -Sy --noconfirm || {
+            print_error "Échec de la mise à jour des bases"
+            return 1
+        }
+        
+        # Installation en bloc
+        if pacman -S --noconfirm "${missing_packages[@]}"; then
+            print_success "Tous les paquets installés avec succès"
+            all_ok=true
+        else
+            # Fallback: installation un par un
+            print_warning "Installation en bloc échouée, tentative un par un..."
+            local failed_packages=()
+            
+            for pkg in "${missing_packages[@]}"; do
+                if pacman -S --noconfirm "$pkg"; then
+                    print_success "$pkg installé"
+                else
+                    print_error "Échec installation de $pkg"
+                    failed_packages+=("$pkg")
+                    all_ok=false
+                fi
+            done
+            
+            if [[ ${#failed_packages[@]} -gt 0 ]]; then
+                print_error "Paquets en échec: ${failed_packages[*]}"
+            fi
+        fi
     fi
     
-    # Test root
-    if [[ $EUID -eq 0 ]]; then
-        print_success " Permissions root"
-    else
-        print_error " Permissions root requises"
-        errors=$((errors + 1))
+    # Étape 3: Vérification FORCÉE de git et unzip (critiques)
+    print_info "Vérification CRITIQUE de git et unzip..."
+    
+    if ! command -v git &>/dev/null; then
+        print_error "GIT ABSENT - Installation FORCÉE..."
+        pacman -S --noconfirm git || {
+            print_error "ÉCHEC CRITIQUE: Impossible d'installer git"
+            return 1
+        }
     fi
     
-    # Test espace disque
-    local available_space
-    available_space=$(df /tmp | awk 'NR==2 {print int($4/1024)}')
-    if [[ $available_space -gt 2000 ]]; then
-        print_success " Espace temporaire suffisant (${available_space}MB)"
-    else
-        print_warning "  Espace temporaire limité (${available_space}MB)"
+    if ! command -v unzip &>/dev/null; then
+        print_error "UNZIP ABSENT - Installation FORCÉE..."
+        pacman -S --noconfirm unzip || {
+            print_error "ÉCHEC CRITIQUE: Impossible d'installer unzip"
+            return 1
+        }
     fi
     
-    # Test RAM
-    local ram_gb=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
-    if [[ $ram_gb -ge 8 ]]; then
-        print_success "RAM optimale (${ram_gb}GB)"
-    elif [[ $ram_gb -ge 4 ]]; then
-        print_success "RAM suffisante (${ram_gb}GB)"
-    else
-        print_warning "RAM limitée (${ram_gb}GB) - installation possible mais lente"
+    # Vérification finale
+    print_info "Vérification finale des outils critiques..."
+    local critical_tools=("git" "unzip" "arch-chroot" "pacstrap")
+    local critical_ok=true
+    
+    for tool in "${critical_tools[@]}"; do
+        if command -v "$tool" &>/dev/null; then
+            print_success "$tool: OK"
+        else
+            print_error "$tool: MANQUANT"
+            critical_ok=false
+        fi
+    done
+    
+    if [[ "$critical_ok" != true ]]; then
+        print_error "OUTILS CRITIQUES MANQUANTS - ARRÊT"
+        return 1
     fi
     
-    # Test vitesse Internet (approximatif)
-    print_info "Test de vitesse de connexion..."
-    local speed_test_start=$(date +%s%N)
-    curl -s -o /dev/null -w "" "http://archlinux.org" || true
-    local speed_test_end=$(date +%s%N)
-    local response_time=$(( (speed_test_end - speed_test_start) / 1000000 ))
+    # Activation user namespaces pour Flatpak
+    if sysctl -n kernel.unprivileged_userns_clone 2>/dev/null | grep -q '^0$'; then
+        print_info "Activation de kernel.unprivileged_userns_clone=1 pour Flatpak"
+        sysctl -w kernel.unprivileged_userns_clone=1 || true
+        echo "kernel.unprivileged_userns_clone=1" >> /etc/sysctl.d/00-local-userns.conf
+    fi
     
-    if [[ $response_time -lt 500 ]]; then
-        print_success " Connexion rapide (${response_time}ms)"
-    elif [[ $response_time -lt 2000 ]]; then
-        print_success " Connexion correcte (${response_time}ms)"
+    # Synchronisation horloge
+    timedatectl set-ntp true
+    sleep 2
+    
+    print_success "TOUS LES PRÉREQUIS SONT SATISFAITS"
+    return 0
+}
+
+test_environment() {
+    print_header "ETAPE 2/$TOTAL_STEPS: TEST DE L'ENVIRONNEMENT D'INSTALLATION"
+    
+    local errors=0
+    local warnings=0
+    
+    echo -e "${WHITE}=== TEST DES OUTILS SYSTÈME ===${NC}"
+    
+    # Outils CRITIQUES (doivent être présents)
+    local critical_tools=(
+        "git" "unzip" "curl" "wget"
+        "parted" "mkfs.fat" "mkfs.ext4"
+        "arch-chroot" "pacstrap" "genfstab"
+        "lsblk" "timedatectl"
+    )
+    
+    for tool in "${critical_tools[@]}"; do
+        if command -v "$tool" &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} $tool"
+        else
+            echo -e "  ${RED}✗${NC} $tool - ABSENT CRITIQUE"
+            errors=$((errors + 1))
+        fi
+    done
+    
+    # Outils IMPORTANTS (avertissement si manquants)
+    local important_tools=("reflector" "rsync" "p7zip")
+    for tool in "${important_tools[@]}"; do
+        if ! command -v "$tool" &>/dev/null; then
+            echo -e "  ${YELLOW}!${NC} $tool - manquant (non critique)"
+            warnings=$((warnings + 1))
+        fi
+    done
+    
+    echo ""
+    echo -e "${WHITE}=== TEST RÉSEAU ===${NC}"
+    
+    # Test Internet avec timeout court
+    if ping -c 1 -W 2 archlinux.org &>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} Connexion Internet stable"
     else
-        print_warning "  Connexion lente (${response_time}ms) - installation plus longue"
+        echo -e "  ${YELLOW}!${NC} Connexion Internet lente/instable"
+        warnings=$((warnings + 1))
     fi
     
     echo ""
-    if [[ $errors -eq 0 ]]; then
-        print_success " Environnement optimal pour l'installation Fallout Edition"
-        return 0
+    echo -e "${WHITE}=== TEST DISPONIBILITÉ SYSTÈME ===${NC}"
+    
+    # Test espace disque
+    local available_space=$(df /tmp --output=avail | tail -1 | awk '{print int($1/1024)}')
+    if [[ $available_space -gt 1000 ]]; then
+        echo -e "  ${GREEN}✓${NC} Espace disque: ${available_space}MB (suffisant)"
+    elif [[ $available_space -gt 500 ]]; then
+        echo -e "  ${YELLOW}!${NC} Espace disque: ${available_space}MB (limité)"
+        warnings=$((warnings + 1))
     else
-        print_error " $errors erreur(s) critique(s) - installation impossible"
+        echo -e "  ${RED}✗${NC} Espace disque: ${available_space}MB (INSUFFISANT)"
+        errors=$((errors + 1))
+    fi
+    
+    # Test RAM
+    local ram_mb=$(grep MemTotal /proc/meminfo | awk '{print int($2/1024)}')
+    if [[ $ram_mb -gt 4000 ]]; then
+        echo -e "  ${GREEN}✓${NC} RAM: $((ram_mb/1024))GB (suffisante)"
+    elif [[ $ram_mb -gt 2000 ]]; then
+        echo -e "  ${YELLOW}!${NC} RAM: ${ram_mb}MB (minimum)"
+        warnings=$((warnings + 1))
+    else
+        echo -e "  ${RED}✗${NC} RAM: ${ram_mb}MB (INSUFFISANTE)"
+        errors=$((errors + 1))
+    fi
+    
+    # Test CPU
+    local cpu_cores=$(nproc 2>/dev/null || echo 1)
+    if [[ $cpu_cores -ge 2 ]]; then
+        echo -e "  ${GREEN}✓${NC} CPU: ${cpu_cores} cœurs"
+    else
+        echo -e "  ${YELLOW}!${NC} CPU: 1 cœur (limité)"
+        warnings=$((warnings + 1))
+    fi
+    
+    echo ""
+    echo -e "${WHITE}=== TEST MODE BOOT ===${NC}"
+    
+    # Détection et affichage mode boot
+    detect_boot_mode
+    
+    # Vérification mode boot cohérent
+    if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -d /sys/firmware/efi ]]; then
+        echo -e "  ${RED}✗${NC} INCOHÉRENCE: Mode UEFI détecté mais pas de /sys/firmware/efi"
+        errors=$((errors + 1))
+    elif [[ "$BOOT_MODE" == "bios" ]] && [[ -d /sys/firmware/efi ]]; then
+        echo -e "  ${RED}✗${NC} INCOHÉRENCE: Mode BIOS détecté mais /sys/firmware/efi existe"
+        errors=$((errors + 1))
+    else
+        echo -e "  ${GREEN}✓${NC} Mode boot cohérent: $BOOT_MODE"
+    fi
+    
+    echo ""
+    echo -e "${WHITE}=== RÉSUMÉ FINAL ===${NC}"
+    
+    if [[ $errors -eq 0 ]]; then
+        if [[ $warnings -eq 0 ]]; then
+            print_success "ENVIRONNEMENT OPTIMAL - Prêt pour l'installation"
+            return 0
+        else
+            print_warning "ENVIRONNEMENT ACCEPTABLE avec $warnings avertissement(s)"
+            echo "L'installation peut continuer mais certaines fonctionnalités"
+            echo "pourraient être limitées."
+            return 0
+        fi
+    else
+        print_error "ENVIRONNEMENT INCOMPATIBLE - $errors erreur(s) critique(s)"
+        echo "Corrigez les problèmes ci-dessus avant de continuer."
         return 1
     fi
 }
