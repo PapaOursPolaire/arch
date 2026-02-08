@@ -10,8 +10,8 @@ fi
 
 # Script d'installation automatisée Arch Linux
 # Made by PapaOursPolaire - available on GitHub PapaOursPolaire
-# Version: 764.4, correctif 4 de la version 764.4
-# Mise à jour : 21/01/2025 à 19H40
+# Version: 864.4, correctif 4 de la version 864.4
+# Mise à jour : 08/02/2026 à 15H34
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreur de l'éxécution automatique de fastfetch : il est bien là, mais ne s'éxécute pas automatiquement
@@ -26,7 +26,7 @@ fi
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_VERSION="764.4"
+readonly SCRIPT_VERSION="864.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
 readonly STATE_FILE="/tmp/arch_install_state.json"
 
@@ -341,7 +341,6 @@ main() {
     return 0
 }
 
-
 detect_boot_mode() {
     print_header "DETECTION DU MODE DE BOOT"
     
@@ -359,21 +358,21 @@ detect_boot_mode() {
         echo -e "${GREEN}• Bootloader: GRUB i386-pc${NC}"
     fi
     
+    # Vérification cohérence du mode de boot
+    if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -d /sys/firmware/efi ]]; then
+        print_error "Incohérence détectée: BOOT_MODE=uefi mais /sys/firmware/efi n'existe pas"
+        echo "Forçage du mode BIOS"
+        BOOT_MODE="bios"
+    elif [[ "$BOOT_MODE" == "bios" ]] && [[ -d /sys/firmware/efi ]]; then
+        print_error "Incohérence détectée: BOOT_MODE=bios mais /sys/firmware/efi existe"
+        echo "Forçage du mode UEFI"
+        BOOT_MODE="uefi"
+    fi
+    
     echo ""
     echo -e "${YELLOW}Configuration pour le mode: ${BOOT_MODE}${NC}"
     echo ""
 }
-
-# Vérification cohérence du mode de boot
-if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -d /sys/firmware/efi ]]; then
-    print_error "Incohérence détectée: BOOT_MODE=uefi mais /sys/firmware/efi n'existe pas"
-    echo "Forçage du mode BIOS"
-    BOOT_MODE="bios"
-elif [[ "$BOOT_MODE" == "bios" ]] && [[ -d /sys/firmware/efi ]]; then
-    print_error "Incohérence détectée: BOOT_MODE=bios mais /sys/firmware/efi existe"
-    echo "Forçage du mode UEFI"
-    BOOT_MODE="uefi"
-fi
 
 configure_grub() {
     print_header "ETAPE 13/$TOTAL_STEPS: CONFIGURATION BOOTLOADER selon le firmware"
@@ -1439,7 +1438,7 @@ Options :
     • Barres de progression avec estimations de temps réelles
     • Gestion d'erreurs robuste avec fallbacks automatiques
 
-    NOUVELLES FONCTIONNALITES DE LA VERSION 764.4:
+    NOUVELLES FONCTIONNALITES DE LA VERSION 864.4:
 
     • Configuration personnalisée des tailles de partitions
     • Partition /home séparée optionnelle avec interface O/N
@@ -5243,7 +5242,7 @@ finish_install() {
         umount -R /mnt 2>/dev/null || true
         
         echo ""
-        echo -e "${GREEN} Installation complète V764.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
+        echo -e "${GREEN} Installation complète V864.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
     fi
 }
