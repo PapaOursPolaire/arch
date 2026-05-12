@@ -41,7 +41,7 @@ readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip"
 readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk" # Inutilisée bug API MegaNZ
-readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme"
+readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme" # Inutilisée, rework de la logique
 readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
 
 # Variables globales
@@ -829,7 +829,7 @@ check_requirements() {
     local required_commands=(
         "pacman" "pacstrap" "genfstab" "/usr/bin/arch-chroot"
         "parted" "mkfs.fat" "mkfs.ext4" "lsblk" 
-        "curl" "git" "timedatectl" "unzip"
+        "curl" "git" "timedatectl" "unzip" "wget"
     )
 
     # Vérifier les commandes manquantes
@@ -838,6 +838,7 @@ check_requirements() {
             case "$cmd" in
                 "pacstrap"|"genfstab") missing_pkgs+=("arch-install-scripts") ;;
                 "mkfs.fat") missing_pkgs+=("dosfstools") ;;
+                "wget") missing_pkgs+=("wget") ;;
                 "mkfs.ext4") missing_pkgs+=("e2fsprogs") ;;
                 *) missing_pkgs+=("$cmd") ;;
             esac
