@@ -1644,7 +1644,7 @@ test_environment() {
 
     # Outils CRITIQUES (doivent être présents)
     local critical_tools=(
-        "git" "unzip" "curl" "wget"
+        "git" "unzip" "curl"
         "parted" "mkfs.fat" "mkfs.ext4"
         "arch-chroot" "pacstrap" "genfstab"
         "lsblk" "timedatectl"
@@ -1660,7 +1660,7 @@ test_environment() {
     done
 
     # Outils IMPORTANTS (avertissement si manquants)
-    local important_tools=("reflector" "rsync" "p7zip")
+    local important_tools=("wget" "reflector" "rsync" "p7zip")
     for tool in "${important_tools[@]}"; do
         if ! command -v "$tool" &>/dev/null; then
             echo -e "  ${YELLOW}!${NC} $tool - manquant (non critique)"
