@@ -15,7 +15,7 @@ fi
 # PRENDRE  LA  NOUVELLE VERSION après un dos2unix SUR LINUX ou dans le chroot, pacman -Sy dos2unix
 # Correction de 2358 erreurs référencées par ShellCheck et par la conssole  TTY de l'ISO corrigées
 # Erreur de l'éxécution automatique de fastfetch : il est bien là, mais ne s'éxécute pas automatiquement
-# Virtual Studio ne s'installe tj pas meme avec sa propre fonction !
+# Virtual Studio ne s'installe tj pas meme avec sa propre fonction ! 
 # Suppression des logiciels/extensions vulkan car elles me cassaient la tete et ne fonctionnaient pas sous automatisation
 # Refonte de la variable install_paru() -> 130eme refonte le 14/08 et marche tj pas
 #[community] -> RETIRE prcq les serveurs packages [community] sont devenus obsolètes le 13/08/2025 vers 20 heures
@@ -64,7 +64,7 @@ CLEANUP_DONE=false
 
 # Variables pour le partitionnement personnalisé
 PARTITION_EFI_SIZE="512M"
-PARTITION_ROOT_SIZE="60G"
+PARTITION_ROOT_SIZE="60G"  
 PARTITION_SWAP_SIZE="8G"
 PARTITION_HOME_SIZE="remaining"
 CUSTOM_PARTITIONING=false
@@ -74,7 +74,7 @@ main() {
     # Initialisation
     init_logging
     parse_arguments "$@"
-
+    
     echo "Chargement des ressources..."
     echo -e "${CYAN}Arch Linux Fallout Edition - Version ${SCRIPT_VERSION}${NC}"
     echo ""
@@ -117,66 +117,66 @@ main() {
     echo ""
 
     echo -e "${PURPLE}PHASE 1: PRÉPARATION SYSTÈME${NC}"
-
+    
     check_requirements || {
         print_error "Échec de la vérification des prérequis"
         return 1
     }
-
+    
     test_environment || {
         print_error "Échec du test de l'environnement"
         return 1
     }
-
+    
     optimize_pacman || {
         print_warning "Optimisation Pacman partielle"
     }
 
     echo -e "${PURPLE}PHASE 2: CONFIGURATION DISQUE ET PARTITIONS${NC}"
-
+    
     select_disk || {
         print_error "Échec de la sélection du disque"
         return 1
     }
-
+    
     choose_partitioning || {
         print_error "Échec du choix du partitionnement"
         return 1
     }
-
+    
     format_partitions || {
         print_error "Échec du formatage des partitions"
         return 1
     }
-
+    
     mount_partitions || {
         print_error "Échec du montage des partitions"
         return 1
     }
 
     echo -e "${PURPLE}PHASE 3: INSTALLATION SYSTÈME DE BASE${NC}"
-
+    
     install_system || {
         print_error "Échec de l'installation du système de base"
         return 1
     }
-
+    
     configure_system || {
         print_error "Échec de la configuration système"
         return 1
     }
-
+    
     create_users || {
         print_error "Échec de la création des utilisateurs"
         return 1
     }
 
     echo -e "${PURPLE}PHASE 4: INTERFACE GRAPHIQUE${NC}"
-
+    
     select_desktop || {
         print_warning "Aucun environnement de bureau sélectionné"
     }
-
+    
     if [[ "$DE_CHOICE" != "none" ]]; then
         install_desktop || {
             print_error "Échec de l'installation de l'environnement de bureau"
@@ -187,13 +187,13 @@ main() {
     fi
 
     echo -e "${PURPLE}PHASE 5: BOOTLOADER ET THÈMES${NC}"
-
+    
     # Configuration du bootloader adaptée au mode
     configure_grub || {
         print_error "Échec de la configuration du bootloader"
         return 1
     }
-
+    
     # Configuration KDE uniquement si KDE est installé
     if [[ "$DE_CHOICE" == "kde" ]]; then
         configure_kde_lockscreen || {
@@ -202,22 +202,22 @@ main() {
     fi
 
     echo -e "${PURPLE}PHASE 6: AUDIO ET MULTIMÉDIA${NC}"
-
+    
     install_audio_system || {
         print_warning "Échec de l'installation du système audio"
     }
-
+    
     install_boot_sound || {
         print_warning "Échec de l'installation du son de boot"
     }
-
+    
     # Plymouth uniquement pour les environnements graphiques
     if [[ "$DE_CHOICE" != "none" ]]; then
         configure_plymouth || {
             print_warning "Échec de la configuration de Plymouth"
         }
     fi
-
+    
     # Gestionnaire d'affichage uniquement pour les environnements graphiques
     if [[ "$DE_CHOICE" != "none" ]]; then
         configure_sddm || {
@@ -226,33 +226,33 @@ main() {
     fi
 
     echo -e "${PURPLE}PHASE 7: APPLICATIONS ET LOGICIELS${NC}"
-
+    
     install_software || {
         print_warning "Échec partiel de l'installation des logiciels"
     }
-
+    
     install_web || {
         print_warning "Échec partiel de l'installation des navigateurs"
     }
-
+    
     install_spotify || {
         print_warning "Échec de l'installation de Spotify"
     }
-
+    
     install_wine || {
         print_warning "Échec de l'installation de Wine"
     }
 
     echo -e "${PURPLE}PHASE 8: OUTILS ET DÉVELOPPEMENTT${NC}"
-
+    
     install_paru || {
         print_warning "Échec de l'installation de Paru"
     }
-
+    
     install_development || {
         print_warning "Échec partiel de l'installation des outils de développement"
     }
-
+    
     # Steam uniquement pour les environnements graphiques
     if [[ "$DE_CHOICE" != "none" ]]; then
         install_steam || {
@@ -261,32 +261,32 @@ main() {
     fi
 
     echo -e "${PURPLE}PHASE 9: THÈMES ET PERSONNALISATION${NC}"
-
+    
     # Thèmes uniquement pour les environnements graphiques
     if [[ "$DE_CHOICE" != "none" ]]; then
         install_themes || {
             print_warning "Échec partiel de l'installation des thèmes"
         }
     fi
-
+    
     install_fastfetch || {
         print_warning "Échec de l'installation de Fastfetch"
     }
 
     echo -e "${PURPLE}PHASE 10: CONFIGURATION FINALE${NC}"
-
+    
     final_config || {
         print_warning "Échec partiel de la configuration finale"
     }
-
+    
     install_vscode || {
         print_warning "Échec de l'installation de VS Code"
     }
-
+    
     generate_postinstall || {
         print_warning "Échec de la génération du script post-installation"
     }
-
+    
     # Finalisation
     finish_install || {
         print_error "Échec de la finalisation de l'installation"
@@ -295,7 +295,7 @@ main() {
 
     echo -e "${GREEN}RAPPORT D'INSTALLATION TERMINÉ${NC}"
     echo ""
-
+    
     # Affichage du résumé selon le mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         echo -e "${GREEN}✓ Installation UEFI réussie${NC}"
@@ -308,13 +308,13 @@ main() {
         echo -e "  • Partition Boot configurée"
         echo -e "  • GRUB BIOS installé"
     fi
-
+    
     echo ""
     echo -e "${CYAN}Prochaines étapes:${NC}"
     echo -e "1. Retirer le support d'installation"
     echo -e "2. Redémarrer le système"
     echo -e "3. Se connecter avec l'utilisateur: ${USERNAME}"
-
+    
     if [[ "$BOOT_MODE" == "bios" ]]; then
         while true; do
             read -r -p "Taille partition Boot (défaut : 512M): " boot_input
@@ -326,10 +326,10 @@ main() {
             print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
         done
     fi
-
+    
     echo ""
     print_success "Installation d'Arch Linux Fallout Edition terminée avec succès!"
-
+    
     # Sauvegarde finale du log
     if [[ -f "$LOG_FILE" ]] && [[ -n "$USERNAME" ]]; then
         local user_log="/mnt/home/$USERNAME/installation.log"
@@ -337,13 +337,13 @@ main() {
             print_info "Journal d'installation sauvegardé: $user_log"
         fi
     fi
-
+    
     return 0
 }
 
 detect_boot_mode() {
     print_header "DETECTION DU MODE DE BOOT"
-
+    
     if [[ -d /sys/firmware/efi ]]; then
         BOOT_MODE="uefi"
         print_success "Mode UEFI détecté"
@@ -357,7 +357,7 @@ detect_boot_mode() {
         echo -e "${GREEN}• Partition boot: Boot (ext4)${NC}"
         echo -e "${GREEN}• Bootloader: GRUB i386-pc${NC}"
     fi
-
+    
     # Vérification cohérence du mode de boot
     if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -d /sys/firmware/efi ]]; then
         print_error "Incohérence détectée: BOOT_MODE=uefi mais /sys/firmware/efi n'existe pas"
@@ -368,7 +368,7 @@ detect_boot_mode() {
         echo "Forçage du mode UEFI"
         BOOT_MODE="uefi"
     fi
-
+    
     echo ""
     echo -e "${YELLOW}Configuration pour le mode: ${BOOT_MODE}${NC}"
     echo ""
@@ -680,14 +680,14 @@ else
     APPLY_OK=false
 fi
 
-# 2) Thème
+# 2) Thème 
 if spicetify config current_theme "DribbblishNordDark"; then
     ok "spicetify: thème défini (DribbblishNordDark)."
 else
     warn_wrap "spicetify: impossible de définir le thème (peut être non installé)."
 fi
 
-# 3) Backup + apply
+# 3) Backup + apply 
 if spicetify backup >/dev/null 2>&1; then
     ok "spicetify: backup ok."
 else
@@ -702,7 +702,7 @@ else
     APPLY_OK=false
 fi
 
-# Fallback post-install : autostart au 1er vrai lancement graphique
+# Fallback post-install : autostart au 1er vrai lancement graphique  
 # Si on a dû créer le prefs à vide, ou si apply a échoué, on prépare une tâche
 # utilisateur qui réessaiera automatiquement après le premier lancement de Spotify.
 # Je fais une multitude de commentaires pour celui-là mais IL MARCHE PAS
@@ -822,17 +822,79 @@ ensure_paru_in_chroot() {
     install_yay_in_chroot || return 1
 }
 
+check_requirements() {
+    print_info "Vérification et installation des commandes requises..."
+    
+    local missing_pkgs=()
+    local required_commands=(
+        "pacman" "pacstrap" "genfstab" "/usr/bin/arch-chroot"
+        "parted" "mkfs.fat" "mkfs.ext4" "lsblk" 
+        "curl" "git" "timedatectl" "unzip" "wget"
+    )
+
+    # Vérifier les commandes manquantes
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            case "$cmd" in
+                "pacstrap"|"genfstab") missing_pkgs+=("arch-install-scripts") ;;
+                "mkfs.fat") missing_pkgs+=("dosfstools") ;;
+                "wget") missing_pkgs+=("wget") ;;
+                "mkfs.ext4") missing_pkgs+=("e2fsprogs") ;;
+                *) missing_pkgs+=("$cmd") ;;
+            esac
+        fi
+    done
+
+    # Installer si nécessaire
+    if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+        print_warning "Installation des paquets manquants: ${missing_pkgs[*]}"
+        pacman -Sy --noconfirm "${missing_pkgs[@]}" || {
+            print_error "Echec de l'installation des dépendances"
+            return 1
+        }
+    fi
+
+    # Installation FORCÉE de git (au cas où)
+    if ! command -v git &>/dev/null; then
+        print_info "Installation forcée de git..."
+        pacman -Sy --noconfirm git || {
+            print_error "Impossible d'installer git"
+            return 1
+        }
+    fi
+
+    # Installation FORCÉE de unzip
+    if ! command -v unzip &>/dev/null; then
+        print_info "Installation forcée de unzip..."
+        pacman -Sy --noconfirm unzip || {
+            print_error "Impossible d'installer unzip"
+            return 1
+        }
+    fi
+
+    if [[ -d /mnt ]]; then
+        if ! /usr/bin/arch-chroot /mnt bash -lc "command -v unzip >/dev/null 2>&1"; then
+            print_info "Installation de unzip dans le chroot..."
+            /usr/bin/arch-chroot /mnt pacman -Sy --noconfirm --needed unzip || {
+                print_warning "Impossible d'installer unzip dans le chroot"
+            }
+        fi
+    fi
+
+    print_success "Toutes les commandes requises sont disponibles"
+}
+
 # Optimisation de la configuration Pacman pour la vitesse
 optimize_pacman() {
     print_header "ETAPE 3/$TOTAL_STEPS: OPTIMISATION DE PACMAN"
-
+    
     # Sauvegarde configuration originale
     if [[ -f /etc/pacman.conf ]]; then
         cp /etc/pacman.conf /etc/pacman.conf.backup.$(date +%s)
     fi
-
+    
     print_info "Configuration de Pacman pour performances maximales..."
-
+    
     # Configuration optimisée
     cat > /etc/pacman.conf <<'PACMAN_EOF'
 [options]
@@ -856,17 +918,17 @@ Include = /etc/pacman.d/mirrorlist
 [multilib]
 Include = /etc/pacman.d/mirrorlist
 PACMAN_EOF
-
+    
     print_info "Nettoyage des miroirs obsolètes..."
-
+    
     # Supprimer [community] s'il existe (obsolète)
     if grep -q "^\[community\]" /etc/pacman.conf; then
         sed -i '/^\[community\]/,/^Include/d' /etc/pacman.conf
         print_warning "Dépôt [community] supprimé (obsolète)"
     fi
-
+    
     print_info "Optimisation des miroirs avec reflector..."
-
+    
     # Installation reflector si manquant
     if ! command -v reflector &>/dev/null; then
         pacman -S --noconfirm reflector || {
@@ -874,10 +936,10 @@ PACMAN_EOF
             return 0
         }
     fi
-
+    
     # Génération miroirs optimisés
     local reflector_success=false
-
+    
     # Essai 1: Pays rapides
     if reflector \
         --country France,Germany,Netherlands,Belgium,Switzerland \
@@ -887,7 +949,7 @@ PACMAN_EOF
         --save /etc/pacman.d/mirrorlist; then
         reflector_success=true
         print_success "Miroirs optimisés (pays ciblés)"
-
+    
     # Essai 2: Tous pays
     elif reflector \
         --protocol https \
@@ -896,7 +958,7 @@ PACMAN_EOF
         --save /etc/pacman.d/mirrorlist; then
         reflector_success=true
         print_success "Miroirs optimisés (tous pays)"
-
+    
     # Essai 3: Fallback minimum
     else
         print_warning "Reflector échoué, utilisation miroir de secours"
@@ -906,22 +968,22 @@ Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
 EOF
     fi
-
+    
     print_info "Nettoyage du cache Pacman..."
-
+    
     # Nettoyage agressif mais sûr
     pacman -Scc --noconfirm 2>/dev/null || true
     rm -rf /var/lib/pacman/sync/* 2>/dev/null || true
-
+    
     print_info "Synchronisation des bases de données..."
-
+    
     # Resync avec nouvelle configuration
     if pacman -Syy --noconfirm; then
         print_success "Bases de données synchronisées"
     else
         print_warning "Synchronisation partielle, continuation..."
     fi
-
+    
     print_success "PACMAN OPTIMISÉ - Prêt pour l'installation rapide"
 }
 
@@ -930,7 +992,7 @@ init_logging() {
     exec 3>&1 4>&2
     exec 1> >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$LOG_FILE" >&2)
-
+    
     echo "Installation Arch Linux Fallout - $(date)" >> "$LOG_FILE"
     echo "Script version: $SCRIPT_VERSION" >> "$LOG_FILE"
     echo "" >> "$LOG_FILE"
@@ -974,7 +1036,7 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
     log_message "ERROR" "$1"
     return 1
-}
+} 
 
 can_use_userns() {
     # Vérifie si userns est activé
@@ -992,32 +1054,32 @@ can_use_userns() {
 # Barre de progression avec estimation de temps # A améliorer si possible
 show_progress() {
     local current="$1"
-    local total="$2"
+    local total="$2" 
     local task="$3"
     local start_time="$4"
-
+    
     local percent=$((current * 100 / total))
     local elapsed=$(($(date +%s) - start_time))
     local remaining=0
-
+    
     if [[ $current -gt 0 ]]; then
         remaining=$(((elapsed * (total - current)) / current))
     fi
-
+    
     local bar_length=50
     local filled_length=$((percent * bar_length / 100))
     local bar=""
-
+    
     for ((i=0; i<filled_length; i++)); do
         bar+="█"
     done
     for ((i=filled_length; i<bar_length; i++)); do
         bar+="░"
     done
-
+    
     printf "\r${CYAN}[%s] %d%% | %02d:%02d restant | %s${NC}" \
         "$bar" "$percent" "$((remaining/60))" "$((remaining%60))" "$task"
-
+    
     if [[ $current -eq $total ]]; then
         echo ""
     fi
@@ -1029,19 +1091,19 @@ run_with_progress() {
     local duration="$2"
     shift 2
     local command="$*"
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation: $task_name"
         return 0
     fi
-
+    
     print_info "Démarrage: $task_name"
     local start_time=$(date +%s)
-
+    
     # Exécuter la commande en arrière-plan
     eval "$command" &
     local cmd_pid=$!
-
+    
     # Simulation de progression
     local steps=$((duration * 2))
     for ((i=0; i<=steps; i++)); do
@@ -1051,10 +1113,10 @@ run_with_progress() {
         show_progress "$i" "$steps" "$task_name" "$start_time"
         sleep 0.5
     done
-
+    
     wait $cmd_pid
     local exit_code=$?
-
+    
     if [[ $exit_code -eq 0 ]]; then
         show_progress $steps $steps "$task_name" $start_time
         print_success "$task_name terminé"
@@ -1070,7 +1132,7 @@ validate_input() {
     local input="$1"
     local type="$2"
     local min_length="${3:-1}"
-
+    
     case "$type" in
         "username")
             [[ ${#input} -ge 3 && ! "$input" =~ [[:space:]] && "$input" =~ ^[a-z][a-z0-9_-]*$ ]]
@@ -1096,7 +1158,7 @@ convert_to_mb() {
     local size="$1"
     local number="${size%[MmGg]}"
     local unit="${size: -1}"
-
+    
     case "${unit^^}" in
         "M") echo "$number" ;;
         "G") echo $((number * 1024)) ;;
@@ -1107,12 +1169,12 @@ convert_to_mb() {
 # Interface pour la configuration personnalisée des partitions
 configure_custom_partitioning() {
     print_header "CONFIGURATION PERSONNALISEE DES PARTITIONS"
-
+    
     echo -e "${WHITE}Configuration des tailles de partitions :${NC}"
     echo -e "${YELLOW}Format attendu : nombre suivi de M/m (Mo) ou G/g (Go)${NC}"
     echo -e "${YELLOW}Exemples : 512M, 512m, 2G, 2g, 100G, 100g${NC}"
     echo ""
-
+    
     # Configuration différente selon le mode de boot
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         # Configuration EFI pour UEFI
@@ -1137,7 +1199,7 @@ configure_custom_partitioning() {
             print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex: 512M, 512m, 2G, 2g)"
         done
     fi
-
+    
     # Configuration Root (identique pour les deux modes)
     while true; do
         read -r -p "Taille partition Root (défaut: 60G) : " root_input
@@ -1148,7 +1210,7 @@ configure_custom_partitioning() {
         fi
         print_warning "Format invalide ! Utilisez : nombre + M/m ou G/g (ex : 60G, 60g)"
     done
-
+    
     # Configuration Swap (optionnelle)
     if confirm_action "Créer une partition Swap?" "O"; then
         USE_SWAP=true
@@ -1165,14 +1227,14 @@ configure_custom_partitioning() {
         USE_SWAP=false
         print_info "Partition Swap désactivée"
     fi
-
+    
     # Configuration Home (optionnelle)
     if confirm_action "Créer une partition /home séparée ?" "N"; then
         USE_SEPARATE_HOME=true
         echo -e "${WHITE}Options pour la partition Home :${NC}"
         echo -e "${CYAN}1.${NC} Utiliser le reste de l'espace disponible"
         echo -e "${CYAN}2.${NC} Spécifier une taille personnalisée"
-
+        
         local home_choice
         while true; do
             read -r -p "Votre choix (1-2) : " home_choice
@@ -1202,7 +1264,7 @@ configure_custom_partitioning() {
         USE_SEPARATE_HOME=false
         print_info "Partition /home séparée désactivée - Il sera dans la partition Root"
     fi
-
+    
     # Résumé de la configuration
     echo ""
     echo -e "${GREEN}RESUME DE LA CONFIGURATION${NC}"
@@ -1224,12 +1286,12 @@ configure_custom_partitioning() {
         echo -e "${WHITE}• Partition Home :${NC} Intégrée dans Root"
     fi
     echo ""
-
+    
     if ! confirm_action "Confirmer cette configuration ?" "O"; then
         print_info "Reconfiguration des partitions..."
         configure_custom_partitioning
     fi
-
+    
     CUSTOM_PARTITIONING=true
 }
 
@@ -1238,11 +1300,11 @@ confirm_action() {
     local message="$1"
     local default="${2:-N}"
     local response
-
+    
     while true; do
         read -r -p "$message (O/N, défaut : $default): " response
         response=${response:-$default}
-
+        
         case "$response" in
             [OoYy]|[Oo][Uu][Ii]|[Yy][Ee][Ss])
                 return 0
@@ -1259,7 +1321,7 @@ confirm_action() {
 
 # Nettoyage à la sortie
 cleanup() {
-    # Eviter les exécutions multiples -> Ne pas désactiver, sans cela ça buggue
+    # Eviter les exécutions multiples -> Ne pas désactiver, sans cela ça buggue 
     if $CLEANUP_DONE; then
         return 0
     fi
@@ -1301,10 +1363,10 @@ show_banner() {
     cat << "EOF"
  █████╗ ██████╗  ██████╗██╗  ██╗    ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗
 ██╔══██╗██╔══██╗██╔════╝██║  ██║    ██║     ██║████╗  ██║██║   ██║╚██╗██╔╝
-███████║██████╔╝██║     ███████║    ██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝
-██╔══██║██╔══██╗██║     ██╔══██║    ██║     ██║██║╚██╗██║██║   ██║ ██╔██╗
+███████║██████╔╝██║     ███████║    ██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
+██╔══██║██╔══██╗██║     ██╔══██║    ██║     ██║██║╚██╗██║██║   ██║ ██╔██╗ 
 ██║  ██║██║  ██║╚██████╗██║  ██║    ███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗
-╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝    ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝    ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝                                                                         
 
 EOF
     echo -e "${NC}"
@@ -1323,7 +1385,7 @@ show_help() {
 Usage : $0 [OPTIONS]
 
 # Purement décoratif car flemme de faire un vrai menu
-Options :
+Options : 
     -h, --help     Afficher cette aide
     -d, --dry-run  Mode simulation (ne fait aucune modification)
     --version      Afficher la version
@@ -1477,18 +1539,18 @@ parse_arguments() { # Est-ce qu'il marche réellement ? J'ai réussi qu'une fois
 # Fonctions de vérifications et tests
 check_requirements() {
     print_header "ETAPE 1/$TOTAL_STEPS: VERIFICATION DES PREREQUIS"
-
+    
     # Vérification root
     if [[ $EUID -ne 0 ]]; then
         print_error "Ce script doit être exécuté en tant que root !"
         return 1
     fi
-
+    
     # Vérification connexion Internet AVANT toute installation
     print_info "Vérification de la connexion Internet..."
     local internet_ok=false
     local test_hosts=("archlinux.org" "8.8.8.8" "1.1.1.1" "github.com")
-
+    
     for host in "${test_hosts[@]}"; do
         if ping -c 1 -W 3 "$host" &> /dev/null; then
             print_success "Connexion Internet active (testé: $host)"
@@ -1496,13 +1558,13 @@ check_requirements() {
             break
         fi
     done
-
+    
     if [[ "$internet_ok" != true ]]; then
         print_error "AUCUNE CONNEXION INTERNET DÉTECTÉE !"
         echo "Vérifiez votre connexion et réessayez."
         return 1
     fi
-
+    
     # Liste COMPLÈTE des commandes REQUISES avec leurs paquets
     local requirements=(
         # Commande:Paquet
@@ -1518,21 +1580,22 @@ check_requirements() {
         "git:git"
         "timedatectl:systemd"
         "unzip:unzip"
+        "wget:wget"
         "reflector:reflector"
         "rsync:rsync"
         "gzip:gzip"
         "tar:tar"
     )
-
+    
     # Vérification et installation des dépendances
     print_info "Vérification des outils système..."
     local missing_packages=()
     local all_ok=true
-
+    
     # Étape 1: Vérifier ce qui manque
     for req in "${requirements[@]}"; do
         IFS=":" read -r cmd pkg <<< "$req"
-
+        
         if ! command -v "$cmd" &>/dev/null; then
             print_warning "$cmd manquant (paquet: $pkg)"
             if [[ ! " ${missing_packages[@]} " =~ " ${pkg} " ]]; then
@@ -1543,19 +1606,19 @@ check_requirements() {
             print_success "$cmd disponible"
         fi
     done
-
+    
     # Étape 2: Installer les paquets manquants
     if [[ ${#missing_packages[@]} -gt 0 ]]; then
         print_info "Installation des paquets manquants..."
         echo "Paquets à installer: ${missing_packages[*]}"
-
+        
         # Mise à jour des miroirs avant installation
         print_info "Mise à jour des bases de données pacman..."
         pacman -Sy --noconfirm || {
             print_error "Échec de la mise à jour des bases"
             return 1
         }
-
+        
         # Installation en bloc
         if pacman -S --noconfirm "${missing_packages[@]}"; then
             print_success "Tous les paquets installés avec succès"
@@ -1564,7 +1627,7 @@ check_requirements() {
             # Fallback: installation un par un
             print_warning "Installation en bloc échouée, tentative un par un..."
             local failed_packages=()
-
+            
             for pkg in "${missing_packages[@]}"; do
                 if pacman -S --noconfirm "$pkg"; then
                     print_success "$pkg installé"
@@ -1574,16 +1637,16 @@ check_requirements() {
                     all_ok=false
                 fi
             done
-
+            
             if [[ ${#failed_packages[@]} -gt 0 ]]; then
                 print_error "Paquets en échec: ${failed_packages[*]}"
             fi
         fi
     fi
-
+    
     # Étape 3: Vérification FORCÉE de git et unzip (critiques)
     print_info "Vérification CRITIQUE de git et unzip..."
-
+    
     if ! command -v git &>/dev/null; then
         print_error "GIT ABSENT - Installation FORCÉE..."
         pacman -S --noconfirm git || {
@@ -1591,7 +1654,7 @@ check_requirements() {
             return 1
         }
     fi
-
+    
     if ! command -v unzip &>/dev/null; then
         print_error "UNZIP ABSENT - Installation FORCÉE..."
         pacman -S --noconfirm unzip || {
@@ -1599,12 +1662,12 @@ check_requirements() {
             return 1
         }
     fi
-
+    
     # Vérification finale
     print_info "Vérification finale des outils critiques..."
     local critical_tools=("git" "unzip" "arch-chroot" "pacstrap")
     local critical_ok=true
-
+    
     for tool in "${critical_tools[@]}"; do
         if command -v "$tool" &>/dev/null; then
             print_success "$tool: OK"
@@ -1613,43 +1676,43 @@ check_requirements() {
             critical_ok=false
         fi
     done
-
+    
     if [[ "$critical_ok" != true ]]; then
         print_error "OUTILS CRITIQUES MANQUANTS - ARRÊT"
         return 1
     fi
-
+    
     # Activation user namespaces pour Flatpak
     if sysctl -n kernel.unprivileged_userns_clone 2>/dev/null | grep -q '^0$'; then
         print_info "Activation de kernel.unprivileged_userns_clone=1 pour Flatpak"
         sysctl -w kernel.unprivileged_userns_clone=1 || true
         echo "kernel.unprivileged_userns_clone=1" >> /etc/sysctl.d/00-local-userns.conf
     fi
-
+    
     # Synchronisation horloge
     timedatectl set-ntp true
     sleep 2
-
+    
     print_success "TOUS LES PRÉREQUIS SONT SATISFAITS"
     return 0
 }
 
 test_environment() {
     print_header "ETAPE 2/$TOTAL_STEPS: TEST DE L'ENVIRONNEMENT D'INSTALLATION"
-
+    
     local errors=0
     local warnings=0
-
+    
     echo -e "${WHITE}=== TEST DES OUTILS SYSTÈME ===${NC}"
-
+    
     # Outils CRITIQUES (doivent être présents)
     local critical_tools=(
-        "git" "unzip" "curl"
+        "git" "unzip" "curl" "wget"
         "parted" "mkfs.fat" "mkfs.ext4"
         "arch-chroot" "pacstrap" "genfstab"
         "lsblk" "timedatectl"
     )
-
+    
     for tool in "${critical_tools[@]}"; do
         if command -v "$tool" &>/dev/null; then
             echo -e "  ${GREEN}✓${NC} $tool"
@@ -1658,19 +1721,19 @@ test_environment() {
             errors=$((errors + 1))
         fi
     done
-
+    
     # Outils IMPORTANTS (avertissement si manquants)
-    local important_tools=("wget" "reflector" "rsync" "p7zip")
+    local important_tools=("reflector" "rsync" "p7zip")
     for tool in "${important_tools[@]}"; do
         if ! command -v "$tool" &>/dev/null; then
             echo -e "  ${YELLOW}!${NC} $tool - manquant (non critique)"
             warnings=$((warnings + 1))
         fi
     done
-
+    
     echo ""
     echo -e "${WHITE}=== TEST RÉSEAU ===${NC}"
-
+    
     # Test Internet avec timeout court
     if ping -c 1 -W 2 archlinux.org &>/dev/null; then
         echo -e "  ${GREEN}✓${NC} Connexion Internet stable"
@@ -1678,10 +1741,10 @@ test_environment() {
         echo -e "  ${YELLOW}!${NC} Connexion Internet lente/instable"
         warnings=$((warnings + 1))
     fi
-
+    
     echo ""
     echo -e "${WHITE}=== TEST DISPONIBILITÉ SYSTÈME ===${NC}"
-
+    
     # Test espace disque
     local available_space=$(df /tmp --output=avail | tail -1 | awk '{print int($1/1024)}')
     if [[ $available_space -gt 1000 ]]; then
@@ -1693,7 +1756,7 @@ test_environment() {
         echo -e "  ${RED}✗${NC} Espace disque: ${available_space}MB (INSUFFISANT)"
         errors=$((errors + 1))
     fi
-
+    
     # Test RAM
     local ram_mb=$(grep MemTotal /proc/meminfo | awk '{print int($2/1024)}')
     if [[ $ram_mb -gt 4000 ]]; then
@@ -1705,7 +1768,7 @@ test_environment() {
         echo -e "  ${RED}✗${NC} RAM: ${ram_mb}MB (INSUFFISANTE)"
         errors=$((errors + 1))
     fi
-
+    
     # Test CPU
     local cpu_cores=$(nproc 2>/dev/null || echo 1)
     if [[ $cpu_cores -ge 2 ]]; then
@@ -1714,13 +1777,13 @@ test_environment() {
         echo -e "  ${YELLOW}!${NC} CPU: 1 cœur (limité)"
         warnings=$((warnings + 1))
     fi
-
+    
     echo ""
     echo -e "${WHITE}=== TEST MODE BOOT ===${NC}"
-
+    
     # Détection et affichage mode boot
     detect_boot_mode
-
+    
     # Vérification mode boot cohérent
     if [[ "$BOOT_MODE" == "uefi" ]] && [[ ! -d /sys/firmware/efi ]]; then
         echo -e "  ${RED}✗${NC} INCOHÉRENCE: Mode UEFI détecté mais pas de /sys/firmware/efi"
@@ -1731,10 +1794,10 @@ test_environment() {
     else
         echo -e "  ${GREEN}✓${NC} Mode boot cohérent: $BOOT_MODE"
     fi
-
+    
     echo ""
     echo -e "${WHITE}=== RÉSUMÉ FINAL ===${NC}"
-
+    
     if [[ $errors -eq 0 ]]; then
         if [[ $warnings -eq 0 ]]; then
             print_success "ENVIRONNEMENT OPTIMAL - Prêt pour l'installation"
@@ -1756,35 +1819,35 @@ test_environment() {
 select_disk() {
     print_header "ETAPE 4/$TOTAL_STEPS: SELECTION DU DISQUE"
     CURRENT_STEP=4
-
+    
     # Attendre que les disques soient détectés
     sleep 2
     sync
-
+    
     local disks
     mapfile -t disks < <(lsblk -dno NAME,SIZE,MODEL | grep -E '^(sd[a-z]|nvme[0-9]n[0-9]|vd[a-z])' | awk '{print $1}')
-
+    
     if [[ ${#disks[@]} -eq 0 ]]; then
         print_error "Aucun disque détecté !"
         echo "Disques disponibles:"
         lsblk
         return 1
     fi
-
+    
     echo -e "${WHITE}Disques disponibles :${NC}"
     for i in "${!disks[@]}"; do
         local disk="${disks[i]}"
         local size model
         size=$(lsblk -dno SIZE "/dev/$disk" 2>/dev/null || echo "Inconnu")
         model=$(lsblk -dno MODEL "/dev/$disk" 2>/dev/null || echo "Inconnu")
-
+        
         echo -e "${CYAN}$((i + 1)).${NC} /dev/$disk - $size - $model"
     done
-
+    
     local disk_choice
     while true; do
         read -r -p "Sélectionnez le disque (numéro) : " disk_choice
-
+        
         if [[ "$disk_choice" =~ ^[0-9]+$ ]] && \
             [[ "$disk_choice" -ge 1 ]] && \
             [[ "$disk_choice" -le "${#disks[@]}" ]]; then
@@ -1793,13 +1856,13 @@ select_disk() {
         fi
         print_warning "Sélection invalide !"
     done
-
+    
     # Vérification finale du disque
     if [[ ! -b "$DISK" ]]; then
         print_error "Le disque $DISK n'existe pas !"
         return 1
     fi
-
+    
     print_success "Disque sélectionné : $DISK"
     return 0
 }
@@ -1807,12 +1870,12 @@ select_disk() {
 choose_partitioning() {
     print_header "ETAPE 5/$TOTAL_STEPS: CHOIX DU PARTITIONNEMENT"
     CURRENT_STEP=5
-
+    
     echo -e "${WHITE}Options de partitionnement :${NC}"
     echo -e "${CYAN}1.${NC} Conserver les partitions existantes"
     echo -e "${CYAN}2.${NC} Créer un nouveau partitionnement automatique"
     echo -e "${CYAN}3.${NC} Créer un nouveau partitionnement personnalisé"
-
+    
     local choice
     while true; do
         read -r -p "Votre choix (1-3): " choice
@@ -1863,16 +1926,16 @@ choose_partitioning() {
 
 use_single_partition_and_split() {
     print_info "Sélection d'une partition unique à diviser"
-
+    
     # Détection des partitions disponibles
     local partitions
     mapfile -t partitions < <(lsblk -no NAME "$DISK" | grep -E "${DISK##*/}[0-9p]")
-
+    
     if [[ ${#partitions[@]} -eq 0 ]]; then
         print_error "Aucune partition trouvée sur $DISK"
         return 1
     fi
-
+    
     echo -e "${WHITE}Partitions détectées :${NC}"
     for i in "${!partitions[@]}"; do
         local part="/dev/${partitions[i]}"
@@ -1880,7 +1943,7 @@ use_single_partition_and_split() {
         local fstype=$(lsblk -no FSTYPE "$part" 2>/dev/null || echo "Inconnu")
         echo -e "${CYAN}$((i + 1)).${NC} $part - $size - $fstype"
     done
-
+    
     local part_choice
     while true; do
         read -r -p "Sélectionnez la partition à diviser (numéro) : " part_choice
@@ -1892,30 +1955,30 @@ use_single_partition_and_split() {
         fi
         print_warning "Sélection invalide !"
     done
-
+    
     # Configuration des tailles pour les nouvelles partitions
     print_info "Configuration des tailles des nouvelles partitions"
     configure_custom_partitioning
-
+    
     # Effacer la partition sélectionnée et créer nouvelle table de partitions
     print_warning "ATTENTION : Toutes les données sur $selected_part seront effacées !"
     if ! confirm_action "Confirmer l'effacement de la partition ?"; then
         return 1
     fi
-
+    
     # Calculer la taille totale disponible
     local total_size=$(lsblk -bno SIZE "$selected_part" | head -1)
     local total_size_mb=$((total_size / 1024 / 1024))
-
+    
     # Convertir les tailles en MB
     local efi_mb=$(convert_to_mb "$PARTITION_EFI_SIZE")
     local root_mb=$(convert_to_mb "$PARTITION_ROOT_SIZE")
     local swap_mb=0
     local home_mb=0
-
+    
     [[ "$USE_SWAP" == true ]] && swap_mb=$(convert_to_mb "$PARTITION_SWAP_SIZE")
     [[ "$USE_SEPARATE_HOME" == true ]] && home_mb=$(convert_to_mb "$PARTITION_HOME_SIZE")
-
+    
     # Vérifier l'espace disponible
     local total_required_mb=$((efi_mb + root_mb + swap_mb + home_mb))
     if [[ $total_required_mb -gt $total_size_mb ]]; then
@@ -1923,38 +1986,38 @@ use_single_partition_and_split() {
         print_error "Disponible: ${total_size_mb}MB, Requis: ${total_required_mb}MB"
         return 1
     fi
-
+    
     # Commencer le partitionnement
     print_info "Début du partitionnement de $selected_part"
-
+    
     # Effacer la partition
     parted -s "$selected_part" rm 1 || {
         print_error "Impossible de supprimer la partition"
         return 1
     }
-
+    
     # Créer nouvelle table de partitions
     parted -s "$selected_part" mklabel gpt || {
         print_error "Impossible de créer la table de partitions"
         return 1
     }
-
+    
     # Créer les partitions
     local current_pos=1
-
+    
     # Partition EFI
     local efi_end=$((current_pos + efi_mb))
     parted -s "$selected_part" mkpart primary fat32 ${current_pos}MiB ${efi_end}MiB
     parted -s "$selected_part" set 1 esp on
     EFI_PART="${selected_part}1"
     current_pos=$efi_end
-
+    
     # Partition Root
     local root_end=$((current_pos + root_mb))
     parted -s "$selected_part" mkpart primary ext4 ${current_pos}MiB ${root_end}MiB
     ROOT_PART="${selected_part}2"
     current_pos=$root_end
-
+    
     # Partition Swap (optionnelle)
     if [[ "$USE_SWAP" == true ]]; then
         local swap_end=$((current_pos + swap_mb))
@@ -1962,52 +2025,52 @@ use_single_partition_and_split() {
         SWAP_PART="${selected_part}3"
         current_pos=$swap_end
     fi
-
+    
     # Partition Home (optionnelle)
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
         parted -s "$selected_part" mkpart primary ext4 ${current_pos}MiB 100%
         HOME_PART="${selected_part}$((USE_SWAP ? 4 : 3))"
     fi
-
+    
     print_success "Partitionnement terminé"
     return 0
 }
 
 detect_existing_partitions() {
     print_info "Détection des partitions existantes sur $DISK..."
-
+    
     local partitions
     mapfile -t partitions < <(lsblk -no NAME "$DISK" | grep -E "${DISK##*/}[0-9p]")
-
+    
     if [[ ${#partitions[@]} -eq 0 ]]; then
         print_error "Aucune partition trouvée sur $DISK"
         return 1
     fi
-
+    
     echo -e "${WHITE}Partitions détectées :${NC}"
     for part in "${partitions[@]}"; do
         local size fstype mountpoint
         size=$(lsblk -no SIZE "/dev/$part" 2>/dev/null || echo "Inconnu")
         fstype=$(lsblk -no FSTYPE "/dev/$part" 2>/dev/null || echo "Inconnu")
         mountpoint=$(lsblk -no MOUNTPOINT "/dev/$part" 2>/dev/null || echo "")
-
+        
         echo -e "${CYAN}/dev/$part${NC} - $size - $fstype $mountpoint"
     done
-
+    
     configure_existing_partitions "${partitions[@]}"
 }
 
 configure_existing_partitions() {
     local partitions=("$@")
-
+    
     print_info "Configuration des partitions..."
-
+    
     # Demander EFI
     echo -e "${WHITE}Sélectionnez la partition EFI :${NC}"
     for i in "${!partitions[@]}"; do
         echo -e "${CYAN}$((i + 1)).${NC} /dev/${partitions[i]}"
     done
-
+    
     local efi_choice
     while true; do
         read -r -p "Partition EFI (numéro) :" efi_choice
@@ -2019,7 +2082,7 @@ configure_existing_partitions() {
         fi
         print_warning "Sélection invalide !"
     done
-
+    
     # Demander Root
     echo -e "${WHITE}Sélectionnez la partition Root :${NC}"
     for i in "${!partitions[@]}"; do
@@ -2027,7 +2090,7 @@ configure_existing_partitions() {
             echo -e "${CYAN}$((i + 1)).${NC} /dev/${partitions[i]}"
         fi
     done
-
+    
     local root_choice
     while true; do
         read -r -p "Partition Root (numéro) : " root_choice
@@ -2040,7 +2103,7 @@ configure_existing_partitions() {
         fi
         print_warning "Sélection invalide !"
     done
-
+    
     # Optionnel: Home et Swap
     if confirm_action "Configurer une partition Home séparée ?"; then
         USE_SEPARATE_HOME=true
@@ -2051,7 +2114,7 @@ configure_existing_partitions() {
                 echo -e "${CYAN}$((i + 1)).${NC} $part"
             fi
         done
-
+        
         local home_choice
         while true; do
             read -r -p "Partition Home (numéro) : " home_choice
@@ -2068,7 +2131,7 @@ configure_existing_partitions() {
             print_warning "Sélection invalide !"
         done
     fi
-
+    
     if confirm_action "Configurer une partition Swap ?"; then
         USE_SWAP=true
         echo -e "${WHITE}Sélectionnez la partition Swap :${NC}"
@@ -2078,7 +2141,7 @@ configure_existing_partitions() {
                 echo -e "${CYAN}$((i + 1)).${NC} $part"
             fi
         done
-
+        
         local swap_choice
         while true; do
             read -r -p "Partition Swap (numéro) :" swap_choice
@@ -2114,25 +2177,25 @@ configure_existing_partitions() {
 
 create_new_partitioning() {
     print_header "CREATION DU PARTITIONNEMENT"
-
+    
     print_warning "ATTENTION : Toutes les données sur $DISK seront effacées !"
-
+    
     if ! confirm_action "Confirmer l'effacement du disque ?"; then
         return 1
     fi
 
     # Nettoyage complet et forcé du disque
     print_info "Nettoyage complet du disque..."
-
+    
     # Démontage forcé de toutes les partitions
     umount -f "${DISK}"* 2>/dev/null || true
     swapoff "${DISK}"* 2>/dev/null || true
-
+    
     # Nettoyage des signatures avec méthodes multiples
     print_info "Effacement des signatures de partition..."
     wipefs -af "$DISK" 2>/dev/null || true
     dd if=/dev/zero of="$DISK" bs=1M count=10 status=none 2>/dev/null || true
-
+    
     # Synchronisation et attente
     sync
     sleep 3
@@ -2172,7 +2235,7 @@ create_new_partitioning() {
     fi
     root_mb=$(convert_to_mb "$PARTITION_ROOT_SIZE")
     [[ "$USE_SWAP" == true ]] && swap_mb=$(convert_to_mb "$PARTITION_SWAP_SIZE") || swap_mb=0
-
+    
     if [[ "$USE_SEPARATE_HOME" == true ]]; then
         if [[ "$PARTITION_HOME_SIZE" == "remaining" ]]; then
             home_mb="remaining"
@@ -2281,21 +2344,21 @@ create_new_partitioning() {
         # Alternative: forcer la relecture des partitions
         echo 1 > /sys/block/${DISK##*/}/device/rescan 2>/dev/null || true
     }
-
+    
     # Attendre que les périphériques soient disponibles
     sleep 5
-
+    
     # Vérification que les partitions existent
     print_info "Vérification des partitions créées..."
-
+    
     # Fonction pour vérifier une partition
     check_partition_exists() {
         local part="$1"
         local part_name="$2"
-
+        
         if [[ -n "$part" ]] && [[ ! -b "$part" ]]; then
             print_warning "Partition $part_name ($part) non détectée, recherche alternative..."
-
+            
             # Chercher la partition par label ou numéro
             local found_part=""
             for p in "${DISK}"*; do
@@ -2307,7 +2370,7 @@ create_new_partitioning() {
                     fi
                 fi
             done
-
+            
             if [[ -n "$found_part" ]]; then
                 print_success "Partition $part_name trouvée: $found_part"
                 eval "${part_name}_PART=\"$found_part\""
@@ -2318,16 +2381,16 @@ create_new_partitioning() {
         fi
         return 0
     }
-
+    
     # Vérifier chaque partition
     check_partition_exists "$ROOT_PART" "ROOT" || return 1
-
+    
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         check_partition_exists "$EFI_PART" "EFI" || return 1
     else
         check_partition_exists "$BOOT_PART" "BOOT" || return 1
     fi
-
+    
     if [[ "$USE_SWAP" == true ]] && [[ -n "$SWAP_PART" ]]; then
         check_partition_exists "$SWAP_PART" "SWAP" || {
             print_warning "Partition Swap introuvable, désactivation..."
@@ -2335,7 +2398,7 @@ create_new_partitioning() {
             SWAP_PART=""
         }
     fi
-
+    
     if [[ "$USE_SEPARATE_HOME" == true ]] && [[ -n "$HOME_PART" ]]; then
         check_partition_exists "$HOME_PART" "HOME" || {
             print_warning "Partition Home introuvable, désactivation..."
@@ -2348,7 +2411,7 @@ create_new_partitioning() {
     print_success "Partitionnement terminé avec succès"
     print_info "Résumé du partitionnement:"
     lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT "$DISK"
-
+    
     echo ""
     echo -e "${GREEN}Partitions configurées:${NC}"
     echo -e "  • Root: $ROOT_PART"
@@ -2356,22 +2419,22 @@ create_new_partitioning() {
     [[ -n "$BOOT_PART" ]] && echo -e "  • Boot: $BOOT_PART"
     [[ -n "$SWAP_PART" ]] && echo -e "  • Swap: $SWAP_PART"
     [[ -n "$HOME_PART" ]] && echo -e "  • Home: $HOME_PART"
-
+    
     return 0
 }
 
 create_mbr_with_fdisk() {
     print_info "Création table MBR avec fdisk..."
-
+    
     # Création de la table MBR avec fdisk
     echo "o\nw\n" | fdisk "$DISK" >/dev/null 2>&1
-
+    
     # Vérification
     if ! parted -s "$DISK" print | grep -q "msdos"; then
         print_error "Échec création MBR avec fdisk"
         return 1
     fi
-
+    
     print_success "Table MBR créée avec fdisk"
     return 0
 }
@@ -2379,27 +2442,27 @@ create_mbr_with_fdisk() {
 format_partitions() {
     print_header "ETAPE 6/$TOTAL_STEPS: FORMATAGE DES PARTITIONS"
     CURRENT_STEP=6
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation du formatage"
         return 0
     fi
-
+    
     # Attendre que les partitions soient disponibles
     print_info "Attente de la disponibilité des partitions..."
     partprobe "$DISK" 2>/dev/null || true
     sleep 8  # Augmenter le temps d'attente
     sync
-
+    
     # Vérification que les partitions existent
     print_info "Vérification des partitions..."
-
+    
     if [[ ! -b "$ROOT_PART" ]]; then
         print_error "Partition ROOT non trouvée: $ROOT_PART"
         print_info "Partitions disponibles sur $DISK:"
         lsblk -no NAME,SIZE,TYPE "$DISK" | grep -E "^${DISK##*/}(p?[0-9]+)"
         print_info "Tentative de recherche alternative..."
-
+        
         # Chercher la partition root
         for p in "${DISK}"*; do
             if [[ "$p" != "$DISK" ]] && [[ -b "$p" ]]; then
@@ -2412,14 +2475,14 @@ format_partitions() {
                 fi
             fi
         done
-
+        
         if [[ ! -b "$ROOT_PART" ]]; then
             print_error "Impossible de trouver la partition root"
             return 1
         fi
         print_success "Partition root identifiée: $ROOT_PART"
     fi
-
+    
     # Vérification selon le mode de boot
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         if [[ ! -b "$EFI_PART" ]]; then
@@ -2527,7 +2590,7 @@ format_partitions() {
 get_partition_number() {
     local disk="$1"
     local part_index="$2"
-
+    
     # Vérifier si le disque est un périphérique NVMe
     if [[ "$disk" =~ nvme[0-9]n[0-9]$ ]]; then
         # Format NVMe: /dev/nvme0n1p1, /dev/nvme0n1p2, etc.
@@ -2545,12 +2608,12 @@ get_partition_number() {
 mount_partitions() {
     print_header "ETAPE 7/$TOTAL_STEPS: MONTAGE DES PARTITIONS"
     CURRENT_STEP=7
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation du montage"
         return 0
     fi
-
+    
     # Démontage préventif
     print_info "Démontage préventif..."
     umount -R /mnt 2>/dev/null || true
@@ -2604,12 +2667,12 @@ mount_partitions() {
 
     # Vérification du montage
     print_info "Vérification des points de montage..."
-
+    
     if ! mountpoint -q /mnt; then
         print_error "Échec montage /mnt"
         return 1
     fi
-
+    
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         if ! mountpoint -q /mnt/boot/efi; then
             print_error "Échec montage /mnt/boot/efi"
@@ -2630,7 +2693,7 @@ mount_partitions() {
 
 detect_partitions() {
     print_info "Détection des partitions..."
-
+    
     # Liste toutes les partitions du disque
     local partitions=()
     for p in "${DISK}"*; do
@@ -2638,12 +2701,12 @@ detect_partitions() {
             partitions+=("$p")
         fi
     done
-
+    
     if [[ ${#partitions[@]} -eq 0 ]]; then
         print_error "Aucune partition détectée sur $DISK"
         return 1
     fi
-
+    
     print_info "Partitions détectées:"
     for p in "${partitions[@]}"; do
         local size=$(lsblk -no SIZE "$p" 2>/dev/null || echo "inconnu")
@@ -2651,7 +2714,7 @@ detect_partitions() {
         local label=$(lsblk -no LABEL "$p" 2>/dev/null || echo "")
         echo "  - $p ($size, $fstype${label:+, label: $label})"
     done
-
+    
     return 0
 }
 
@@ -2659,12 +2722,12 @@ detect_partitions() {
 install_system() {
     print_header "ETAPE 8/$TOTAL_STEPS: INSTALLATION DU SYSTEME DE BASE"
     CURRENT_STEP=8
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation du système de base"
         return 0
     fi
-
+    
     # Optimisation des miroirs
     print_info "Optimisation des miroirs Pacman..."
     if command -v reflector &> /dev/null; then
@@ -2676,7 +2739,7 @@ install_system() {
         pacman -S --noconfirm reflector || true
         reflector --country France,Germany --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist || true
     fi
-
+    
     # Mise à jour forcée des bases
     print_info "Mise à jour forcée des bases de données..."
     pacman -Syy --noconfirm || {
@@ -2688,7 +2751,7 @@ install_system() {
             return 1
         }
     }
-
+    
     # Paquets de base adaptés selon le mode de boot
     local base_packages=(
         base base-devel linux linux-firmware
@@ -2698,7 +2761,7 @@ install_system() {
         reflector pacman-contrib
         dosfstools e2fsprogs
     )
-
+    
     # Ajout spécifique selon le mode
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         base_packages+=("efibootmgr")
@@ -2706,10 +2769,10 @@ install_system() {
     else
         print_info "Configuration BIOS - pas d'efibootmgr nécessaire"
     fi
-
+    
     print_info "Installation des paquets de base pour le mode ${BOOT_MODE}..."
     run_with_progress "Installation système de base" 300 "pacstrap /mnt ${base_packages[*]}"
-
+    
     print_success "Système de base installé pour le mode ${BOOT_MODE}"
 }
 
@@ -2745,7 +2808,7 @@ configure_system() {
     print_info "Configuration du système dans chroot..."
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 set -e
-echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen
+echo "fr_FR.UTF-8 UTF-8" > /etc/locale.gen 
 locale-gen
 
 echo "LANG=fr_FR.UTF-8" > /etc/locale.conf
@@ -2921,12 +2984,12 @@ EOF
 select_desktop() {
     print_header "ETAPE 11/$TOTAL_STEPS: SELECTION ENVIRONNEMENT DE BUREAU"
     CURRENT_STEP=11
-
+    
     echo -e "${WHITE}Environnements disponibles :${NC}"
     echo -e "${CYAN}1.${NC} KDE Plasma"
     echo -e "${CYAN}2.${NC} GNOME"
     echo -e "${CYAN}3.${NC} Sans interface graphique (serveur/minimal)"
-
+    
     local choice
     while true; do
         read -r -p "Votre choix (1-3): " choice
@@ -2937,24 +3000,24 @@ select_desktop() {
             *) print_warning "Choix invalide! Utilisez 1, 2 ou 3." ;;
         esac
     done
-
+    
     print_success "Environnement sélectionné : $DE_CHOICE"
 }
 
 install_desktop() {
     print_header "ETAPE 12/$TOTAL_STEPS: INSTALLATION DE L'ENVIRONNEMENT DE BUREAU"
     CURRENT_STEP=12
-
+    
     if [[ "$DE_CHOICE" == "none" ]]; then
         print_info "Aucun environnement de bureau à installer"
         return 0
     fi
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation de $DE_CHOICE"
         return 0
     fi
-
+    
     case $DE_CHOICE in
         kde)
             print_info "Installation de KDE Plasma..."
@@ -2967,7 +3030,7 @@ install_desktop() {
             /usr/bin/arch-chroot /mnt systemctl enable gdm
             ;;
     esac
-
+    
     print_success "Environnement de bureau installé"
 }
 
@@ -3034,27 +3097,27 @@ EOF
 install_boot_sound() { # Bip sonore de boot disfonctionnel, à y remédier ou non
     print_header "ETAPE 17/$TOTAL_STEPS: CONFIGURATION BIP SONORE BOOT"
     CURRENT_STEP=17
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation du bip sonore"
         return 0
     fi
-
+    
     # Création du répertoire des sons
     mkdir -p /mnt/usr/share/sounds/fallout
-
+    
     # Téléchargement du son Fallout (correction de l'URL)
     print_info "Téléchargement du son de boot Fallout..."
     if curl -fL -o /mnt/usr/share/sounds/fallout/boot.wav \
         'https://raw.githubusercontent.com/PapaOursPolaire/arch/refs/heads/Projets/boot.wav' 2>/dev/null; then
-
+        
         print_success "Son de boot téléchargé avec succès"
-
+        
         # Installation des dépendances audio
         /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed alsa-utils pulseaudio-alsa || {
             print_warning "Impossible d'installer les dépendances audio complètes"
         }
-
+        
         # Service systemd corrigé
         cat > /mnt/etc/systemd/system/boot-sound.service <<'EOF'
 [Unit]
@@ -3071,10 +3134,10 @@ StandardOutput=null
 [Install]
 WantedBy=multi-user.target
 EOF
-
+        
     else
         print_warning "Impossible de télécharger le son, création d'un bip système"
-
+        
         # Fallback vers bip système intégré
         cat > /mnt/usr/local/bin/fallout-beep <<'EOF'
 #!/bin/bash
@@ -3086,9 +3149,9 @@ done
 sleep 0.2
 echo -e '\a\a'
 EOF
-
+        
         chmod +x /mnt/usr/local/bin/fallout-beep
-
+        
         cat > /mnt/etc/systemd/system/boot-sound.service <<'EOF'
 [Unit]
 Description=Fallout Boot Sound
@@ -3105,12 +3168,12 @@ StandardOutput=null
 WantedBy=multi-user.target
 EOF
     fi
-
+    
     # Activation du service
     /usr/bin/arch-chroot /mnt systemctl enable boot-sound.service || {
         print_warning "Impossible d'activer le service de son de boot"
     }
-
+    
     print_success "Bip sonore de boot configuré"
 }
 
@@ -3127,14 +3190,14 @@ configure_plymouth() {
 set -euo pipefail
 
 echo "[INFO] Installation de Plymouth..."
-pacman -Sy --noconfirm --needed plymouth unzip curl
+pacman -Sy --noconfirm --needed plymouth unzip wget
 
 cd /tmp
 rm -f arch-mac-style.zip
 rm -rf /usr/share/plymouth/themes/arch-mac-style
 
 echo "[INFO] Téléchargement du thème Plymouth..."
-curl -fL -o arch-mac-style.zip "https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/arch-mac-style.zip"
+wget -O arch-mac-style.zip "https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/arch-mac-style.zip"
 
 echo "[INFO] Décompression du thème..."
 unzip -o arch-mac-style.zip -d /usr/share/plymouth/themes/
@@ -3236,19 +3299,19 @@ EOF"
 configure_kde_lockscreen() {
     print_header "ETAPE 15/$TOTAL_STEPS: CONFIGURATION KDE SPLASH"
     CURRENT_STEP=15
-
+    
     if [[ "$DE_CHOICE" != "kde" ]]; then
         print_info "Environnement KDE non détecté - lockscreen ignoré"
         return 0
     fi
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation configuration lockscreen KDE"
         return 0
     fi
 
     print_info "Configuration du splash screen KDE Fallout..."
-
+    
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 set -euo pipefail
 
@@ -3454,14 +3517,14 @@ EOF
 install_paru() {
     print_header "ETAPE 24/$TOTAL_STEPS: INSTALLATION PARU (AUR HELPER)"
     CURRENT_STEP=24
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation installation Paru"
         return 0
     fi
-
+    
     print_info "Début installation Paru dans chroot..."
-
+    
     /usr/bin/arch-chroot /mnt /bin/bash << 'CHROOT_EOF'
 set -e
 
@@ -3506,7 +3569,7 @@ if command -v paru; then
 else
     echo "Paru non trouvé, recherche aléatoire..."
     find /usr -name "*paru*" -type f 2>/dev/null
-
+    
     # Si trouvé ailleurs, créer lien
     if [[ -f /usr/local/bin/paru ]]; then
         echo "Création lien /usr/local/bin/paru -> /usr/bin/paru"
@@ -3531,17 +3594,17 @@ userdel -r builduser 2>/dev/null || true
 echo "FIN DE L'INSTALLATION PARU"
 
 CHROOT_EOF
-
+    
     local exit_code=$?
-
+    
     if [[ $exit_code -ne 0 ]]; then
         print_error "Erreur durant l'installation (code: $exit_code)"
         return 1
     fi
-
+    
     # Vérification finale avec le bon PATH
     print_info "Vérification finale avec PATH étendu..."
-
+    
     if /usr/bin/arch-chroot /mnt /bin/bash -c 'export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"; command -v paru >/dev/null 2>&1'; then
         print_success "Paru installé et disponible"
         # Nettoie maintenant que c'est confirmé
@@ -3824,29 +3887,29 @@ clean_tmp() { # Plus efficace depuis la version 238.0, à enelver dans la versio
 install_wine() {
     print_header "ETAPE 23/$TOTAL_STEPS: INSTALLATION DE WINE"
     CURRENT_STEP=23
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation de Wine"
         return 0
     fi
-
+    
     print_info "Installation de Wine pour la compatibilité Windows..."
-
+    
     # Activation multilib pour Wine
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 # Activation multilib dans pacman.conf
 sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf
 pacman -Sy
 EOF
-
+    
     # Installation Wine et outils
     local wine_packages=(
         wine wine-staging winetricks
         wine-mono wine-gecko
     )
-
+    
     run_with_progress "Installation Wine" 180 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm ${wine_packages[*]}"
-
+    
     # Configuration Wine pour l'utilisateur
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Echec configuration Wine"
 sudo -u $USERNAME /bin/bash <<'USEREOF'
@@ -3863,7 +3926,7 @@ winetricks --unattended corefonts vcrun2019 dotnetfx48 || echo "Certains composa
 echo "Wine configuré pour Windows 10"
 USEREOF
 EOF
-
+    
     print_success "Wine et extensions installés"
 }
 
@@ -3877,14 +3940,14 @@ install_software() {
         print_warning "Fonction clean_tmp absente — nettoyage minimal de /tmp"
         find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf {} \; 2>/dev/null || true
     fi
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de l'installation des logiciels"
         return 0
     fi
-
+    
     print_info "Installation de tous les logiciels..."
-
+    
     # Catégorie 1: Internet & Communication
     print_info "Installation Internet & Communication..."
     local internet_packages=(
@@ -3892,9 +3955,9 @@ install_software() {
         thunderbird # à vérifier
         telegram-desktop  #  à vérifier
     )
-
+    
     run_with_progress "Installation Internet" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${internet_packages[*]}"
-
+    
     # Discord via AUR ou Flatpak
     if /usr/bin/arch-chroot /mnt command -v paru &> /dev/null; then
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm discord || {
@@ -3902,25 +3965,25 @@ install_software() {
             /usr/bin/arch-chroot /mnt flatpak install -y flathub com.discordapp.Discord || print_warning "Discord non installé"
         }
     fi
-
+    
     # Catégorie 2: Multimédia
     print_info "Installation Multimédia & Design..."
     local multimedia_packages=(
         vlc # OK
         mpv  # OK
         obs-studio # OK
-        audacity # OK
-        gimp # OK
-        inkscape # OK
+        audacity # OK 
+        gimp # OK 
+        inkscape # OK  
         imagemagick # A vérifier*
         kdenlive # A vérifier*
-        blender # OK
+        blender # OK 
         krita # A vérifier*
     )
     # * : Ne s'installaient pas avant la version 411, à revérifier
     run_with_progress "Installation Multimédia" 180 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${multimedia_packages[*]}"
-
-        # Catégorie 3 : Gaming (si interface graphique installée)
+    
+        # Catégorie 3 : Gaming (si interface graphique installée) 
         if [[ "$DE_CHOICE" != "none" ]]; then
             print_header "INSTALLATION LOGICIELS GAMING"
             print_info "Installation de la suite Gaming complète..."
@@ -3978,8 +4041,8 @@ install_software() {
                 # Optimisations gaming
                 gamemode # JSP
                 lib32-gamemode # JSP
-                mangohud # JSP
-                lib32-mangohud # JSP
+                mangohud # JSP 
+                lib32-mangohud # JSP 
 
                 # Proton & compatibilité
                 lib32-gcc-libs # JSP
@@ -3993,7 +4056,7 @@ install_software() {
                 retroarch # JSP
                 dolphin-emu # OK
             )
-
+        
         install_errors=0
         for pkg in "${gaming_packages[@]}"; do
             if ! /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed "$pkg"; then
@@ -4088,9 +4151,9 @@ EOF
     print_info "Installation Utilitaires système..."
     local utility_packages=(
         gparted # OK
-        timeshift # OK
-        flatpak # OK
-        keepassxc # OK
+        timeshift # OK 
+        flatpak # OK 
+        keepassxc # OK  
         unzip # OK
         p7zip # JSP
         tree # JSP
@@ -4108,9 +4171,9 @@ EOF
     )
 
     clean_tmp
-
+    
     run_with_progress "Installation Utilitaires" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${utility_packages[*]}"
-
+    
     # Catégorie 5: Polices et thèmes - A vérifier car je ne pense pas que toutes les polices aient été installées
     print_info "Installation Polices..."
     local font_packages=(
@@ -4123,9 +4186,9 @@ EOF
         adobe-source-code-pro-fonts
         ttf-jetbrains-mono
     )
-
+    
     run_with_progress "Installation Polices" 60 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed ${font_packages[*]}"
-
+    
 
     /usr/bin/arch-chroot /mnt /bin/bash -lc '
     set -e
@@ -4164,7 +4227,7 @@ flatpak install -y flathub com.google.AndroidStudio 2>/dev/null || true
 
 echo "Applications Flatpak installées"
 EOF
-
+    
     # Configuration Steam avancée (si installé)
     if [[ "$DE_CHOICE" != "none" ]]; then
         print_info "Configuration Steam et gaming..."
@@ -4222,14 +4285,14 @@ GAMEMODE_EOF
 USEREOF
 EOF
     fi
-
+    
     print_info "Vérification des installations..."
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 echo "VERIFICATION DES LOGICIELS INSTALLES"
 
 # Vérification des logiciels critiques
 critical_apps=(
-    "firefox" "vlc" "gimp" "steam" "discord"
+    "firefox" "vlc" "gimp" "steam" "discord" 
     "code" "git" "docker" "fastfetch"
 )
 
@@ -4253,21 +4316,21 @@ echo "RÉSUMÉ: $installed_count/$total_count logiciels installés"
 # Liste des paquets installés
 echo "Nombre total de paquets installés: $(pacman -Q | wc -l)"
 EOF
-
+    
     print_success "TOUS LES LOGICIELS ESSENTIELS ONT ÉTÉ INSTALLÉS "
 }
 
 install_themes() {
     print_header "ETAPE 27/$TOTAL_STEPS: INSTALLATION THEMES ET ICONES"
     CURRENT_STEP=27
-
+    
     if [[ "$DRY_RUN" == true ]] || [[ "$DE_CHOICE" == "none" ]]; then
         print_info "Thèmes et icones ignorés (mode console ou dry-run)"
         return 0
     fi
-
+    
     print_info "Installation des thèmes et icones..."
-
+    
     # Icones et thèmes via pacman - CORRECTION: noms de paquets corrects - pas sur car pas beaucoup sont installés, à reverifier
     local theme_packages=(
         papirus-icon-theme
@@ -4278,30 +4341,30 @@ install_themes() {
         qogir-gtk-theme
         sweet-theme-git
     )
-
+    
     # Installation des thèmes de base
     run_with_progress "Installation thèmes et icones" 120 "/usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed papirus-icon-theme breeze-icons breeze-gtk"
-
+    
     # Thèmes additionnels via AUR - A part Tela, les autres n'ont pas été installés A REVERIFIER
     if /usr/bin/arch-chroot /mnt command -v paru &> /dev/null; then
         print_info "Installation thèmes additionnels via AUR..."
-
+        
         # Installation séparée pour éviter les conflits
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm --needed tela-icon-theme-git || {
             print_warning "Tela icon theme non installé"
         }
-
+        
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm --needed sweet-theme-git || {
             /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm --needed materia-gtk-theme || {
                 print_warning "Sweet/Materia theme non installé"
             }
         }
-
+        
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" paru -S --noconfirm --needed qogir-gtk-theme || {
             print_warning "Qogir theme non installé"
         }
     fi
-
+    
     # Configuration du thème par défaut - CORRECTION: Thèmes existants (correction inneficace)
     if [[ "$DE_CHOICE" == "kde" ]]; then
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "Echec configuration thème KDE"
@@ -4361,7 +4424,7 @@ gsettings set org.gnome.desktop.background picture-uri "file:///home/$USERNAME/.
 gsettings set org.gnome.desktop.background picture-uri-dark "file:///home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png"
 EOF
     fi
-
+    
     print_success "Thèmes et icones installés et configurés"
 }
 
@@ -4379,7 +4442,7 @@ install_vscode() { # Ne fonctionne pas
     # Tentative 1 : via pacman directement
     if /usr/bin/arch-chroot /mnt pacman -S --noconfirm --needed code 2>/dev/null; then
         print_success "Visual Studio Code installé via pacman"
-
+        
         # Créer raccourci bureau
         /usr/bin/arch-chroot /mnt /bin/bash <<EOF
 mkdir -p /usr/share/applications
@@ -4410,7 +4473,7 @@ EOF
     # Tentative 3 : via Flatpak
     if /usr/bin/arch-chroot /mnt command -v flatpak &>/dev/null; then
         /usr/bin/arch-chroot /mnt flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
-
+        
         if /usr/bin/arch-chroot /mnt flatpak install -y flathub com.visualstudio.code 2>/dev/null; then
             print_success "Visual Studio Code installé via Flatpak"
             return 0
@@ -4437,7 +4500,7 @@ EOF
     echo "  • pacman -S code"
     echo "  • paru -S visual-studio-code-bin"
     echo "  • flatpak install flathub com.visualstudio.code"
-
+    
     return 1
 }
 
@@ -4694,7 +4757,7 @@ install_spotify_and_spicetify() {
     fi
 }
 
-# SECTION D: Visual Studio Code + extensions (user session)
+# SECTION D: Visual Studio Code + extensions (user session) 
 install_vscode_extensions_user() {
     echo
     yellow "[TASK] Installer Visual Studio Code (si binaire 'code' présent) et extensions utiles"
@@ -4724,7 +4787,7 @@ install_vscode_extensions_user() {
     red "[WARN] VSCode CLI (code) introuvable, extensions non installées"
     fi
 }
-
+    
 # SECTION E: Navigateurs (Brave, Chrome, DuckDuckGo Browser)
 install_browsers() {
     echo
@@ -4928,7 +4991,7 @@ FFCONFIG
 
     # Configuration bashrc pour l'autostart GARANTIE
     print_info "Configuration autostart dans bashrc..."
-
+    
     /usr/bin/arch-chroot /mnt /bin/bash <<'BASHRC_CONFIG'
 USERNAME='$USERNAME'
 BASHRC="/home/${USERNAME}/.bashrc"
@@ -4942,7 +5005,7 @@ if [[ $- == *i* ]]; then
     # Exécuter uniquement une fois par session shell
     if [[ -z "$FASTFETCH_RUN" ]]; then
         export FASTFETCH_RUN=1
-
+        
         if command -v fastfetch >/dev/null 2>&1; then
             fastfetch --config ~/.config/fastfetch/config.json 2>/dev/null || fastfetch
         fi
@@ -4959,14 +5022,14 @@ if /usr/bin/arch-chroot /mnt command -v zsh >/dev/null 2>&1; then
     if [[ ! -f "$ZSHRC" ]]; then
         touch "$ZSHRC"
     fi
-
+    
     if ! grep -q "FASTFETCH AUTOSTART" "$ZSHRC" 2>/dev/null; then
         cat >> "$ZSHRC" <<'ZSHFETCH_EOF'
 ### FASTFETCH AUTOSTART - Installation Arch
 if [[ -o interactive ]]; then
     if [[ -z "$FASTFETCH_RUN" ]]; then
         export FASTFETCH_RUN=1
-
+        
         if command -v fastfetch >/dev/null 2>&1; then
             fastfetch --config ~/.config/fastfetch/config.json 2>/dev/null || fastfetch
         fi
@@ -5007,14 +5070,14 @@ ALIAS_CONFIG
 final_config() {
     print_header "ETAPE 29/$TOTAL_STEPS: CONFIGURATION FINALE"
     CURRENT_STEP=29
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] Simulation de la configuration finale"
         return 0
     fi
-
+    
     print_info "Configuration finale..."
-
+    
     # Services système optimisés
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF' || print_warning "Certaines configurations ont échoué"
 set -e
@@ -5041,7 +5104,7 @@ echo "$USERNAME hard nofile 65536" >> /etc/security/limits.conf
 echo "$USERNAME soft memlock unlimited" >> /etc/security/limits.conf
 echo "$USERNAME hard memlock unlimited" >> /etc/security/limits.conf
 EOF
-
+    
     # Configuration utilisateur
     /usr/bin/arch-chroot /mnt /bin/bash <<EOF || print_warning "Configuration utilisateur partielle"
 cat > /home/$USERNAME/.bashrc <<'BASHRC_EOF'
@@ -5174,7 +5237,7 @@ fi
 # Fastfetch automatique GARANTI
 if [[ -z "\$FASTFETCH_SHOWN" && "\$TERM" != "linux" ]]; then
     export FASTFETCH_SHOWN=1
-
+    
     if command -v fastfetch >/dev/null 2>&1; then
         echo ""
         if [[ -f /home/$USERNAME/.config/fastfetch/config.jsonc ]]; then
@@ -5254,7 +5317,7 @@ chmod 755 /home/$USERNAME
 chmod -R 755 /home/$USERNAME/{Projets,Scripts,Documents,Images}
 chmod -R 775 /home/$USERNAME/Téléchargements
 EOF
-
+    
     print_info "Vérification finale de TOUTES les corrections..."
     /usr/bin/arch-chroot /mnt /bin/bash <<'EOF'
 echo ""
@@ -5349,21 +5412,21 @@ else
     echo "Certaines corrections peuvent nécessiter une intervention manuelle car flemme de créer un script de correction ou de  débugguer ce script, vous pensez que je n'ai pas d'autres scripts sur le plancher ?"
 fi
 EOF
-
+    
     print_success "Configuration finale terminée avec TOUTES LES CORRECTIONS"
 }
 
 finish_install() {
     print_header "ETAPE 32/$TOTAL_STEPS: FINALISATION DE L'INSTALLATION"
     CURRENT_STEP=32
-
+    
     if [[ "$DRY_RUN" == true ]]; then
         print_success " SIMULATION TERMINEE - Aucune modification réelle effectuée"
         echo ""
         echo -e "${YELLOW}Pour une installation réelle, relancez sans --dry-run${NC}"
         return 0
     fi
-
+    
     print_success "L'installation complète d'Arch Linux Fallout Edition est maintenant terminée!"
     echo ""
     echo -e "${GREEN} RESUME COMPLET DE L'INSTALLATION:${NC}"
@@ -5383,7 +5446,7 @@ finish_install() {
     echo -e "${CYAN}• Environnement :${NC} $DE_CHOICE"
     [[ "$CUSTOM_PARTITIONING" == true ]] && echo -e "${CYAN}• Partitionnement :${NC} Personnalisé"
     echo ""
-
+    
     echo -e "${YELLOW}INFORMATIONS SPECIFIQUES AU MODE ${BOOT_MODE^^}:${NC}"
     if [[ "$BOOT_MODE" == "uefi" ]]; then
         echo -e "• Bootloader: GRUB x86_64-efi"
@@ -5395,10 +5458,10 @@ finish_install() {
         echo -e "• Partition Boot: ext4"
     fi
     echo ""
-
+    
     # Le reste de la fonction reste identique...
     # [contenu identique de l'affichage des fonctionnalités]
-
+    
     # Instructions post-installation adaptées
     echo -e "${BLUE} INSTRUCTIONS POST-INSTALLATION :${NC}"
     echo -e "1. ${WHITE}Retirez le support d'installation${NC}"
@@ -5409,23 +5472,23 @@ finish_install() {
     fi
     echo -e "5. ${WHITE}Première mise à jour :${NC} ${CYAN}sudo pacman -Syu${NC}"
     echo ""
-
+    
     # Sauvegarde du log
     if [[ -f "$LOG_FILE" ]]; then
         cp "$LOG_FILE" "/mnt/home/$USERNAME/installation.log" 2>/dev/null || true
         print_info "Log d'installation sauvegardé: /home/$USERNAME/installation.log"
     fi
-
+    
     if confirm_action "Voulez-vous redémarrer maintenant ?" "O"; then
         print_info "Redémarrage dans 5 secondes..."
-
+        
         print_info "Démontage des partitions..."
         sync
-
+        
         # Démontage propre
         [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
         umount -R /mnt 2>/dev/null || print_warning "Démontage partiel"
-
+        
         echo ""
         for i in {5..1}; do
             echo -ne "\r${YELLOW} Redémarrage dans $i secondes... (Ctrl+C pour annuler)${NC}"
@@ -5434,17 +5497,17 @@ finish_install() {
         echo ""
         echo ""
         print_success " Redémarrage en cours... Bienvenue dans Arch Linux (${BOOT_MODE})!"
-
+        
         reboot
     else
         print_info "Installation terminée. Redémarrez manuellement quand vous le souhaitez."
         echo -e "${YELLOW} N'oubliez pas de retirer la clé USB bootable !${NC}"
-
+        
         # Démontage manuel
         sync
         [[ -n "$SWAP_PART" ]] && swapoff "$SWAP_PART" 2>/dev/null || true
         umount -R /mnt 2>/dev/null || true
-
+        
         echo ""
         echo -e "${GREEN} Installation complète V864.4-BIOS ! Votre système Arch Linux est prêt.${NC}"
         echo ""
@@ -5461,9 +5524,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
     exec > >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$LOG_FILE" >&2)
-
+    
     main "$@"
-
+    
     # Exit explicite
     exit 0
 fi
