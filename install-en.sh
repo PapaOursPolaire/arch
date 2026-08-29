@@ -4167,14 +4167,10 @@ PLASMA_EOF
 
 # Wallpaper configuration
 mkdir -p /home/$USERNAME/.local/share/wallpapers
-# FIX: correctly download the desktop image
-curl -o /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png \
-    'https://raw.githubusercontent.com/PapaOursPolaire/Linux-tools/refs/heads/Projects/fallout-desktop-bg.png' 2>/dev/null || {
-    # Copy the SDDM image as a fallback
-    if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
-        cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png
-    fi
-}
+# Directly reuse the SDDM background (no separate download)
+if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
+    cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png
+fi
 EOF
     elif [[ "$DE_CHOICE" == "gnome" ]]; then
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "GNOME theme configuration failed"
@@ -4185,12 +4181,10 @@ gsettings set org.gnome.desktop.wm.preferences theme 'Arc-Dark'
 
 # FIX: correct GNOME wallpaper configuration
 mkdir -p /home/$USERNAME/.local/share/backgrounds
-curl -o /home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png \
-    'https://raw.githubusercontent.com/PapaOursPolaire/Linux-tools/refs/heads/Projects/fallout-desktop-bg.png' 2>/dev/null || {
-    if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
-        cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png
-    fi
-}
+# Directly reuse the SDDM background (no separate download)
+if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
+    cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png
+fi
 
 # Set the wallpaper
 gsettings set org.gnome.desktop.background picture-uri "file:///home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png"

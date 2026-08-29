@@ -28,7 +28,6 @@ set -euo pipefail
 # Configuration
 readonly SCRIPT_VERSION="864.4"
 readonly LOG_FILE="/tmp/arch_install_$(date +%Y%m%d_%H%M%S).log"
-readonly STATE_FILE="/tmp/arch_install_state.json"
 
 # Couleurs pour l'affichage
 readonly RED='\033[0;31m'
@@ -39,8 +38,6 @@ readonly PURPLE='\033[0;35m'
 readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
-readonly KDESPLASH_URL="https://raw.githubusercontent.com/PapaOursPolaire/arch/Projets/fallout-splashscreen4k.zip"
-readonly SDDM_VIDEO_URL="https://mega.nz/file/PpJzyBjB#ONC7iTpdJkUxcOtLRuclrzJ-vsRRDgqR2oEkJPcHEbk" # Inutilisée bug API MegaNZ
 readonly SDDM_THEME_DIR="/usr/share/sddm/themes/SDDM-Fallout-theme" # Inutilisée, rework de la logique
 readonly LOCKSCREEN_THEME_DIR="/usr/share/plasma/look-and-feel/org.kde.falloutlock"
 
@@ -558,237 +555,6 @@ install_steam() {
     fi
 }
 
-fix_spicetify_prefs() { # Ne fonctionne pas car Spotify & spicetify ne sont pas installés dans le chroot à cause de multi je sais plus quoi # Faudrait peut etre le supprimer dans la version stable si je réussis pas de tt façon le post-install réussi lui
-    print_header "CORRECTION SPICETIFY PREFS (ROBUSTE, NON BLOQUANT)"
-
-    # Sécurité : s'assurer que USERNAME est défini
-    if [[ -z "${USERNAME:-}" ]]; then
-        print_warning "USERNAME non défini – impossible d'appliquer Spicetify pour un utilisateur."
-        return 0
-    fi
-
-    /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" bash -lc '
-set -u
-
-# Journalisation dédiée utilisateur
-LOG_DIR="${HOME}/.local/share/spicetify-fix"
-LOG_FILE="${LOG_DIR}/fix.log"
-mkdir -p "$LOG_DIR" || true
-# Redirige tout vers le log + stdout
-exec > >(tee -a "$LOG_FILE") 2>&1
-echo ""
-echo "[$(date "+%F %T")] Démarrage fix_spicetify_prefs"
-
-# Helpers d affichage locaux
-info(){ echo "[INFO]  $*"; }
-ok(){ echo "[OK]    $*"; }
-warn(){ echo "[WARN]  $*"; }
-err(){ echo "[ERROR] $*"; }
-
-# Etat cumul des avertissements/erreurs (mais on sort avec 0)
-WARN_COUNT=0
-ERR_COUNT=0
-warn_wrap(){ warn "$@"; WARN_COUNT=$((WARN_COUNT+1)); }
-err_wrap(){  err  "$@"; ERR_COUNT=$((ERR_COUNT+1)); }
-
-# Détection outillage
-if ! command -v spicetify >/dev/null 2>&1; then
-    warn_wrap "spicetify introuvable pour ${USER}. Etape ignorée."
-    echo "Fin (spicetify absent)"
-    exit 0
-fi
-
-IS_NATIVE=false
-IS_FLATPAK=false
-
-if command -v spotify >/dev/null 2>&1; then
-    IS_NATIVE=true
-    ok "Spotify natif détecté."
-else
-    info "Spotify natif non détecté."
-fi
-
-if command -v flatpak >/dev/null 2>&1 && flatpak info com.spotify.Client >/dev/null 2>&1; then
-    IS_FLATPAK=true
-    ok "Spotify Flatpak détecté."
-else
-    info "Spotify Flatpak non détecté."
-fi
-
-if [[ "$IS_NATIVE" != true && "$IS_FLATPAK" != true ]]; then
-    warn_wrap "Aucune installation de Spotify détectée (natif ni Flatpak)."
-    echo "Fin (Spotify absent"
-    exit 0
-fi
-
-# Localisation du fichier prefs
-# Chemins possibles (on privilégie Flatpak si présent)
-CANDIDATES=()
-if [[ "$IS_FLATPAK" == true ]]; then
-    CANDIDATES+=("${HOME}/.var/app/com.spotify.Client/config/spotify/prefs")
-fi
-if [[ "$IS_NATIVE" == true ]]; then
-    CANDIDATES+=("${HOME}/.config/spotify/prefs")
-fi
-# Ajout de secours au cas où je connais le script y'a 90% qui foire ce salopiot
-CANDIDATES+=("${HOME}/.config/spotify/prefs" "${HOME}/.var/app/com.spotify.Client/config/spotify/prefs")
-
-PREFS_PATH=""
-for p in "${CANDIDATES[@]}"; do
-    if [[ -f "$p" ]]; then
-        PREFS_PATH="$p"
-        ok "prefs existant trouvé: $PREFS_PATH"
-        break
-    fi
-done
-
-# Si non trouvé, on crée prudemment un squelette sans lancer Spotify (prcq  chroot/tty)
-if [[ -z "$PREFS_PATH" ]]; then
-    # Choix du dossier cible prioritaire
-    if [[ "$IS_FLATPAK" == true ]]; then
-        TARGET_DIR="${HOME}/.var/app/com.spotify.Client/config/spotify"
-    elif [[ "$IS_NATIVE" == true ]]; then
-        TARGET_DIR="${HOME}/.config/spotify"
-    else
-        # Fallback extrême
-        TARGET_DIR="${HOME}/.config/spotify"
-    fi
-
-    mkdir -p "$TARGET_DIR" || { err_wrap "Impossible de créer ${TARGET_DIR}"; echo "Fin (échec création dossier)"; exit 0; }
-    PREFS_PATH="${TARGET_DIR}/prefs"
-
-    if [[ ! -f "$PREFS_PATH" ]]; then
-        : > "$PREFS_PATH" || { err_wrap "Impossible de créer ${PREFS_PATH}"; echo "Fin (échec création prefs)"; exit 0; }
-        ok "prefs créé: $PREFS_PATH (sera complété après le premier lancement de Spotify)."
-        PREFS_WAS_CREATED="yes"
-    else
-        ok "prefs trouvé juste après création du dossier: $PREFS_PATH"
-        PREFS_WAS_CREATED="no"
-    fi
-else
-    PREFS_WAS_CREATED="no"
-fi
-
-# Configuration Spicetify
-APPLY_OK=true
-
-# 1) Déclare le prefs_path
-if spicetify config prefs_path "$PREFS_PATH"; then
-    ok "spicetify: prefs_path enregistré."
-else
-    warn_wrap "spicetify config prefs_path a échoué."
-    APPLY_OK=false
-fi
-
-# 2) Thème 
-if spicetify config current_theme "DribbblishNordDark"; then
-    ok "spicetify: thème défini (DribbblishNordDark)."
-else
-    warn_wrap "spicetify: impossible de définir le thème (peut être non installé)."
-fi
-
-# 3) Backup + apply 
-if spicetify backup >/dev/null 2>&1; then
-    ok "spicetify: backup ok."
-else
-    warn_wrap "spicetify: backup a échoué."
-    APPLY_OK=false
-fi
-
-if spicetify apply >/dev/null 2>&1; then
-    ok "spicetify: apply ok."
-else
-    warn_wrap "spicetify: apply a échoué (probable prefs incomplet avant 1er lancement)."
-    APPLY_OK=false
-fi
-
-# Fallback post-install : autostart au 1er vrai lancement graphique  
-# Si on a dû créer le prefs à vide, ou si apply a échoué, on prépare une tâche
-# utilisateur qui réessaiera automatiquement après le premier lancement de Spotify.
-# Je fais une multitude de commentaires pour celui-là mais IL MARCHE PAS
-if [[ "${PREFS_WAS_CREATED}" == "yes" || "${APPLY_OK}" == "false" ]]; then
-    AUTOSTART_DIR="${HOME}/.config/autostart"
-    BIN_DIR="${HOME}/.local/bin"
-    mkdir -p "$AUTOSTART_DIR" "$BIN_DIR" || true
-
-    FIX_SCRIPT="${BIN_DIR}/spicetify-postfirststart.sh"
-    DESKTOP_FILE="${AUTOSTART_DIR}/spicetify-postfirststart.desktop"
-
-    cat > "$FIX_SCRIPT" << "EOSH"
-#!/usr/bin/env bash
-set -u
-# Attendre que Spotify ait généré un prefs "réel", puis réappliquer spicetify
-TRIES=60
-SLEEP_SECS=2
-
-log(){ echo "[spicetify-postfirststart] $*"; }
-
-    # Chemins potentiels
-    CANDIDATES=(
-    "${HOME}/.var/app/com.spotify.Client/config/spotify/prefs"
-    "${HOME}/.config/spotify/prefs"
-    )
-
-    FOUND=""
-    for ((i=0; i<TRIES; i++)); do
-    for p in "${CANDIDATES[@]}"; do
-        if [[ -s "$p" ]]; then
-        FOUND="$p"
-        break
-        fi
-    done
-    [[ -n "$FOUND" ]] && break
-    sleep "$SLEEP_SECS"
-    done
-
-    if [[ -z "$FOUND" ]]; then
-    log "prefs toujours introuvable/vides, abandon silencieux."
-    exit 0
-    fi
-
-log "prefs détecté: $FOUND"
-spicetify config prefs_path "$FOUND" || true
-spicetify backup || true
-spicetify apply || true
-
-# Auto-nettoyage : on supprime ce service après succès
-rm -f "${HOME}/.config/autostart/spicetify-postfirststart.desktop" || true
-rm -f "${HOME}/.local/bin/spicetify-postfirststart.sh" || true
-exit 0
-EOSH
-    chmod +x "$FIX_SCRIPT" || true
-
-    cat > "$DESKTOP_FILE" << EOF
-[Desktop Entry]
-Type=Application
-Name=Spicetify Post-First-Start
-Comment=Finalise Spicetify après le 1er lancement de Spotify
-Exec=${FIX_SCRIPT}
-X-GNOME-Autostart-enabled=true
-NoDisplay=true
-EOF
-
-    ok "Fallback post-install préparé (autostart) : ${DESKTOP_FILE}"
-fi
-
-# Récapitulatif et fin
-if [[ $ERR_COUNT -gt 0 ]]; then
-    warn "Terminé avec ${ERR_COUNT} erreur(s) et ${WARN_COUNT} avertissement(s). Voir le log: ${LOG_FILE}"
-elif [[ $WARN_COUNT -gt 0 ]]; then
-    warn "Terminé avec ${WARN_COUNT} avertissement(s). Voir le log: ${LOG_FILE}"
-else
-    ok "Terminé sans avertissement."
-fi
-
-echo "Fin fix_spicetify_prefs"
-exit 0
-' || {
-        # On n'échoue pas le script global : message et on continue
-        print_warning "fix_spicetify_prefs: la sous-commande chroot a remonté un non-zéro (voir log utilisateur). Étape CONTINUÉE."
-        return 0
-
-    print_success "fix_spicetify_prefs exécuté (voir le journal utilisateur ~/.local/share/spicetify-fix/fix.log dans le chroot)."
-}
 
 # Fonctions utilitaires et logging
 # Vérifie la présence d'une commande dans le chroot
@@ -1598,7 +1364,14 @@ check_requirements() {
         
         if ! command -v "$cmd" &>/dev/null; then
             print_warning "$cmd manquant (paquet: $pkg)"
-            if [[ ! " ${missing_packages[@]} " =~ " ${pkg} " ]]; then
+            local deja_present=false
+            for pkg_existant in "${missing_packages[@]}"; do
+                if [[ "$pkg_existant" == "$pkg" ]]; then
+                    deja_present=true
+                    break
+                fi
+            done
+            if [[ "$deja_present" == false ]]; then
                 missing_packages+=("$pkg")
             fi
             all_ok=false
@@ -4394,14 +4167,10 @@ PLASMA_EOF
 
 # Configuration du fond d'écran
 mkdir -p /home/$USERNAME/.local/share/wallpapers
-# CORRECTION: Téléchargement correct de l'image de bureau
-curl -o /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png \
-    'https://raw.githubusercontent.com/PapaOursPolaire/Linux-tools/refs/heads/Projets/fallout-desktop-bg.png' 2>/dev/null || {
-    # Copie de l'image SDDM en fallback
-    if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
-        cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png
-    fi
-}
+# Réutilisation directe du fond d'écran SDDM (pas de téléchargement séparé)
+if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
+    cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/wallpapers/fallout-wallpaper.png
+fi
 EOF
     elif [[ "$DE_CHOICE" == "gnome" ]]; then
         /usr/bin/arch-chroot /mnt sudo -u "$USERNAME" /bin/bash <<'EOF' || print_warning "Echec configuration thème GNOME"
@@ -4412,12 +4181,10 @@ gsettings set org.gnome.desktop.wm.preferences theme 'Arc-Dark'
 
 # CORRECTION: Configuration correcte du fond d'écran GNOME
 mkdir -p /home/$USERNAME/.local/share/backgrounds
-curl -o /home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png \
-    'https://raw.githubusercontent.com/PapaOursPolaire/Linux-tools/refs/heads/Projets/fallout-desktop-bg.png' 2>/dev/null || {
-    if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
-        cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png
-    fi
-}
+# Réutilisation directe du fond d'écran SDDM (pas de téléchargement séparé)
+if [ -f /usr/share/sddm/themes/fallout/background.png ]; then
+    cp /usr/share/sddm/themes/fallout/background.png /home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png
+fi
 
 # Définir le fond d'écran
 gsettings set org.gnome.desktop.background picture-uri "file:///home/$USERNAME/.local/share/backgrounds/fallout-wallpaper.png"
